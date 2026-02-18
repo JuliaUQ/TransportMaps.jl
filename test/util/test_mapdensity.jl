@@ -96,7 +96,6 @@ using Optim
         X_test = [
             -1.0 0.5
             0.0 -0.5
-            1.0 1.0
         ]
 
         @testset "Analytical gradient" begin
@@ -104,12 +103,18 @@ using Optim
             @test target_vectorized.isvectorized == true
             @test isnothing(target_vectorized.ad_backend)
 
-            logpdf_vals = logπ(X_test)
-            @test length(logpdf_vals) == 3
+            logpdf_vals = logpdf(target_vectorized, X_test)
+            @test length(logpdf_vals) == 2
             @test logpdf_vals[1] ≈ logpdf(Normal(), -1.0) + logpdf(Normal(), 0.5)
+            @test logpdf_vals[2] ≈ logpdf(Normal(), 0.0) + logpdf(Normal(), -0.5)
 
-            grad_vals = grad_logπ(X_test)
-            @test size(grad_vals) == (3, 2)
+            pdf_vals = pdf(target_vectorized, X_test)
+            @test length(pdf_vals) == 2
+            @test pdf_vals[1] ≈ pdf(Normal(), -1.0) * pdf(Normal(), 0.5)
+            @test pdf_vals[2] ≈ pdf(Normal(), 0.0) * pdf(Normal(), -0.5)
+
+            grad_vals = grad_logpdf(target_vectorized, X_test)
+            @test size(grad_vals) == (2, 2)
             @test grad_vals[1, 1] ≈ 1.0
             @test grad_vals[1, 2] ≈ -0.5
         end
@@ -119,12 +124,13 @@ using Optim
             @test target_vectorized.isvectorized == true
             @test target_vectorized.ad_backend == AutoForwardDiff()
 
-            logpdf_vals = logπ(X_test)
-            @test length(logpdf_vals) == 3
+            logpdf_vals = logpdf(target_vectorized, X_test)
+            @test length(logpdf_vals) == 2
             @test logpdf_vals[1] ≈ logpdf(Normal(), -1.0) + logpdf(Normal(), 0.5)
+            @test logpdf_vals[2] ≈ logpdf(Normal(), 0.0) + logpdf(Normal(), -0.5)
 
-            grad_vals = grad_logπ(X_test)
-            @test size(grad_vals) == (3, 2)
+            grad_vals = grad_logpdf(target_vectorized, X_test)
+            @test size(grad_vals) == (2, 2)
             @test grad_vals[1, 1] ≈ 1.0
             @test grad_vals[1, 2] ≈ -0.5
 
