@@ -10,12 +10,13 @@ differentiation backends via DifferentiationInterface.jl.
 - `ad_backend<:Union{Nothing,ADTypes.AbstractADType}`: AD backend or `nothing` for analytical
 - `grad_logdensity<:Function`: Function computing gradient `∇ log π(x)`
 - `prepared_gradient`: Optional prepared gradient for performance (can be `nothing`)
+- `isvectorized::Bool`: Whether the log-density (and gradient, if analytical) accepts matrix input
 
 # Constructors
-- `MapTargetDensity(logdensity, grad_logdensity)`: Provide both log-density and analytical gradient.
-- `MapTargetDensity(logdensity, backend::ADTypes.AbstractADType, d::Int)`: Use AD backend with prepared gradient.
-- `MapTargetDensity(logdensity, backend::ADTypes.AbstractADType)`: Use AD backend without preparation.
-- `MapTargetDensity(logdensity)`: Use ForwardDiff.
+- `MapTargetDensity(logdensity, grad_logdensity; isvectorized=false)`: Provide both log-density and analytical gradient.
+- `MapTargetDensity(logdensity, backend::ADTypes.AbstractADType, d::Int; isvectorized=false)`: Use AD backend with prepared gradient.
+- `MapTargetDensity(logdensity, backend::ADTypes.AbstractADType; isvectorized=false)`: Use AD backend without preparation.
+- `MapTargetDensity(logdensity; isvectorized=false)`: Use ForwardDiff.
 
 # Examples
 ```julia
@@ -33,6 +34,9 @@ density = MapTargetDensity(logπ, AutoFiniteDiff(), d)
 
 # Use analytical gradient
 density = MapTargetDensity(logπ, grad_logπ)
+
+# Use vectorized log-density (accepts matrix input where rows are samples)
+density = MapTargetDensity(logπ_vectorized; isvectorized=true)
 ```
 """
 struct MapTargetDensity{F<:Function,B<:Union{Nothing,ADTypes.AbstractADType},G<:Function,P<:Union{Nothing,DifferentiationInterface.GradientPrep}} <: AbstractMapDensity
@@ -40,38 +44,39 @@ struct MapTargetDensity{F<:Function,B<:Union{Nothing,ADTypes.AbstractADType},G<:
     ad_backend::B
     grad_logdensity::G
     prepared_gradient::P
+    isvectorized::Bool
 
     # Analytical gradient
-    function MapTargetDensity(logdensity::F, grad_logdensity::G) where {F<:Function,G<:Function}
-        return new{F,Nothing,G,Nothing}(logdensity, nothing, grad_logdensity, nothing)
+    function MapTargetDensity(logdensity::F, grad_logdensity::G; isvectorized::Bool=false) where {F<:Function,G<:Function}
+        return new{F,Nothing,G,Nothing}(logdensity, nothing, grad_logdensity, nothing, isvectorized)
     end
 
     # AD backend with prepared gradient
-    function MapTargetDensity(logdensity::F, backend::B, d::Int) where {F<:Function,B<:ADTypes.AbstractADType}
+    function MapTargetDensity(logdensity::F, backend::B, d::Int; isvectorized::Bool=false) where {F<:Function,B<:ADTypes.AbstractADType}
         # Prepare gradient once for this input size
         prep = DifferentiationInterface.prepare_gradient(logdensity, backend, zeros(d))
 
         grad_logdensity = function (x)
             return DifferentiationInterface.gradient(logdensity, prep, backend, x)
         end
-        return new{F,B,typeof(grad_logdensity),typeof(prep)}(logdensity, backend, grad_logdensity, prep)
+        return new{F,B,typeof(grad_logdensity),typeof(prep)}(logdensity, backend, grad_logdensity, prep, isvectorized)
     end
 
     # AD backend without preparation
-    function MapTargetDensity(logdensity::F, backend::B) where {F<:Function,B<:ADTypes.AbstractADType}
+    function MapTargetDensity(logdensity::F, backend::B; isvectorized::Bool=false) where {F<:Function,B<:ADTypes.AbstractADType}
         grad_logdensity = function (x)
             return DifferentiationInterface.gradient(logdensity, backend, x)
         end
-        return new{F,B,typeof(grad_logdensity),Nothing}(logdensity, backend, grad_logdensity, nothing)
+        return new{F,B,typeof(grad_logdensity),Nothing}(logdensity, backend, grad_logdensity, nothing, isvectorized)
     end
 
     # Default: ForwardDiff without preparation
-    function MapTargetDensity(logdensity::F) where {F<:Function}
+    function MapTargetDensity(logdensity::F; isvectorized::Bool=false) where {F<:Function}
         backend = AutoForwardDiff()
         grad_logdensity = function (x)
             return DifferentiationInterface.gradient(logdensity, backend, x)
         end
-        return new{F,typeof(backend),typeof(grad_logdensity),Nothing}(logdensity, backend, grad_logdensity, nothing)
+        return new{F,typeof(backend),typeof(grad_logdensity),Nothing}(logdensity, backend, grad_logdensity, nothing, isvectorized)
     end
 end
 
@@ -101,6 +106,7 @@ struct MapReferenceDensity{F<:Function,B<:ADTypes.AbstractADType,G<:Function,P<:
     grad_logdensity::G
     densitytype::Distributions.UnivariateDistribution
     prepared_gradient::P
+    isvectorized::Bool
 
     # Constructor with dimension specified for preparation (recommended for performance)
     function MapReferenceDensity(
@@ -118,7 +124,7 @@ struct MapReferenceDensity{F<:Function,B<:ADTypes.AbstractADType,G<:Function,P<:
             return DifferentiationInterface.gradient(density, prep, backend, x)
         end
         return new{typeof(density),typeof(backend),typeof(grad_density),typeof(prep)}(
-            density, backend, grad_density, densitytype, prep
+            density, backend, grad_density, densitytype, prep, false
         )
     end
 
@@ -132,7 +138,7 @@ struct MapReferenceDensity{F<:Function,B<:ADTypes.AbstractADType,G<:Function,P<:
             return DifferentiationInterface.gradient(density, backend, x)
         end
         return new{typeof(density),typeof(backend),typeof(grad_density),Nothing}(
-            density, backend, grad_density, densitytype, nothing
+            density, backend, grad_density, densitytype, nothing, false
         )
     end
 
@@ -158,13 +164,19 @@ logpdf(density::AbstractMapDensity, x::Vector{<:Real}) = density.logdensity(x)
 logpdf(density::AbstractMapDensity, x::Real) = logpdf(density, [x])
 
 function logpdf(density::AbstractMapDensity, X::Matrix{<:Real})
-    n = size(X, 1)
-    logdensities = zeros(Float64, n)
 
-    Threads.@threads for i in 1:n
-        logdensities[i] = density.logdensity(view(X, i, :))
+    if density.isvectorized
+        return density.logdensity(X)
+
+    else
+        n = size(X, 1)
+        logdensities = zeros(Float64, n)
+
+        Threads.@threads for i in 1:n
+            logdensities[i] = density.logdensity(view(X, i, :))
+        end
+        return logdensities
     end
-    return logdensities
 end
 
 """
@@ -182,22 +194,27 @@ Evaluate the gradient of log-density at point(s) `x`.
 grad_logpdf(density::AbstractMapDensity, x::Vector{<:Real}) = density.grad_logdensity(x)
 
 function grad_logpdf(density::AbstractMapDensity, X::Matrix{<:Real})
-    n, d = size(X)
-    log_gradients = zeros(Float64, n, d)
 
-    threaded = !(density.ad_backend isa ADTypes.AutoMooncake)
-
-    if threaded
-        Threads.@threads for i in 1:n
-            log_gradients[i, :] = density.grad_logdensity(X[i, :])
-        end
+    if density.isvectorized && isnothing(density.ad_backend)
+        return density.grad_logdensity(X)
     else
-        for i in 1:n
-            log_gradients[i, :] = density.grad_logdensity(X[i, :])
-        end
-    end
+        n, d = size(X)
+        log_gradients = zeros(Float64, n, d)
 
-    return log_gradients
+        threaded = !(density.ad_backend isa ADTypes.AutoMooncake)
+
+        if threaded
+            Threads.@threads for i in 1:n
+                log_gradients[i, :] = density.grad_logdensity(X[i, :])
+            end
+        else
+            for i in 1:n
+                log_gradients[i, :] = density.grad_logdensity(X[i, :])
+            end
+        end
+
+        return log_gradients
+    end
 end
 
 """
@@ -220,13 +237,18 @@ pdf(density::AbstractMapDensity, x::Vector{<:Real}) = exp(density.logdensity(x))
 pdf(density::AbstractMapDensity, x::Real) = pdf(density, [x])
 
 function pdf(density::AbstractMapDensity, X::Matrix{<:Real})
-    n = size(X, 1)
-    densities = zeros(Float64, n)
 
-    Threads.@threads for i in 1:n
-        densities[i] = exp(density.logdensity(view(X, i, :)))
+    if density.isvectorized
+        return exp.(density.logdensity(X))
+    else
+        n = size(X, 1)
+        densities = zeros(Float64, n)
+
+        Threads.@threads for i in 1:n
+            densities[i] = exp(density.logdensity(view(X, i, :)))
+        end
+        return densities
     end
-    return densities
 end
 
 function Base.show(io::IO, target::MapTargetDensity)

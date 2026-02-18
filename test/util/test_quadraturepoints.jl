@@ -220,4 +220,18 @@ using Test
             @test all(q.weights .> 0)  # All weights should be positive
         end
     end
+
+    @testset "Dimensions" begin
+        mc = MonteCarloWeights(10, 2)
+        @test numberdimensions(mc) == size(mc.points, 2)
+
+        lhs = LatinHypercubeWeights(10, 2)
+        @test numberdimensions(lhs) == size(lhs.points, 2)
+
+        gh = GaussHermiteWeights(2,2)
+        @test numberdimensions(gh) == size(gh.points, 2)
+
+        smo = SparseSmolyakWeights(2,2)
+        @test numberdimensions(smo) == size(smo.points, 2)
+    end
 end

@@ -240,3 +240,7 @@ function Base.show(io::IO, ::MIME"text/plain", w::SparseSmolyakWeights)
     println(io, "  Reference measure: Standard Gaussian")
     println(io, "  Weight range: [$weight_min, $weight_max]")
 end
+
+function numberdimensions(quad::AbstractQuadratureWeights)
+    return size(quad.points, 2)
+end

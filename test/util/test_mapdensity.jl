@@ -1,6 +1,7 @@
 using TransportMaps
 using Test
 using Distributions
+using Optim
 
 @testset "Map Density" begin
 
@@ -62,6 +63,85 @@ using Distributions
             @test isa(target.prepared_gradient, GradientPrep)
         end
 
+    end
+
+    @testset "MapTargetDensity with isvectorized flag" begin
+        function logπ(X::Union{AbstractVector{<:Real},AbstractMatrix{<:Real}})
+            if X isa Vector
+                return logpdf(Normal(), X[1]) + logpdf(Normal(), X[2])
+            else
+                n = size(X, 1)
+                result = zeros(n)
+                for i in 1:n
+                    result[i] = logpdf(Normal(), X[i, 1]) + logpdf(Normal(), X[i, 2])
+                end
+                return result
+            end
+        end
+
+        function grad_logπ(X::Union{AbstractVector{<:Real},AbstractMatrix{<:Real}})
+            if X isa Vector
+                return [-X[1], -X[2]]
+            else
+                n = size(X, 1)
+                result = zeros(n, 2)
+                for i in 1:n
+                    result[i, 1] = -X[i, 1]
+                    result[i, 2] = -X[i, 2]
+                end
+                return result
+            end
+        end
+
+        X_test = [
+            -1.0 0.5
+            0.0 -0.5
+        ]
+
+        @testset "Analytical gradient" begin
+            target_vectorized = MapTargetDensity(logπ, grad_logπ; isvectorized=true)
+            @test target_vectorized.isvectorized == true
+            @test isnothing(target_vectorized.ad_backend)
+
+            logpdf_vals = logpdf(target_vectorized, X_test)
+            @test length(logpdf_vals) == 2
+            @test logpdf_vals[1] ≈ logpdf(Normal(), -1.0) + logpdf(Normal(), 0.5)
+            @test logpdf_vals[2] ≈ logpdf(Normal(), 0.0) + logpdf(Normal(), -0.5)
+
+            pdf_vals = pdf(target_vectorized, X_test)
+            @test length(pdf_vals) == 2
+            @test pdf_vals[1] ≈ pdf(Normal(), -1.0) * pdf(Normal(), 0.5)
+            @test pdf_vals[2] ≈ pdf(Normal(), 0.0) * pdf(Normal(), -0.5)
+
+            grad_vals = grad_logpdf(target_vectorized, X_test)
+            @test size(grad_vals) == (2, 2)
+            @test grad_vals[1, 1] ≈ 1.0
+            @test grad_vals[1, 2] ≈ -0.5
+        end
+
+        @testset "AutoForwardDiff gradient" begin
+            target_vectorized = MapTargetDensity(logπ; isvectorized=true)
+            @test target_vectorized.isvectorized == true
+            @test target_vectorized.ad_backend == AutoForwardDiff()
+
+            logpdf_vals = logpdf(target_vectorized, X_test)
+            @test length(logpdf_vals) == 2
+            @test logpdf_vals[1] ≈ logpdf(Normal(), -1.0) + logpdf(Normal(), 0.5)
+            @test logpdf_vals[2] ≈ logpdf(Normal(), 0.0) + logpdf(Normal(), -0.5)
+
+            grad_vals = grad_logpdf(target_vectorized, X_test)
+            @test size(grad_vals) == (2, 2)
+            @test grad_vals[1, 1] ≈ 1.0
+            @test grad_vals[1, 2] ≈ -0.5
+
+        end
+        @testset "Map Optimization with vectorized density" begin
+            tm = PolynomialMap(2, 1)
+            quad = GaussHermiteWeights(3, 2)
+            target = MapTargetDensity(logπ; isvectorized=true)
+            res = optimize!(tm, target, quad)
+            @test Optim.converged(res)
+        end
     end
 
     @testset "MapReferenceDensity" begin
