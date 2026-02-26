@@ -141,7 +141,6 @@ function optimize!(
     options::Optim.Options=Optim.Options()
 )
 
-    # Define objective function and gradient
     function objective_function(a)
         setcoefficients!(M, a)
         return kldivergence(M, target, precomp)
@@ -152,15 +151,24 @@ function optimize!(
         grad_storage .= kldivergence_gradient(M, target, precomp)
     end
 
-    # Optimize with analytical gradient
     initial_coefficients = getcoefficients(M)
     result = optimize(objective_function, gradient_function!, initial_coefficients, optimizer, options)
 
-    setcoefficients!(M, result.minimizer)  # Update the polynomial map with optimized coefficients
+    if !Optim.converged(result)
+        @warn "Optimization has not converged."
+    end
+
+    setcoefficients!(M, result.minimizer)
+
+    # Get number of model calls
+    n_quad = length(precomp.quad_weights)
+    logpdf_calls = Optim.f_calls(result) * n_quad
+    grad_logpdf_calls = Optim.g_calls(result) * n_quad
+
+    @debug "Function calls" target_calls=logpdf_calls ∇target_calls=grad_logpdf_calls
 
     return result
 end
-
 """
     variance_diagnostic(M::PolynomialMap, target::MapTargetDensity, Z::AbstractArray{<:Real})
 
