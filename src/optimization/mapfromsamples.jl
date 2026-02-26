@@ -221,6 +221,10 @@ function optimize!(
     initial_coefficients = getcoefficients(component)
     result = optimize(obj_fun, grad_fun!, initial_coefficients, optimizer, options)
 
+    if !Optim.converged(result)
+        @warn "Optimization has not converged."
+    end
+
     # Update map component with optimized coefficients
     setcoefficients!(component, result.minimizer)
 
