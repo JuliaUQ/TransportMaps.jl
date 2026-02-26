@@ -160,9 +160,15 @@ function optimize!(
 
     setcoefficients!(M, result.minimizer)
 
+    # Get number of model calls
+    n_quad = length(precomp.quad_weights)
+    logpdf_calls = Optim.f_calls(result) * n_quad
+    grad_logpdf_calls = Optim.g_calls(result) * n_quad
+
+    @debug "Function calls" target_calls=logpdf_calls ∇target_calls=grad_logpdf_calls
+
     return result
 end
-
 """
     variance_diagnostic(M::PolynomialMap, target::MapTargetDensity, Z::AbstractArray{<:Real})
 
