@@ -2,6 +2,7 @@ using TransportMaps
 using Test
 using Distributions
 using Optim
+import Mooncake
 
 @testset "Map Density" begin
 
@@ -141,6 +142,17 @@ using Optim
             target = MapTargetDensity(logπ; isvectorized=true)
             res = optimize!(tm, target, quad)
             @test Optim.converged(res)
+        end
+
+        @testset "Threaded flag" begin
+            target = MapTargetDensity(logπ)
+            @test target.threaded == true
+
+            target = MapTargetDensity(logπ, AutoMooncake())
+            @test target.threaded == false
+
+            target = MapTargetDensity(logπ, AutoMooncake(), 2)
+            @test target.threaded == false
         end
     end
 
