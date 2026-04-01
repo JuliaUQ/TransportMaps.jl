@@ -9,7 +9,7 @@ Triangular transport map with polynomial basis.
 - `forwarddirection::Symbol`: `:target` for map from density, `:reference` for map from samples
 
 # Constructors
-- `PolynomialMap(dimension::Int,degree::Int, referencetype::Symbol=:normal, rectifier::AbstractRectifierFunction=Softplus(), basis::AbstractPolynomialBasis=LinearizedHermiteBasis(), map_type::Symbol=:total)`: Initialize polynomial map for map from density.
+- `PolynomialMap(dimension::Int,degree::Int, referencetype::Symbol=:normal, rectifier::AbstractRectifierFunction=Softplus(), basis::AbstractPolynomialBasis=LinearizedHermiteBasis(), map_type::Symbol=:total)`: Initialize polynomial map for map from density. Reference types: `:normal`, `:uniform` (U(-1,1)), `:uniform01` (U(0,1)).
 - `DiagonalMap(dimension::Int, degree::Int, referencetype::Symbol=:normal, rectifier::AbstractRectifierFunction=Softplus(), basis::AbstractPolynomialBasis=LinearizedHermiteBasis())`: Initialize diagonal map with diagonal structure.
 - `NoMixedMap(dimension::Int, degree::Int, referencetype::Symbol=:normal, rectifier::AbstractRectifierFunction=Softplus(), basis::AbstractPolynomialBasis=LinearizedHermiteBasis())`: Initialize diagonal map without mixed terms.
 """
@@ -26,14 +26,15 @@ mutable struct PolynomialMap <: AbstractTriangularMap
         basis::AbstractPolynomialBasis=LinearizedHermiteBasis(),
         map_type::Symbol=:total
     )
-        @assert map_type in [:total, :diagonal, :no_mixed] "Invalid map_type. Supported types are :total, :diagonal, :no_mixed"
-        @assert referencetype in [:normal] "Currently, only :normal reference density is supported"
+        @assert referencetype in [:normal, :uniform, :uniform01] "Supported reference types: :normal, :uniform (U(-1,1)), :uniform01 (U(0,1))"
 
-        if referencetype == :normal
-            referencedensity = Normal()
-        end
+        reference = Dict(
+            :normal => Normal(),
+            :uniform => Uniform(-1, 1),
+            :uniform01 => Uniform(0, 1)
+        )
 
-        return PolynomialMap(dimension, degree, referencedensity, rectifier, basis, map_type)
+        return PolynomialMap(dimension, degree, reference[referencetype], rectifier, basis, map_type)
     end
 
     function PolynomialMap(
@@ -44,6 +45,9 @@ mutable struct PolynomialMap <: AbstractTriangularMap
         basis::AbstractPolynomialBasis=LinearizedHermiteBasis(),
         map_type::Symbol=:total
     )
+        @assert map_type in [:total, :diagonal, :no_mixed] "Invalid map_type. Supported types are :total, :diagonal, :no_mixed"
+        @assert validate_basis_reference_compatibility!(basis, reference) "Invalid combination of reference density and basis. Support of $reference is $(support(reference)), while support of $basis is $(support(basis))."
+
         components = [PolynomialMapComponent(k, degree, rectifier, basis, reference, map_type) for k in 1:dimension]
 
         return PolynomialMap(components, reference)
@@ -62,22 +66,22 @@ end
 function DiagonalMap(
     dimension::Int,
     degree::Int,
-    referencetype::Symbol=:normal,
+    reference::Distributions.UnivariateDistribution=Normal(),
     rectifier::AbstractRectifierFunction=Softplus(),
     basis::AbstractPolynomialBasis=LinearizedHermiteBasis()
 )
-    return PolynomialMap(dimension, degree, referencetype, rectifier, basis, :diagonal)
+    return PolynomialMap(dimension, degree, reference, rectifier, basis, :diagonal)
 end
 
 # Convenience constructor for NoMixedMap
 function NoMixedMap(
     dimension::Int,
     degree::Int,
-    referencetype::Symbol=:normal,
+    reference::Distributions.UnivariateDistribution=Normal(),
     rectifier::AbstractRectifierFunction=Softplus(),
     basis::AbstractPolynomialBasis=LinearizedHermiteBasis()
 )
-    return PolynomialMap(dimension, degree, referencetype, rectifier, basis, :no_mixed)
+    return PolynomialMap(dimension, degree, reference, rectifier, basis, :no_mixed)
 end
 
 # Construct PolynomialMap from multi-index sets Λ and given density
@@ -722,4 +726,38 @@ function Base.show(io::IO, ::MIME"text/plain", M::PolynomialMap)
     else
         println(io, "  (Empty map)")
     end
+end
+
+# Check compatibility of reference densities and selected bassis
+function validate_basis_reference_compatibility!(basis::AbstractPolynomialBasis, reference::Distributions.UnivariateDistribution)
+    # Check Hermite basis family with Gaussian reference
+    if basis isa Union{HermiteBasis,LinearizedHermiteBasis,CubicSplineHermiteBasis,GaussianWeightedHermiteBasis}
+        if !(reference isa Normal)
+            return false
+        end
+    end
+
+    # Check Legendre basis with Uniform(-1, 1)
+    if basis isa LegendreBasis
+        if reference isa Uniform
+            if !(reference.a ≈ -1.0 && reference.b ≈ 1.0)
+                return false
+            end
+        elseif !(reference isa Uniform)
+            return false
+        end
+    end
+
+    # Check Shifted Legendre basis with Uniform(0, 1)
+    if basis isa ShiftedLegendreBasis
+        if reference isa Uniform
+            if !(reference.a ≈ 0.0 && reference.b ≈ 1.0)
+                return false
+            end
+        elseif !(reference isa Uniform)
+            return false
+        end
+    end
+
+    return true
 end

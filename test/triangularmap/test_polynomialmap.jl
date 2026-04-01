@@ -47,8 +47,6 @@ using LinearAlgebra
         setcoefficients!(pm_5d.components[5], [1.0, 0.1, 0.08, 0.04, 0.02, 0.01])  # 6 coefficients for 5D degree 1
         @test length(pm_5d.components) == 5
 
-        # Test error handling
-        @test_throws AssertionError PolynomialMap(1, 1, :uniform)
     end
 
     @testset "Direct Construction with Components" begin
@@ -880,6 +878,57 @@ using LinearAlgebra
         coeffs_int = collect(1:n_coeffs)
         setcoefficients!(pm, coeffs_int)
         @test pm.components[1].coefficients ≈ Float64.(coeffs_int[1:length(pm.components[1].coefficients)])
+
+    end
+
+    @testset "Basis-Reference compatibility validation" begin
+
+        @test_nowarn PolynomialMap(2, 3, :normal, Softplus(), LinearizedHermiteBasis())
+        @test_nowarn PolynomialMap(2, 3, Normal(), Softplus(), HermiteBasis())
+
+        @test_nowarn PolynomialMap(2, 3, :uniform, Softplus(), LegendreBasis())
+        @test_nowarn PolynomialMap(2, 3, Uniform(-1, 1), Softplus(), LegendreBasis())
+
+        @test_nowarn PolynomialMap(2, 3, :uniform01, Softplus(), ShiftedLegendreBasis())
+        @test_nowarn PolynomialMap(2, 3, Uniform(0, 1), Softplus(), ShiftedLegendreBasis())
+
+        @test_throws AssertionError PolynomialMap(2, 3, Uniform(), Softplus(), LinearizedHermiteBasis())
+        @test_throws AssertionError PolynomialMap(2, 3, :uniform, Softplus(), LinearizedHermiteBasis())
+
+        @test_throws AssertionError PolynomialMap(2, 3, :uniform01, Softplus(), LegendreBasis())
+        @test_throws AssertionError PolynomialMap(2, 3, Uniform(2, 5), Softplus(), LegendreBasis())
+
+        @test_throws AssertionError PolynomialMap(2, 3, :uniform, Softplus(), ShiftedLegendreBasis())
+        @test_throws AssertionError PolynomialMap(2, 3, Uniform(2, 5), Softplus(), ShiftedLegendreBasis())
+
+        @test_throws AssertionError PolynomialMap(2, 3, :normal, Softplus(), LegendreBasis())
+        @test_throws AssertionError PolynomialMap(2, 3, :normal, Softplus(), ShiftedLegendreBasis())
+    end
+
+    @testset "PolynomialMap with Uniform Reference" begin
+        @testset "Construction with :uniform" begin
+            M = PolynomialMap(2, 3, :uniform, Softplus(), LegendreBasis())
+            @test M.reference.densitytype isa Uniform
+            @test M.reference.densitytype.a ≈ -1.0
+            @test M.reference.densitytype.b ≈ 1.0
+            @test length(M.components) == 2
+        end
+
+        @testset "Construction with :uniform01" begin
+            M = PolynomialMap(2, 3, :uniform01, Softplus(), ShiftedLegendreBasis())
+            @test M.reference.densitytype isa Uniform
+            @test M.reference.densitytype.a ≈ 0.0
+            @test M.reference.densitytype.b ≈ 1.0
+            @test length(M.components) == 2
+        end
+
+        @testset "Map evaluation" begin
+            M = PolynomialMap(2, 3, :uniform, Softplus(), LegendreBasis())
+            z = [0.0, 0.5]
+            y = evaluate(M, z)
+            @test length(y) == 2
+            @test all(isfinite.(y))
+        end
 
     end
 

@@ -164,13 +164,46 @@ import Mooncake
         @test length(g) == 1
         @test isfinite(g[1])
 
-        @test_throws ErrorException MapReferenceDensity(Uniform())
+        # Test Uniform reference (now supported)
+        ref_uniform = MapReferenceDensity(Uniform(-1, 1))
+        @test ref_uniform.densitytype isa Uniform
+        ref_uniform01 = MapReferenceDensity(Uniform(0, 1))
+        @test ref_uniform01.densitytype isa Uniform
 
-        @testset "Reference Density with pre-computed gradient" begin
-            reference = MapReferenceDensity(Normal(), AutoFiniteDiff(), 1)
-            @test isa(reference.prepared_gradient, GradientPrep)
+        @testset "Reference Density uses explicit gradlogpdf" begin
+            reference = MapReferenceDensity(Normal())
+            @test grad_logpdf(reference, [0.7]) ≈ [-0.7]
+
+            reference_uniform = MapReferenceDensity(Uniform(-1, 1))
+            @test grad_logpdf(reference_uniform, [0.0]) ≈ [0.0]
         end
 
+    end
+
+    @testset "Uniform Reference Density" begin
+
+        # Test Uniform(-1, 1)
+        ref1 = MapReferenceDensity(Uniform(-1, 1))
+        @test ref1.densitytype isa Uniform
+        @test ref1.densitytype.a ≈ -1.0
+        @test ref1.densitytype.b ≈ 1.0
+
+        # Test Uniform(0, 1)
+        ref2 = MapReferenceDensity(Uniform(0, 1))
+        @test ref2.densitytype isa Uniform
+        @test ref2.densitytype.a ≈ 0.0
+        @test ref2.densitytype.b ≈ 1.0
+
+        # For Uniform(-1, 1), pdf = 0.5 for x in [-1, 1]
+        x = [0.0, 0.5, -0.5]
+        logpdf_val = logpdf(ref1, x)
+        # log(0.5^3) = 3*log(0.5) ≈ -2.0794
+        @test logpdf_val ≈ 3 * log(0.5)
+
+        # Test gradient
+        grad = grad_logpdf(ref1, x)
+        # Gradient of constant log-density should be zero
+        @test all(abs.(grad) .< 1e-10)
     end
 
     @testset "Show Methods" begin

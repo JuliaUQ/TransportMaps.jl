@@ -101,3 +101,5 @@ end
 function Base.show(io::IO, basis::LinearizedHermiteBasis)
     print(io, "LinearizedHermiteBasis(bounds=$(basis.linearizationbounds))")
 end
+
+support(basis::LinearizedHermiteBasis) = RealInterval(-Inf, Inf)

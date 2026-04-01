@@ -46,3 +46,6 @@ end
 function Base.show(io::IO, ::GaussianWeightedHermiteBasis)
     print(io, "GaussianWeightedHermiteBasis()")
 end
+
+
+support(basis::GaussianWeightedHermiteBasis) = RealInterval(-Inf, Inf)

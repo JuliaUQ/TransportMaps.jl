@@ -13,7 +13,7 @@ using Random
 using StatsFuns
 using Statistics
 
-import Distributions: mean, mode, cov, MvNormal, pdf, logpdf
+import Distributions: mean, mode, cov, MvNormal, pdf, logpdf, gradlogpdf, support
 
 # Abstract type definitions
 abstract type AbstractBasisFunction end
@@ -55,6 +55,11 @@ export hermite_polynomial
 export hermite_derivative
 export hermite_second_derivative
 export multivariate_indices
+
+export legendre_polynomial
+export legendre_derivative
+export shifted_legendre_polynomial
+export shifted_legendre_derivative
 
 # Map operations
 export DiagonalMap
@@ -104,6 +109,8 @@ export hybridrootfinder
 # Export structs/types
 export IdentityRectifier
 export HermiteBasis
+export LegendreBasis
+export ShiftedLegendreBasis
 export LinearizedHermiteBasis
 export CubicSplineHermiteBasis
 export GaussianWeightedHermiteBasis
@@ -117,6 +124,7 @@ export PolynomialMap
 export Softplus
 export ShiftedELU
 export GaussHermiteWeights
+export GaussLegendreWeights
 export MonteCarloWeights
 export LatinHypercubeWeights
 export MapTargetDensity
@@ -141,6 +149,7 @@ export grad_logpdf
 include("util/mapdensity.jl")
 
 include("mapcomponents/univariatebases/hermitebasis.jl")
+include("mapcomponents/univariatebases/legendrebasis.jl")
 include("mapcomponents/univariatebases/linearizedhermitebasis.jl")
 include("mapcomponents/univariatebases/cubicsplinehermitebasis.jl")
 include("mapcomponents/univariatebases/gaussianweighthermitebasis.jl")

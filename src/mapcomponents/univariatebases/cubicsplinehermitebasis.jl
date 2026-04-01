@@ -78,3 +78,5 @@ end
 function Base.show(io::IO, basis::CubicSplineHermiteBasis)
     print(io, "CubicSplineHermiteBasis(radius=$(basis.radius))")
 end
+
+support(basis::CubicSplineHermiteBasis) = RealInterval(-Inf, Inf)

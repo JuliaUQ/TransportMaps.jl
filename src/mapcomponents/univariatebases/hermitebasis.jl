@@ -48,3 +48,5 @@ end
 function Base.show(io::IO, ::HermiteBasis)
     print(io, "HermiteBasis()")
 end
+
+support(basis::HermiteBasis) = RealInterval(-Inf, Inf)
