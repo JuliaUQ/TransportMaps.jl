@@ -13,6 +13,8 @@ HermiteBasis
 LinearizedHermiteBasis
 CubicSplineHermiteBasis
 GaussianWeightedHermiteBasis
+LegendreBasis
+ShiftedLegendreBasis
 MultivariateBasis
 ```
 

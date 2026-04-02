@@ -71,8 +71,8 @@ end
     ShiftedLegendreBasis
 
 Shifted Legendre polynomial basis, orthogonal with respect to uniform measure on [0, 1].
-The shifted Legendre polynomials P_n^*([0,1])(x) are obtained by transforming the standard
-Legendre polynomials: P_n^*(x) = P_n(2x - 1).
+The shifted Legendre polynomials ``P_n^*([0,1])(x)`` are obtained by transforming the standard
+Legendre polynomials: ``P_n^*(x) = P_n(2x - 1)``.
 """
 struct ShiftedLegendreBasis <: AbstractPolynomialBasis end
 

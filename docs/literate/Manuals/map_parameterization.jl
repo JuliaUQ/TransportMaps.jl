@@ -57,18 +57,18 @@ using Distributions
 # softplus as the rectifier function, and Hermite polynomials as the univariate basis functions.
 
 # ### Total Order Map
-M_to = PolynomialMap(2, 3, :normal, Softplus(), HermiteBasis())
-## alternative: PolynomialMap(2, 3, :normal, Softplus(), HermiteBasis(), :total)
+M_to = PolynomialMap(2, 3, Normal(), Softplus(), HermiteBasis())
+## alternative: PolynomialMap(2, 3, Normal(), Softplus(), HermiteBasis(), :total)
 
 # ### No-mixed-terms Map
 # We can use the `NoMixedMap` constructor for this map type:
-M_nm = NoMixedMap(2, 3, :normal, Softplus(), HermiteBasis())
-## alternative: PolynomialMap(2, 3, :normal, Softplus(), HermiteBasis(), :no_mixed)
+M_nm = NoMixedMap(2, 3, Normal(), Softplus(), HermiteBasis())
+## alternative: PolynomialMap(2, 3, Normal(), Softplus(), HermiteBasis(), :no_mixed)
 
 # ### Diagonal Map
 # For the diagonal map, we can use the `DiagonalMap` constructor:
-M_d = DiagonalMap(2, 3, :normal, Softplus(), HermiteBasis())
-## alternative: PolynomialMap(2, 3, :normal, Softplus(), HermiteBasis(), :diagonal)
+M_d = DiagonalMap(2, 3, Normal(), Softplus(), HermiteBasis())
+## alternative: PolynomialMap(2, 3, Normal(), Softplus(), HermiteBasis(), :diagonal)
 
 # ### Visualizing Multi-Index Sets
 #
