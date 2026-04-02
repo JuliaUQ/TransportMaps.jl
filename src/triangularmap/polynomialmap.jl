@@ -10,8 +10,8 @@ Triangular transport map with polynomial basis.
 
 # Constructors
 - `PolynomialMap(dimension::Int,degree::Int, referencetype::Symbol=:normal, rectifier::AbstractRectifierFunction=Softplus(), basis::AbstractPolynomialBasis=LinearizedHermiteBasis(), map_type::Symbol=:total)`: Initialize polynomial map for map from density. Reference types: `:normal`, `:uniform` (U(-1,1)), `:uniform01` (U(0,1)).
-- `DiagonalMap(dimension::Int, degree::Int, referencetype::Symbol=:normal, rectifier::AbstractRectifierFunction=Softplus(), basis::AbstractPolynomialBasis=LinearizedHermiteBasis())`: Initialize diagonal map with diagonal structure.
-- `NoMixedMap(dimension::Int, degree::Int, referencetype::Symbol=:normal, rectifier::AbstractRectifierFunction=Softplus(), basis::AbstractPolynomialBasis=LinearizedHermiteBasis())`: Initialize diagonal map without mixed terms.
+- `DiagonalMap(dimension::Int, degree::Int, reference::Distributions.UnivariateDistribution=Normal(), rectifier::AbstractRectifierFunction=Softplus(), basis::AbstractPolynomialBasis=LinearizedHermiteBasis())`: Initialize diagonal map with diagonal structure.
+- `NoMixedMap(dimension::Int, degree::Int, reference::Distributions.UnivariateDistribution=Normal(), rectifier::AbstractRectifierFunction=Softplus(), basis::AbstractPolynomialBasis=LinearizedHermiteBasis())`: Initialize diagonal map without mixed terms.
 """
 mutable struct PolynomialMap <: AbstractTriangularMap
     components::Vector{PolynomialMapComponent{<:AbstractPolynomialBasis}}  # Vector of map components
@@ -46,7 +46,7 @@ mutable struct PolynomialMap <: AbstractTriangularMap
         map_type::Symbol=:total
     )
         @assert map_type in [:total, :diagonal, :no_mixed] "Invalid map_type. Supported types are :total, :diagonal, :no_mixed"
-        @assert validate_basis_reference_compatibility!(basis, reference) "Invalid combination of reference density and basis. Support of $reference is $(support(reference)), while support of $basis is $(support(basis))."
+        @assert validate_basis_reference_compatibility(basis, reference) "Invalid combination of reference density and basis. Support of $reference is $(support(reference)), while support of $basis is $(support(basis))."
 
         components = [PolynomialMapComponent(k, degree, rectifier, basis, reference, map_type) for k in 1:dimension]
 
@@ -73,6 +73,17 @@ function DiagonalMap(
     return PolynomialMap(dimension, degree, reference, rectifier, basis, :diagonal)
 end
 
+# Backward-compatible Symbol overload for DiagonalMap
+function DiagonalMap(
+    dimension::Int,
+    degree::Int,
+    referencetype::Symbol,
+    rectifier::AbstractRectifierFunction=Softplus(),
+    basis::AbstractPolynomialBasis=LinearizedHermiteBasis()
+)
+    return PolynomialMap(dimension, degree, referencetype, rectifier, basis, :diagonal)
+end
+
 # Convenience constructor for NoMixedMap
 function NoMixedMap(
     dimension::Int,
@@ -82,6 +93,17 @@ function NoMixedMap(
     basis::AbstractPolynomialBasis=LinearizedHermiteBasis()
 )
     return PolynomialMap(dimension, degree, reference, rectifier, basis, :no_mixed)
+end
+
+# Backward-compatible Symbol overload for NoMixedMap
+function NoMixedMap(
+    dimension::Int,
+    degree::Int,
+    referencetype::Symbol,
+    rectifier::AbstractRectifierFunction=Softplus(),
+    basis::AbstractPolynomialBasis=LinearizedHermiteBasis()
+)
+    return PolynomialMap(dimension, degree, referencetype, rectifier, basis, :no_mixed)
 end
 
 # Construct PolynomialMap from multi-index sets Λ and given density
@@ -728,8 +750,8 @@ function Base.show(io::IO, ::MIME"text/plain", M::PolynomialMap)
     end
 end
 
-# Check compatibility of reference densities and selected bassis
-function validate_basis_reference_compatibility!(basis::AbstractPolynomialBasis, reference::Distributions.UnivariateDistribution)
+# Check compatibility of reference densities and selected basis
+function validate_basis_reference_compatibility(basis::AbstractPolynomialBasis, reference::Distributions.UnivariateDistribution)
     # Check Hermite basis family with Gaussian reference
     if basis isa Union{HermiteBasis,LinearizedHermiteBasis,CubicSplineHermiteBasis,GaussianWeightedHermiteBasis}
         if !(reference isa Normal)

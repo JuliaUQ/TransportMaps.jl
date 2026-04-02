@@ -39,7 +39,7 @@
 
 # Example:
 # ```julia
-# map_u = PolynomialMap(2, 3, Uniform(), Softplus(), LegendreBasis())
+# map_u = PolynomialMap(2, 3, Uniform(-1, 1), Softplus(), LegendreBasis())
 # q_gl  = GaussLegendreWeights(5, map_u)      # uniform-aware deterministic
 # q_mc  = MonteCarloWeights(1000, map_u)      # MC samples from map reference
 # q_lhs = LatinHypercubeWeights(1000, map_u)  # LHS samples from map reference
@@ -106,7 +106,7 @@ p_sparse = scatter(sparse.points[:, 1], sparse.points[:, 2], ms=6,
 # ## Tensor-product Gauss-Legendre
 # Gauss-Legendre quadrature integrates polynomials on bounded intervals accurately and is
 # therefore well matched to reference distributions with support on $[-1, 1]$, or after
-# after an affine rescaling, on $[0, 1]$.
+# an affine rescaling, on $[0, 1]$.
 
 legendre = GaussLegendreWeights(5, 2)
 p_legendre = scatter(legendre.points[:, 1], legendre.points[:, 2],

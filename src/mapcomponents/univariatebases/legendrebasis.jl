@@ -81,7 +81,7 @@ struct ShiftedLegendreBasis <: AbstractPolynomialBasis end
 @inline function shifted_legendre_polynomial(n::Int64, x::Real)
     # Transform x ∈ [0,1] to ξ ∈ [-1,1]
     ξ = 2x - 1
-    return sqrt(2n + 1) * legendre_polynomial(n, ξ)
+    return legendre_polynomial(n, ξ)
 end
 
 # Derivative of shifted Legendre polynomial
@@ -90,7 +90,7 @@ end
     # Transform x ∈ [0,1] to ξ ∈ [-1,1]
     ξ = 2x - 1
     # Chain rule: d/dx P_n(2x-1) = 2 * P'_n(2x-1)
-    return 2 * sqrt(2n + 1) * legendre_derivative(n, ξ)
+    return 2 * legendre_derivative(n, ξ)
 end
 
 """

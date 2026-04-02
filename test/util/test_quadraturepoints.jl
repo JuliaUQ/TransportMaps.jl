@@ -1,5 +1,6 @@
 using TransportMaps
 using Test
+using Distributions
 
 @testset "Quadrature Points" begin
     @testset "GaussHermiteWeights" begin

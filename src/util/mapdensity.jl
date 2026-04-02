@@ -101,12 +101,12 @@ to the target distribution.
 
 # Fields
 - `logdensity<:Function`: Function computing log-density `log ρ(z)`
-- `grad_logdensity<:Function`: Function computing gradient `∇ log ρ(z)` explicitly via `gradlogpdf`
+- `grad_logdensity<:Function`: Function computing gradient `∇ log ρ(z)` via `gradlogpdf` when available, otherwise via ForwardDiff
 - `densitytype::Distributions.UnivariateDistribution`: Univariate density type (e.g., `Normal()`)
 
 # Constructors
 - `MapReferenceDensity()`: Use standard normal as reference density.
-- `MapReferenceDensity(densitytype)`: Specify univariate distribution and use analytical `gradlogpdf`.
+- `MapReferenceDensity(densitytype)`: Specify univariate distribution; uses analytical `gradlogpdf` when available, otherwise falls back to ForwardDiff.
 """
 struct MapReferenceDensity{F<:Function,G<:Function} <: AbstractMapDensity
     logdensity::F
@@ -117,8 +117,13 @@ struct MapReferenceDensity{F<:Function,G<:Function} <: AbstractMapDensity
         densitytype::Distributions.UnivariateDistribution=Normal()
     )
         density = x -> sum(logpdf.(Ref(densitytype), x))
-        grad_density = function (x)
-            return gradlogpdf.(Ref(densitytype), x)
+
+        # Use gradlogpdf if available, otherwise fall back to ForwardDiff
+        grad_density = if hasmethod(gradlogpdf, Tuple{typeof(densitytype), Float64})
+            x -> gradlogpdf.(Ref(densitytype), x)
+        else
+            backend = AutoForwardDiff()
+            x -> DifferentiationInterface.gradient(density, backend, x)
         end
 
         return new{typeof(density),typeof(grad_density)}(
