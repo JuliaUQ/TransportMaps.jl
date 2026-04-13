@@ -1,5 +1,6 @@
 using TransportMaps
 using Test
+using Distributions
 
 @testset "Quadrature Points" begin
     @testset "GaussHermiteWeights" begin
@@ -228,10 +229,130 @@ using Test
         lhs = LatinHypercubeWeights(10, 2)
         @test numberdimensions(lhs) == size(lhs.points, 2)
 
-        gh = GaussHermiteWeights(2,2)
+        gh = GaussHermiteWeights(2, 2)
         @test numberdimensions(gh) == size(gh.points, 2)
 
-        smo = SparseSmolyakWeights(2,2)
+        smo = SparseSmolyakWeights(2, 2)
         @test numberdimensions(smo) == size(smo.points, 2)
     end
+
+    @testset "GaussLegendreWeights with U[-1,1]" begin
+        # Test default constructor (U[-1,1])
+        quad = GaussLegendreWeights(5, 2)
+
+        @test size(quad.points, 1) == 25  # 5^2
+        @test size(quad.points, 2) == 2
+        @test length(quad.weights) == 25
+
+        # Points should be in [-1, 1]
+        @test all(-1 .<= quad.points .<= 1)
+
+        # Sum of weights should be (b-a)^d = 2^2 = 4 for U[-1,1]^2
+        @test sum(quad.weights) ≈ 4.0 atol = 1e-10
+    end
+
+    @testset "GaussLegendreWeights with U[0,1]" begin
+        # Test with explicit U[0,1]
+        quad = GaussLegendreWeights(5, 2, Uniform(0, 1))
+
+        @test size(quad.points, 1) == 25
+        @test size(quad.points, 2) == 2
+
+        # Points should be in [0, 1]
+        @test all(0 .<= quad.points .<= 1)
+
+        # Sum of weights should be (b-a)^d = 1^2 = 1 for U[0,1]^2
+        @test sum(quad.weights) ≈ 1.0 atol = 1e-10
+    end
+
+    @testset "GaussLegendreWeights with custom Uniform" begin
+        # Test with U[2, 5]
+        quad = GaussLegendreWeights(4, 1, Uniform(2, 5))
+
+        @test size(quad.points, 1) == 4
+        @test size(quad.points, 2) == 1
+
+        # Points should be in [2, 5]
+        @test all(2 .<= quad.points .<= 5)
+
+        # Sum of weights should be (b-a)^d = 3^1 = 3 for U[2,5]
+        @test sum(quad.weights) ≈ 3.0 atol = 1e-10
+    end
+
+    @testset "GaussLegendreWeights from map with U[-1,1]" begin
+        # Create map with U[-1,1]
+        map = PolynomialMap(2, 3, :uniform, Softplus(), LegendreBasis())
+        quad = GaussLegendreWeights(5, map)
+
+        @test size(quad.points, 2) == 2
+        @test all(-1 .<= quad.points .<= 1)
+        @test sum(quad.weights) ≈ 4.0 atol = 1e-10
+    end
+
+    @testset "GaussLegendreWeights from map with U[0,1]" begin
+        # Create map with U[0,1]
+        map = PolynomialMap(2, 3, :uniform01, Softplus(), ShiftedLegendreBasis())
+        quad = GaussLegendreWeights(5, map)
+
+        @test size(quad.points, 2) == 2
+        @test all(0 .<= quad.points .<= 1)
+        @test sum(quad.weights) ≈ 1.0 atol = 1e-10
+    end
+
+    @testset "GaussLegendreWeights error with non-Uniform map" begin
+        # Create map with Normal reference
+        map = PolynomialMap(2, 3, :normal)
+
+        # Should error when trying to create Gauss-Legendre weights from Normal reference
+        @test_throws ErrorException GaussLegendreWeights(5, map)
+    end
+
+    @testset "Integration accuracy with U[0,1]" begin
+        # Test that quadrature can integrate polynomials exactly
+        quad = GaussLegendreWeights(10, 1, Uniform(0, 1))
+
+        # Integrate f(x) = x^2 over [0,1], exact value = 1/3
+        f_vals = [quad.points[i, 1]^2 for i in 1:size(quad.points, 1)]
+        integral = sum(quad.weights .* f_vals)
+
+        @test integral ≈ 1 / 3 atol = 1e-10
+
+        # Integrate f(x) = x^3 over [0,1], exact value = 1/4
+        f_vals = [quad.points[i, 1]^3 for i in 1:size(quad.points, 1)]
+        integral = sum(quad.weights .* f_vals)
+
+        @test integral ≈ 1 / 4 atol = 1e-10
+    end
+
+    @testset "Integration accuracy with U[-1,1]" begin
+        # Test that quadrature can integrate polynomials exactly
+        quad = GaussLegendreWeights(10, 1, Uniform(-1, 1))
+
+        # Integrate f(x) = x^2 over [-1,1], exact value = 2/3
+        f_vals = [quad.points[i, 1]^2 for i in 1:size(quad.points, 1)]
+        integral = sum(quad.weights .* f_vals)
+
+        @test integral ≈ 2 / 3 atol = 1e-10
+
+        # Integrate f(x) = 1 over [-1,1], exact value = 2
+        f_vals = ones(size(quad.points, 1))
+        integral = sum(quad.weights .* f_vals)
+
+        @test integral ≈ 2.0 atol = 1e-10
+    end
+
+    @testset "Weight scaling for different dimensions" begin
+        # 1D case: sum should be (b-a)^1
+        quad1d = GaussLegendreWeights(5, 1, Uniform(0, 1))
+        @test sum(quad1d.weights) ≈ 1.0 atol = 1e-10
+
+        # 2D case: sum should be (b-a)^2
+        quad2d = GaussLegendreWeights(5, 2, Uniform(0, 1))
+        @test sum(quad2d.weights) ≈ 1.0 atol = 1e-10
+
+        # 3D case: sum should be (b-a)^3
+        quad3d = GaussLegendreWeights(5, 3, Uniform(0, 1))
+        @test sum(quad3d.weights) ≈ 1.0 atol = 1e-10
+    end
+
 end

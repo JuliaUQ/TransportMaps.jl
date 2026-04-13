@@ -101,65 +101,34 @@ to the target distribution.
 
 # Fields
 - `logdensity<:Function`: Function computing log-density `log ρ(z)`
-- `ad_backend<:ADTypes.AbstractADType`: AD backend for gradient computation
-- `grad_logdensity<:Function`: Function computing gradient `∇ log ρ(z)`
+- `grad_logdensity<:Function`: Function computing gradient `∇ log ρ(z)` via `gradlogpdf` when available, otherwise via ForwardDiff
 - `densitytype::Distributions.UnivariateDistribution`: Univariate density type (e.g., `Normal()`)
-- `prepared_gradient`: Prepared gradient for performance (can be `nothing`)
-- `threaded::Bool`: Whether to use multithreading for gradient evaluations on matrices (default: `true`)
 
 # Constructors
-- `MapReferenceDensity()`: Use standard normal with ForwardDiff (default, not prepared).
-- `MapReferenceDensity(densitytype)`: Specify distribution with ForwardDiff (not prepared).
-- `MapReferenceDensity(densitytype, backend)`: Specify distribution and AD backend (not prepared).
-- `MapReferenceDensity(densitytype, backend, d; threaded=true)`: Specify distribution, AD backend, and dimension (prepared, recommended for performance).
+- `MapReferenceDensity()`: Use standard normal as reference density.
+- `MapReferenceDensity(densitytype)`: Specify univariate distribution; uses analytical `gradlogpdf` when available, otherwise falls back to ForwardDiff.
 """
-struct MapReferenceDensity{F<:Function,B<:ADTypes.AbstractADType,G<:Function,P<:Union{Nothing,DifferentiationInterface.GradientPrep}} <: AbstractMapDensity
+struct MapReferenceDensity{F<:Function,G<:Function} <: AbstractMapDensity
     logdensity::F
-    ad_backend::B
     grad_logdensity::G
     densitytype::Distributions.UnivariateDistribution
-    prepared_gradient::P
-    isvectorized::Bool
-    threaded::Bool
 
-    # Constructor with dimension specified for preparation (recommended for performance)
     function MapReferenceDensity(
-        densitytype::Distributions.UnivariateDistribution,
-        backend::ADTypes.AbstractADType,
-        d::Int;
-        threaded::Bool=true
+        densitytype::Distributions.UnivariateDistribution=Normal()
     )
-        density = x -> sum(map(Base.Fix1(logpdf, densitytype), x))
+        density = x -> sum(logpdf.(Ref(densitytype), x))
 
-        # Prepare gradient for dimension d
-        x_example = zeros(d)
-        prep = DifferentiationInterface.prepare_gradient(density, backend, x_example)
-
-        grad_density = function (x)
-            return DifferentiationInterface.gradient(density, prep, backend, x)
+        # Use gradlogpdf if available, otherwise fall back to ForwardDiff
+        grad_density = if hasmethod(gradlogpdf, Tuple{typeof(densitytype), Float64})
+            x -> gradlogpdf.(Ref(densitytype), x)
+        else
+            backend = AutoForwardDiff()
+            x -> DifferentiationInterface.gradient(density, backend, x)
         end
-        return new{typeof(density),typeof(backend),typeof(grad_density),typeof(prep)}(
-            density, backend, grad_density, densitytype, prep, false, threaded
-        )
-    end
 
-    # base constructor for reference density, without preparation (convenience)
-    function MapReferenceDensity(
-        densitytype::Distributions.UnivariateDistribution=Normal(),
-        backend::ADTypes.AbstractADType=AutoForwardDiff();
-        threaded::Bool=true
-    )
-        density = x -> sum(map(Base.Fix1(logpdf, densitytype), x))
-        grad_density = function (x)
-            return DifferentiationInterface.gradient(density, backend, x)
-        end
-        return new{typeof(density),typeof(backend),typeof(grad_density),Nothing}(
-            density, backend, grad_density, densitytype, nothing, false, threaded
+        return new{typeof(density),typeof(grad_density)}(
+            density, grad_density, densitytype
         )
-    end
-
-    function MapReferenceDensity(densitytype::Distributions.Uniform)
-        error("Not implemented yet")
     end
 end
 
@@ -179,7 +148,7 @@ logpdf(density::AbstractMapDensity, x::Vector{<:Real}) = density.logdensity(x)
 
 logpdf(density::AbstractMapDensity, x::Real) = logpdf(density, [x])
 
-function logpdf(density::AbstractMapDensity, X::Matrix{<:Real})
+function logpdf(density::MapTargetDensity, X::Matrix{<:Real})
 
     if density.isvectorized
         return density.logdensity(X)
@@ -193,6 +162,16 @@ function logpdf(density::AbstractMapDensity, X::Matrix{<:Real})
         end
         return logdensities
     end
+end
+
+function logpdf(density::MapReferenceDensity, X::Matrix{<:Real})
+    n = size(X, 1)
+    logdensities = zeros(Float64, n)
+
+    Threads.@threads for i in 1:n
+        logdensities[i] = density.logdensity(view(X, i, :))
+    end
+    return logdensities
 end
 
 """
@@ -209,9 +188,9 @@ Evaluate the gradient of log-density at point(s) `x`.
 """
 grad_logpdf(density::AbstractMapDensity, x::Vector{<:Real}) = density.grad_logdensity(x)
 
-function grad_logpdf(density::AbstractMapDensity, X::Matrix{<:Real})
+function grad_logpdf(density::MapTargetDensity, X::Matrix{<:Real})
 
-    if density.isvectorized && isnothing(density.ad_backend)
+    if density isa MapTargetDensity && density.isvectorized && isnothing(density.ad_backend)
         return density.grad_logdensity(X)
     else
         n, d = size(X)
@@ -231,6 +210,17 @@ function grad_logpdf(density::AbstractMapDensity, X::Matrix{<:Real})
     end
 end
 
+function grad_logpdf(density::MapReferenceDensity, X::Matrix{<:Real})
+    n, d = size(X)
+    log_gradients = zeros(Float64, n, d)
+
+    Threads.@threads for i in 1:n
+        log_gradients[i, :] = density.grad_logdensity(X[i, :])
+    end
+
+    return log_gradients
+end
+
 """
     pdf(density::AbstractMapDensity, x)
 
@@ -246,24 +236,11 @@ Evaluate the probability density at point(s) `x`.
 # Note
 This computes `exp(logpdf(density, x))`. For numerical stability, prefer using `logpdf` when possible.
 """
-pdf(density::AbstractMapDensity, x::Vector{<:Real}) = exp(density.logdensity(x))
+pdf(density::AbstractMapDensity, x::Vector{<:Real}) = exp(logpdf(density, x))
 
 pdf(density::AbstractMapDensity, x::Real) = pdf(density, [x])
 
-function pdf(density::AbstractMapDensity, X::Matrix{<:Real})
-
-    if density.isvectorized
-        return exp.(density.logdensity(X))
-    else
-        n = size(X, 1)
-        densities = zeros(Float64, n)
-
-        Threads.@threads for i in 1:n
-            densities[i] = exp(density.logdensity(view(X, i, :)))
-        end
-        return densities
-    end
-end
+pdf(density::AbstractMapDensity, X::Matrix{<:Real}) = exp.(logpdf(density, X))
 
 function Base.show(io::IO, target::MapTargetDensity)
     backend_str = target.ad_backend === nothing ? "analytical" : string(target.ad_backend)
@@ -271,5 +248,5 @@ function Base.show(io::IO, target::MapTargetDensity)
 end
 
 function Base.show(io::IO, ref::MapReferenceDensity)
-    print(io, "MapReferenceDensity(density=$(ref.densitytype), backend=$(ref.ad_backend))")
+    print(io, "MapReferenceDensity(density=$(ref.densitytype))")
 end

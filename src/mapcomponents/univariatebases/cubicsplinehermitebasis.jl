@@ -46,11 +46,11 @@ function _cubic_weight_derivative(z::Real, r::Float64)
 end
 
 """
-    basisfunction(basis::CubicSplineHermiteBasis, αᵢ::Real, zᵢ::Real)
+    basisfunction(basis::CubicSplineHermiteBasis, αᵢ::Int, zᵢ::Real)
 
 Evaluate `CubicSplineHermiteBasis` with degree `αᵢ` at `zᵢ`.
 """
-function basisfunction(basis::CubicSplineHermiteBasis, αᵢ::Real, zᵢ::Real)
+function basisfunction(basis::CubicSplineHermiteBasis, αᵢ::Int, zᵢ::Real)
     n = Int(αᵢ)
     r = basis.radius
     if n <= 1
@@ -61,11 +61,11 @@ function basisfunction(basis::CubicSplineHermiteBasis, αᵢ::Real, zᵢ::Real)
 end
 
 """
-    basisfunction_derivative(basis::CubicSplineHermiteBasis, αᵢ::Real, zᵢ::Real)
+    basisfunction_derivative(basis::CubicSplineHermiteBasis, αᵢ::Int, zᵢ::Real)
 
 Evaluate derivative of `CubicSplineHermiteBasis` with degree `αᵢ` at `zᵢ`.
 """
-function basisfunction_derivative(basis::CubicSplineHermiteBasis, αᵢ::Real, zᵢ::Real)
+function basisfunction_derivative(basis::CubicSplineHermiteBasis, αᵢ::Int, zᵢ::Real)
     n = Int(αᵢ)
     r = basis.radius
     if n <= 1
@@ -78,3 +78,5 @@ end
 function Base.show(io::IO, basis::CubicSplineHermiteBasis)
     print(io, "CubicSplineHermiteBasis(radius=$(basis.radius))")
 end
+
+support(basis::CubicSplineHermiteBasis) = RealInterval(-Inf, Inf)

@@ -10,6 +10,7 @@ Pages = ["quadrature.md"]
 
 ```@docs
 GaussHermiteWeights
+GaussLegendreWeights
 MonteCarloWeights
 LatinHypercubeWeights
 SparseSmolyakWeights

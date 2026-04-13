@@ -18,9 +18,9 @@ using Statistics
 
     # Test basisfunction interface
     hb = HermiteBasis()
-    @test basisfunction(hb, 0.0, 1.0) ≈ 1.0
-    @test basisfunction(hb, 1.0, 1.0) ≈ 1.0
-    @test basisfunction(hb, 2.0, 0.0) ≈ -1.0
+    @test basisfunction(hb, 0, 1.0) ≈ 1.0
+    @test basisfunction(hb, 1, 1.0) ≈ 1.0
+    @test basisfunction(hb, 2, 0.0) ≈ -1.0
 
     # Derivative tests
     @test hermite_derivative(0, 1.0) ≈ 0.0
@@ -28,9 +28,9 @@ using Statistics
     @test hermite_derivative(2, 1.0) ≈ 2.0
 
     # Basis function derivative tests
-    @test basisfunction_derivative(hb, 0.0, 1.0) ≈ 0.0
-    @test basisfunction_derivative(hb, 1.0, 1.0) ≈ 1.0
-    @test basisfunction_derivative(hb, 2.0, 1.0) ≈ 2.0
+    @test basisfunction_derivative(hb, 0, 1.0) ≈ 0.0
+    @test basisfunction_derivative(hb, 1, 1.0) ≈ 1.0
+    @test basisfunction_derivative(hb, 2, 1.0) ≈ 2.0
 
     @test_throws MethodError HermiteBasis(1)
 

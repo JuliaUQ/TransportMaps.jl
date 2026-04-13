@@ -1,5 +1,4 @@
 # Implementation of various quadrature rules for numerical integration
-# Todo: Add more flexible reference density (so far: only Gaussian)
 
 """
     GaussHermiteWeights
@@ -14,7 +13,7 @@ reference measure. Uses `numberpoints` points per dimension, resulting in
 
 # Constructors
 - `GaussHermiteWeights(numberpoints::Int64, dimension::Int64)`: Construct weights for number of points per dimension and `dimension`.
-- `GaussHermiteWeights(numberpoints::Int64, map::AbstractTransportMap)`: Get number of dimensions from `map`.
+- `GaussHermiteWeights(numberpoints::Int64, map::AbstractTransportMap)`: Get number of dimensions from `map` and construct a standard Gaussian Gauss-Hermite rule.
 """
 struct GaussHermiteWeights <: AbstractQuadratureWeights
     points::Matrix{Float64}
@@ -53,6 +52,78 @@ function gausshermite_weights(numberpoints::Int64, dimension::Int64)
 end
 
 """
+    GaussLegendreWeights
+
+Tensor product Gauss-Legendre quadrature for numerical integration with Uniform
+reference measure. Automatically handles both U[-1,1] and U[0,1] reference distributions.
+
+# Fields
+- `points::Matrix{Float64}`: Quadrature points
+- `weights::Vector{Float64}`: Quadrature weights
+
+# Constructors
+- `GaussLegendreWeights(numberpoints::Int64, dimension::Int64)`: Construct for U[-1,1] (default).
+- `GaussLegendreWeights(numberpoints::Int64, dimension::Int64, reference::Uniform)`: Construct for specific Uniform distribution.
+- `GaussLegendreWeights(numberpoints::Int64, map::AbstractTransportMap)`: Auto-detect from map's reference (must be `Uniform`).
+"""
+struct GaussLegendreWeights <: AbstractQuadratureWeights
+    points::Matrix{Float64}
+    weights::Vector{Float64}
+
+    function GaussLegendreWeights(numberpoints::Int64, dimension::Int64)
+        # Default: U[-1,1]
+        points, weights = gausslegendre_weights(numberpoints, dimension, Uniform(-1, 1))
+        return new(points, weights)
+    end
+
+    function GaussLegendreWeights(numberpoints::Int64, dimension::Int64, reference::Uniform)
+        points, weights = gausslegendre_weights(numberpoints, dimension, reference)
+        return new(points, weights)
+    end
+
+    function GaussLegendreWeights(numberpoints::Int64, map::AbstractTransportMap)
+        # Extract reference distribution from map
+        ref_dist = map.reference.densitytype
+
+        if !(ref_dist isa Uniform)
+            error("GaussLegendreWeights requires Uniform reference distribution, got $(typeof(ref_dist))")
+        end
+
+        points, weights = gausslegendre_weights(numberpoints, numberdimensions(map), ref_dist)
+        return new(points, weights)
+    end
+end
+
+function gausslegendre_weights(numberpoints::Int64, dimension::Int64, reference::Uniform)
+    # Tensor product Gauss-Legendre quadrature on [-1, 1]
+    x1d, w1d = gausslegendre(numberpoints)
+
+    # Get the bounds of the reference distribution
+    a, b = reference.a, reference.b
+
+    # Transform from [-1, 1] to [a, b]: x_transformed = (b-a)/2 * x + (a+b)/2
+    # Weight scaling: w_transformed = (b-a)/2 * w
+    scale = (b - a) / 2
+    shift = (a + b) / 2
+
+    # Generate tensor product indices
+    indices = collect(Iterators.product(ntuple(_ -> 1:numberpoints, dimension)...))
+
+    # Allocate arrays for points and weights
+    points = Matrix{Float64}(undef, length(indices), dimension)
+    weights = Vector{Float64}(undef, length(indices))
+
+    for (k, idx) in enumerate(indices)
+        # Transform each point from [-1,1] to [a,b]
+        points[k, :] = [scale * x1d[i] + shift for i in idx]
+        # Scale weights appropriately (scale^dimension for d dimensions)
+        weights[k] = (scale^dimension) * prod(w1d[i] for i in idx)
+    end
+
+    return points, weights
+end
+
+"""
     MonteCarloWeights
 
 Monte Carlo quadrature using random samples from the reference distribution.
@@ -63,8 +134,8 @@ All points receive uniform weights `1/numberpoints`.
 - `weights::Vector{Float64}`: Quadrature weights (uniform)
 
 # Constructors
-- `MonteCarloWeights(numberpoints::Int64, dimension::Int64)`: Construct weights with random sampling.
-- `MonteCarloWeights(numberpoints::Int64, map::AbstractTransportMap)`: Get number of dimensions and reference density from `map`.
+- `MonteCarloWeights(numberpoints::Int64, dimension::Int64)`: Construct weights with random sampling from `Normal()`.
+- `MonteCarloWeights(numberpoints::Int64, map::AbstractTransportMap)`: Get number of dimensions and sample from the map's reference density.
 - `MonteCarloWeights(points::Matrix{Float64}, weights::Vector{Float64}=Float64[])`: Construct from custom points and weights.
 """
 struct MonteCarloWeights <: AbstractQuadratureWeights
@@ -110,8 +181,8 @@ weights `1/n`.
 - `weights::Vector{Float64}`: Quadrature weights (uniform)
 
 # Constructors
-- `LatinHypercubeWeights(n::Int64, d::Int64)`: Construct Latin Hypercube samples for `d` dimensions.
-- `LatinHypercubeWeights(n::Int64, map::AbstractTransportMap)`: Get number of dimensions and reference density from `map`.
+- `LatinHypercubeWeights(n::Int64, d::Int64)`: Construct Latin Hypercube samples for `d` dimensions using `Normal()`.
+- `LatinHypercubeWeights(n::Int64, map::AbstractTransportMap)`: Get number of dimensions and sample according to the map's reference density.
 """
 struct LatinHypercubeWeights <: AbstractQuadratureWeights
     points::Matrix{Float64}
@@ -148,7 +219,7 @@ controls accuracy (higher level = more points and higher accuracy).
 
 # Constructors
 - `SparseSmolyakWeights(level::Int64, dimension::Int64)`: Construct sparse Smolyak grid with specified `level` and `dimension`.
-- `SparseSmolyakWeights(level::Int64, map::AbstractTransportMap)`: Get number of dimensions from `map`.
+- `SparseSmolyakWeights(level::Int64, map::AbstractTransportMap)`: Get number of dimensions from `map` and construct a standard Gaussian sparse Smolyak rule.
 """
 struct SparseSmolyakWeights <: AbstractQuadratureWeights
     points::Matrix{Float64}
@@ -184,6 +255,32 @@ function Base.show(io::IO, ::MIME"text/plain", w::GaussHermiteWeights)
     println(io, "  Quadrature type: Tensor product Gauss-Hermite")
     println(io, "  Reference measure: Standard Gaussian")
     println(io, "  Weight range: [$weight_min, $weight_max]")
+end
+
+# Display methods for GaussLegendreWeights
+function Base.show(io::IO, w::GaussLegendreWeights)
+    npts, dim = size(w.points)
+    print(io, "GaussLegendreWeights($npts points, $dim dimensions)")
+end
+
+function Base.show(io::IO, ::MIME"text/plain", w::GaussLegendreWeights)
+    npts, dim = size(w.points)
+    weight_min = minimum(w.weights)
+    weight_max = maximum(w.weights)
+    weight_sum = sum(w.weights)
+
+    # Detect domain from points
+    point_min = minimum(w.points)
+    point_max = maximum(w.points)
+    domain_str = "[$point_min, $point_max]^$dim"
+
+    println(io, "GaussLegendreWeights:")
+    println(io, "  Number of points: $npts")
+    println(io, "  Dimensions: $dim")
+    println(io, "  Quadrature type: Tensor product Gauss-Legendre")
+    println(io, "  Reference domain: $domain_str")
+    println(io, "  Weight range: [$weight_min, $weight_max]")
+    println(io, "  Sum of weights: $weight_sum")
 end
 
 # Display methods for MonteCarloWeights

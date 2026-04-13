@@ -71,11 +71,11 @@ end
 end
 
 """
-    basisfunction(basis::LinearizedHermiteBasis, αᵢ::Real, zᵢ::Real)
+    basisfunction(basis::LinearizedHermiteBasis, αᵢ::Int, zᵢ::Real)
 
 Evaluate `LinearizedHermiteBasis` with degree `αᵢ` at `zᵢ`.
 """
-@inline function basisfunction(basis::LinearizedHermiteBasis, αᵢ::Real, zᵢ::Real)
+@inline function basisfunction(basis::LinearizedHermiteBasis, αᵢ::Int, zᵢ::Real)
     n = Int(αᵢ)
     if !isempty(basis.normalization) && isfinite(basis.linearizationbounds[1]) && isfinite(basis.linearizationbounds[2])
         return _linearized_hermite(n, zᵢ, basis.linearizationbounds) / sqrt(basis.normalization[n+1])
@@ -85,11 +85,11 @@ Evaluate `LinearizedHermiteBasis` with degree `αᵢ` at `zᵢ`.
 end
 
 """
-    basisfunction_derivative(basis::LinearizedHermiteBasis, αᵢ::Real, zᵢ::Real)
+    basisfunction_derivative(basis::LinearizedHermiteBasis, αᵢ::Int, zᵢ::Real)
 
 Evaluate derivative of `LinearizedHermiteBasis` with degree `αᵢ` at `zᵢ`.
 """
-@inline function basisfunction_derivative(basis::LinearizedHermiteBasis, αᵢ::Real, zᵢ::Real)
+@inline function basisfunction_derivative(basis::LinearizedHermiteBasis, αᵢ::Int, zᵢ::Real)
     n = Int(αᵢ)
     if !isempty(basis.normalization) && isfinite(basis.linearizationbounds[1]) && isfinite(basis.linearizationbounds[2])
         return _linearized_hermite_derivative(n, zᵢ, basis.linearizationbounds) / sqrt(basis.normalization[n+1])
@@ -101,3 +101,5 @@ end
 function Base.show(io::IO, basis::LinearizedHermiteBasis)
     print(io, "LinearizedHermiteBasis(bounds=$(basis.linearizationbounds))")
 end
+
+support(basis::LinearizedHermiteBasis) = RealInterval(-Inf, Inf)
