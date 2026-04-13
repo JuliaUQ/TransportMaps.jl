@@ -46,20 +46,20 @@ end
 end
 
 """
-    basisfunction(basis::LegendreBasis, αᵢ::Real, zᵢ::Real)
+    basisfunction(basis::LegendreBasis, αᵢ::Int, zᵢ::Real)
 
 Evaluate `LegendreBasis` with degree `αᵢ` at `zᵢ`.
 """
-@inline function basisfunction(basis::LegendreBasis, αᵢ::Real, zᵢ::Real)
+@inline function basisfunction(basis::LegendreBasis, αᵢ::Int, zᵢ::Real)
     return legendre_polynomial(Int(αᵢ), zᵢ)
 end
 
 """
-    basisfunction_derivative(basis::LegendreBasis, αᵢ::Real, zᵢ::Real)
+    basisfunction_derivative(basis::LegendreBasis, αᵢ::Int, zᵢ::Real)
 
 Evaluate derivative of `LegendreBasis` with degree `αᵢ` at `zᵢ`.
 """
-@inline function basisfunction_derivative(basis::LegendreBasis, αᵢ::Real, zᵢ::Real)
+@inline function basisfunction_derivative(basis::LegendreBasis, αᵢ::Int, zᵢ::Real)
     return legendre_derivative(Int(αᵢ), zᵢ)
 end
 
@@ -94,20 +94,20 @@ end
 end
 
 """
-    basisfunction(basis::ShiftedLegendreBasis, αᵢ::Real, zᵢ::Real)
+    basisfunction(basis::ShiftedLegendreBasis, αᵢ::Int, zᵢ::Real)
 
 Evaluate `ShiftedLegendreBasis` with degree `αᵢ` at `zᵢ` ∈ [0,1].
 """
-@inline function basisfunction(basis::ShiftedLegendreBasis, αᵢ::Real, zᵢ::Real)
+@inline function basisfunction(basis::ShiftedLegendreBasis, αᵢ::Int, zᵢ::Real)
     return shifted_legendre_polynomial(Int(αᵢ), zᵢ)
 end
 
 """
-    basisfunction_derivative(basis::ShiftedLegendreBasis, αᵢ::Real, zᵢ::Real)
+    basisfunction_derivative(basis::ShiftedLegendreBasis, αᵢ::Int, zᵢ::Real)
 
 Evaluate derivative of `ShiftedLegendreBasis` with degree `αᵢ` at `zᵢ` ∈ [0,1].
 """
-@inline function basisfunction_derivative(basis::ShiftedLegendreBasis, αᵢ::Real, zᵢ::Real)
+@inline function basisfunction_derivative(basis::ShiftedLegendreBasis, αᵢ::Int, zᵢ::Real)
     return shifted_legendre_derivative(Int(αᵢ), zᵢ)
 end
 

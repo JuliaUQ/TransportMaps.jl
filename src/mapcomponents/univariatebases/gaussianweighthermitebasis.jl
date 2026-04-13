@@ -14,11 +14,11 @@ function _gaussian_weight_hermite_derivative(n::Int, z::Real)
 end
 
 """
-    basisfunction(basis::GaussianWeightedHermiteBasis, αᵢ::Real, zᵢ::Real)
+    basisfunction(basis::GaussianWeightedHermiteBasis, αᵢ::Int, zᵢ::Real)
 
 Evaluate `GaussianWeightedHermiteBasis` with degree `αᵢ` at `zᵢ`.
 """
-@inline function basisfunction(basis::GaussianWeightedHermiteBasis, αᵢ::Real, zᵢ::Real)
+@inline function basisfunction(basis::GaussianWeightedHermiteBasis, αᵢ::Int, zᵢ::Real)
     n = Int(αᵢ)
 
     if n <= 1
@@ -29,11 +29,11 @@ Evaluate `GaussianWeightedHermiteBasis` with degree `αᵢ` at `zᵢ`.
 end
 
 """
-    basisfunction_derivative(basis::GaussianWeightedHermiteBasis, αᵢ::Real, zᵢ::Real)
+    basisfunction_derivative(basis::GaussianWeightedHermiteBasis, αᵢ::Int, zᵢ::Real)
 
 Evaluate derivative of `GaussianWeightedHermiteBasis` with degree `αᵢ` at `zᵢ`.
 """
-@inline function basisfunction_derivative(basis::GaussianWeightedHermiteBasis, αᵢ::Real, zᵢ::Real)
+@inline function basisfunction_derivative(basis::GaussianWeightedHermiteBasis, αᵢ::Int, zᵢ::Real)
     n = Int(αᵢ)
 
     if n <= 1

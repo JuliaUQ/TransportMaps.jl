@@ -20,17 +20,17 @@ end
 
 @testset "MultivariateBasis - Hermite specific" begin
     # Test multivariate Psi (using HermiteBasis)
-    alpha = [0.0, 1.0]
+    alpha = [0, 1]
     x = [1.0, 2.0]
     result = Psi(alpha, x, [HermiteBasis(), HermiteBasis()])
-    expected = basisfunction(HermiteBasis(), 0.0, 1.0) * basisfunction(HermiteBasis(), 1.0, 2.0)
+    expected = basisfunction(HermiteBasis(), 0, 1.0) * basisfunction(HermiteBasis(), 1, 2.0)
     @test result ≈ expected
 
     # Test with different dimensions
-    alpha3 = [1.0, 0.0, 2.0]
+    alpha3 = [1, 0, 2]
     x3 = [0.5, 1.0, -0.5]
     result3 = Psi(alpha3, x3, [HermiteBasis(), HermiteBasis(), HermiteBasis()])
-    expected3 = basisfunction(HermiteBasis(), 1.0, 0.5) * basisfunction(HermiteBasis(), 0.0, 1.0) * basisfunction(HermiteBasis(), 2.0, -0.5)
+    expected3 = basisfunction(HermiteBasis(), 1, 0.5) * basisfunction(HermiteBasis(), 0, 1.0) * basisfunction(HermiteBasis(), 2, -0.5)
     @test result3 ≈ expected3
 
     # Test MultivariateBasis creation

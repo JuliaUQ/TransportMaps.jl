@@ -28,20 +28,20 @@ end
 end
 
 """
-    basisfunction(basis::HermiteBasis, αᵢ::Real, zᵢ::Real)
+    basisfunction(basis::HermiteBasis, αᵢ::Int, zᵢ::Real)
 
 Evaluate `HermiteBasis` with degree `αᵢ` at `zᵢ`.
 """
-@inline function basisfunction(basis::HermiteBasis, αᵢ::Real, zᵢ::Real)
+@inline function basisfunction(basis::HermiteBasis, αᵢ::Int, zᵢ::Real)
     return hermite_polynomial(Int(αᵢ), zᵢ)
 end
 
 """
-    basisfunction_derivative(basis::HermiteBasis, αᵢ::Real, zᵢ::Real)
+    basisfunction_derivative(basis::HermiteBasis, αᵢ::Int, zᵢ::Real)
 
 Evaluate derivative of `HermiteBasis` with degree `αᵢ` at `zᵢ`.
 """
-@inline function basisfunction_derivative(basis::HermiteBasis, αᵢ::Real, zᵢ::Real)
+@inline function basisfunction_derivative(basis::HermiteBasis, αᵢ::Int, zᵢ::Real)
     return hermite_derivative(Int(αᵢ), zᵢ)
 end
 
