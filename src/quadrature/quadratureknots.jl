@@ -29,7 +29,8 @@ support(knots::GaussLegendreKnots) = knots.domain
 
 function (knots::GaussLegendreKnots)(level::Int)
     if level == 0
-        return ([0.0], [1.0])
+        a, b = extrema(support(knots))
+        return ([a + (b - a) / 2], [1.0])
     else
         n = min(2^level + 1, 200)
         quad = gausslegendre(n)
@@ -64,7 +65,8 @@ support(knots::ClenshawCurtisKnots) = knots.domain
 
 function (knots::ClenshawCurtisKnots)(level::Int)
     if level == 0
-        return ([0.0], [1.0])
+        a, b = extrema(support(knots))
+        return ([a + (b - a) / 2], [1.0])
     else
         quad = clenshaw_curtis_rule(2^level)
         transform_to_domain!(knots, quad...)
@@ -72,6 +74,7 @@ function (knots::ClenshawCurtisKnots)(level::Int)
     end
 end
 
+#? maybe update this with fft-based version?
 function clenshaw_curtis_rule(n::Int64)
     n ≥ 1 || throw(ArgumentError("n must be ≥ 1"))
 
@@ -80,7 +83,7 @@ function clenshaw_curtis_rule(n::Int64)
 
     # Build Vandermonde system A * w = b enforcing exactness for x^m
     # ∫_{-1}^1 x^m dx = 0 for m odd, 2/(m+1) for m even
-    A = Matrix{Float64}(undef, n+1, n+1)
+    A = Matrix{Float64}(undef, n + 1, n + 1)
     for m in 0:n
         A[m+1, :] .= x .^ m
     end

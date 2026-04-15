@@ -37,10 +37,10 @@ end
 """
     GaussLegendreWeights(level::Int64, dim::Int64)
 
-Tensor-product Gauss-Legendre weights for integration with respect to Uniform[-1, 1].
+Tensor-product Gauss-Legendre weights for integration with respect to Uniform[0, 1].
 """
-function GaussLegendreWeights(level::Int64, dim::Int64)
-    return TensorProductWeights(level, dim, GaussLegendreKnots())
+function GaussLegendreWeights(level::Int64, dim::Int64, domain::Vector{<:Real}=[0, 1])
+    return TensorProductWeights(level, dim, GaussLegendreKnots(domain))
 end
 
 function GaussLegendreWeights(level::Int64, map::AbstractTransportMap)
@@ -57,8 +57,8 @@ end
 
 Tensor-product Clenshaw-Curtis weights for integration with respect to Uniform[-1, 1].
 """
-function ClenshawCurtisWeights(level::Int64, dim::Int64)
-    return TensorProductWeights(level, dim, ClenshawCurtisKnots())
+function ClenshawCurtisWeights(level::Int64, dim::Int64, domain::Vector{<:Real}=[0, 1])
+    return TensorProductWeights(level, dim, ClenshawCurtisKnots(domain))
 end
 
 """
@@ -160,12 +160,13 @@ controls accuracy (higher level = more points and higher accuracy).
 - `SparseSmolyakWeights(level::Int64, dimension::Int64)`: Construct sparse Smolyak grid with specified `level` and `dimension`.
 - `SparseSmolyakWeights(level::Int64, map::AbstractTransportMap)`: Get number of dimensions from `map` and construct a standard Gaussian sparse Smolyak rule.
 """
+# todo: update docstring
 struct SparseSmolyakWeights{T<:AbstractQuadratureKnots} <: AbstractQuadratureWeights
     points::Matrix{Float64}
     weights::Vector{Float64}
     knots::AbstractQuadratureKnots
 
-    function SparseSmolyakWeights(level::Int64, dim::Int64, knots::AbstractQuadratureKnots; sparse::Bool=true)
+    function SparseSmolyakWeights(level::Int64, dim::Int64, knots::AbstractQuadratureKnots=GaussHermiteKnots(); sparse::Bool=true)
         T = typeof(knots)
         points, weights = smolyak_points(dim, level, knots, sparse)
         return new{T}(points, weights, knots)
@@ -180,6 +181,8 @@ struct SparseSmolyakWeights{T<:AbstractQuadratureKnots} <: AbstractQuadratureWei
         return new{T}(points, weights, knots)
     end
 end
+
+Base.eltype(::Type{SparseSmolyakWeights{T}}) where T<:AbstractQuadratureKnots = T
 
 function _determine_knots_from_reference(map::AbstractTransportMap)
     ref = map.reference.densitytype
@@ -197,7 +200,7 @@ function Base.show(io::IO, w::TensorProductWeights{T}) where T<:AbstractQuadratu
     print(io, "TensorProductWeights{$T}(number_pts=$npts, dim=$dim, support=$(domain))")
 end
 
-# todo: update doc strings, test and documentation
+# todo: update doc strings, test and documentation !
 
 # function Base.show(io::IO, ::MIME"text/plain", w::TensorProductWeights)
 #     npts, dim = size(w.points)
