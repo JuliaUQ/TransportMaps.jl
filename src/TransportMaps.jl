@@ -27,6 +27,7 @@ abstract type AbstractQuadratureWeights end
 abstract type AbstractMapDensity end
 abstract type AbstractComposedMap end
 abstract type AbstractLinearMap <: AbstractTriangularMap end
+abstract type AbstractQuadratureKnots end
 
 # Export abstract types
 export AbstractBasisFunction
@@ -39,6 +40,7 @@ export AbstractQuadratureWeights
 export AbstractMapDensity
 export AbstractComposedMap
 export AbstractLinearMap
+export AbstractQuadratureKnots
 
 # Export functions/methods
 # Basis functions and evaluation
@@ -123,16 +125,24 @@ export PolynomialMapComponent
 export PolynomialMap
 export Softplus
 export ShiftedELU
-export GaussHermiteWeights
-export GaussLegendreWeights
-export MonteCarloWeights
-export LatinHypercubeWeights
 export MapTargetDensity
 export MapReferenceDensity
-export SparseSmolyakWeights
 export PrecomputedBasis
 export PrecomputedMapBasis
 export ExpRectifier
+
+# Quadrature
+export TensorProductWeights
+export GaussHermiteWeights
+export GaussLegendreWeights
+export ClenshawCurtisWeights
+export SparseSmolyakWeights
+export MonteCarloWeights
+export LatinHypercubeWeights
+
+export GaussHermiteKnots
+export GaussLegendreKnots
+export ClenshawCurtisKnots
 
 # Laplace Map
 export mean
@@ -173,9 +183,11 @@ include("optimization/optimizationhistory.jl")
 include("optimization/adaptivetransportmap.jl")
 include("optimization/adaptivetransportmap_density.jl")
 
+include("quadrature/grids.jl")
+include("quadrature/quadratureknots.jl")
+include("quadrature/quadratureweights.jl")
+
 include("util/gaussquadrature.jl")
 include("util/hybridrootfinder.jl")
-include("util/quadraturepoints.jl")
-include("util/smolyak.jl")
 
 end
