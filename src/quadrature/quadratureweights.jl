@@ -1,9 +1,21 @@
 # Implementation of various quadrature rules for numerical integration
 
 """
-    TensorProductWeights
+    TensorProductWeights{T<:AbstractQuadratureKnots}
 
+Multi-dimensional quadrature rule constructed from a tensor-product of one-dimensional
+quadrature knots. The `level` parameter controls accuracy.
 
+# Fields
+- `points::Matrix{Float64}`: Quadrature points (tensor grid)
+- `weights::Vector{Float64}`: Quadrature weights
+- `knots::AbstractQuadratureKnots`: The 1D quadrature knots, e.g., `GaussHermiteKnots` or `GaussLegendreKnots`
+
+# Constructors
+- `TensorProductWeights(level::Int64, dim::Int64, knots::AbstractQuadratureKnots)`
+- `TensorProductWeights(level::Int64, map::AbstractTransportMap)`
+
+See also [`GaussHermiteWeights`](@ref) and [`GaussLegendreWeights`](@ref), and [`SparseSmolyakWeights`](@ref) for spare grids.
 """
 struct TensorProductWeights{T<:AbstractQuadratureKnots} <: AbstractQuadratureWeights
     points::Matrix{Float64}
@@ -17,6 +29,13 @@ struct TensorProductWeights{T<:AbstractQuadratureKnots} <: AbstractQuadratureWei
         return new{T}(points, weights, knots)
     end
 
+    function TensorProductWeights(level::Int64, map::AbstractTransportMap)
+        dim = numberdimensions(map)
+        knots = _determine_knots_from_reference(map)
+
+        points, weights = full_tensor_points(dim, level, knots)
+        return new{T}(points, weights, knots)
+    end
 end
 
 Base.eltype(::Type{TensorProductWeights{T}}) where T<:AbstractQuadratureKnots = T
@@ -25,40 +44,101 @@ Base.eltype(::Type{TensorProductWeights{T}}) where T<:AbstractQuadratureKnots = 
     GaussHermiteWeights(level::Int64, dim::Int64)
 
 Tensor-product Gauss-Hermite weights for integration with respect to standard Gaussian.
+Returns a [`TensorProductWeights`](@ref) object.
 """
 function GaussHermiteWeights(level::Int64, dim::Int64)
+    # convenience constructor and compatibility
     return TensorProductWeights(level, dim, GaussHermiteKnots())
 end
 
+"""
+    GaussHermiteWeights(level::Int64, map::AbstractTransportMap)
+
+Tensor-product Gauss-Hermite weights for integration with respect to standard Gaussian
+constructed from the transport map `map` with normal reference density.
+Returns a [`TensorProductWeights`](@ref) object.
+"""
 function GaussHermiteWeights(level::Int64, map::AbstractTransportMap)
+    if !(map.reference.densitytype isa Normal)
+        error("GaussHermiteWeights requires Normal reference distribution, got $(typeof(ref_dist))")
+    end
+
     return TensorProductWeights(level, numberdimensions(map), GaussHermiteKnots())
 end
 
 """
-    GaussLegendreWeights(level::Int64, dim::Int64)
+    GaussLegendreWeights(level::Int64, dim::Int64, domain=[0, 1])
 
-Tensor-product Gauss-Legendre weights for integration with respect to Uniform[0, 1].
+Tensor-product Gauss-Legendre weights for integration with respect to Uniform[0,1].
+Returns a [`TensorProductWeights`](@ref) object.
 """
 function GaussLegendreWeights(level::Int64, dim::Int64, domain::Vector{<:Real}=[0, 1])
     return TensorProductWeights(level, dim, GaussLegendreKnots(domain))
 end
 
+"""
+    GaussLegendreWeights(level::Int64, map::AbstractTransportMap)
+
+Tensor-product Gauss-Legendre weights for integration with respect to Uniform[a,b]
+constructed from the transport map `map` with uniform reference density.
+Returns a [`TensorProductWeights`](@ref) object.
+"""
 function GaussLegendreWeights(level::Int64, map::AbstractTransportMap)
 
     if !(map.reference.densitytype isa Uniform)
         error("GaussLegendreWeights requires Uniform reference distribution, got $(typeof(ref_dist))")
     end
 
-    return TensorProductWeights(level, numberdimensions(map), GaussLegendreKnots())
+    return TensorProductWeights(level, numberdimensions(map), _determine_knots_from_reference(ref))
 end
 
 """
-    GaussLegendreWeights(level::Int64, dim::Int64)
+    SparseSmolyakWeights{T<:AbstractQuadratureKnots}
 
-Tensor-product Clenshaw-Curtis weights for integration with respect to Uniform[-1, 1].
+Multi-dimensional quadrature rule constructed using a sparse Smolyak grid of one-dimensional
+quadrature knots. The `level` parameter controls accuracy.
+
+# Fields
+- `points::Matrix{Float64}`: Quadrature points (sparse grid)
+- `weights::Vector{Float64}`: Quadrature weights
+- `knots::AbstractQuadratureKnots`: The 1D quadrature knots, e.g., `GaussHermiteKnots` or `GaussLegendreKnots`
+
+# Constructors
+- `SparseSmolyakWeights(level::Int64, dim::Int64, knots=GaussHermiteKnots())`: Construct sparse Smolyak grid with specified `level`, `dim` and `knots`.
+- `SparseSmolyakWeights(level::Int64, map::AbstractTransportMap)`: Construct sparse Smolyak grid with the help of the transport map. The knots are chosen based on the reference distribution ([`GaussHermiteKnots`](@ref) for a Normal reference and [`GaussLegendreKnots`](@ref) for a Uniform reference).
+
+See also [`TensorProductWeights`](@ref).
 """
-function ClenshawCurtisWeights(level::Int64, dim::Int64, domain::Vector{<:Real}=[0, 1])
-    return TensorProductWeights(level, dim, ClenshawCurtisKnots(domain))
+struct SparseSmolyakWeights{T<:AbstractQuadratureKnots} <: AbstractQuadratureWeights
+    points::Matrix{Float64}
+    weights::Vector{Float64}
+    knots::AbstractQuadratureKnots
+
+    function SparseSmolyakWeights(level::Int64, dim::Int64, knots::AbstractQuadratureKnots=GaussHermiteKnots(); sparse::Bool=true)
+        T = typeof(knots)
+        points, weights = smolyak_points(dim, level, knots, sparse)
+        return new{T}(points, weights, knots)
+    end
+
+    function SparseSmolyakWeights(level::Int64, map::AbstractTransportMap; sparse::Bool=true)
+        dim = numberdimensions(map)
+        knots = _determine_knots_from_reference(map)
+        T = typeof(knots)
+        points, weights = smolyak_points(dim, level, knots, sparse)
+
+        return new{T}(points, weights, knots)
+    end
+end
+
+Base.eltype(::Type{SparseSmolyakWeights{T}}) where T<:AbstractQuadratureKnots = T
+
+function _determine_knots_from_reference(map::AbstractTransportMap)
+    ref = map.reference.densitytype
+    if ref isa Normal
+        return GaussHermiteKnots()
+    elseif ref isa Uniform
+        return GaussLegendreKnots(support(ref))
+    end
 end
 
 """
@@ -142,55 +222,6 @@ function latinhypercube_weights(numberpoints::Int64, dimension::Int64, distr::Di
     points = reshape([quantile(distr, u) for u in QuasiMonteCarlo.sample(numberpoints, dimension, LatinHypercubeSample())], numberpoints, dimension)
     weights = 1 / numberpoints * ones(numberpoints)
     return points, weights
-end
-
-
-"""
-    SparseSmolyakWeights
-
-Sparse Smolyak quadrature using Gauss-Hermite rules. Reduces the curse of
-dimensionality by using a sparse grid construction. The `level` parameter
-controls accuracy (higher level = more points and higher accuracy).
-
-# Fields
-- `points::Matrix{Float64}`: Quadrature points (sparse grid)
-- `weights::Vector{Float64}`: Quadrature weights
-
-# Constructors
-- `SparseSmolyakWeights(level::Int64, dimension::Int64)`: Construct sparse Smolyak grid with specified `level` and `dimension`.
-- `SparseSmolyakWeights(level::Int64, map::AbstractTransportMap)`: Get number of dimensions from `map` and construct a standard Gaussian sparse Smolyak rule.
-"""
-# todo: update docstring
-struct SparseSmolyakWeights{T<:AbstractQuadratureKnots} <: AbstractQuadratureWeights
-    points::Matrix{Float64}
-    weights::Vector{Float64}
-    knots::AbstractQuadratureKnots
-
-    function SparseSmolyakWeights(level::Int64, dim::Int64, knots::AbstractQuadratureKnots=GaussHermiteKnots(); sparse::Bool=true)
-        T = typeof(knots)
-        points, weights = smolyak_points(dim, level, knots, sparse)
-        return new{T}(points, weights, knots)
-    end
-
-    function SparseSmolyakWeights(level::Int64, map::AbstractTransportMap; sparse::Bool=true)
-        dim = numberdimensions(map)
-        knots = _determine_knots_from_reference(map)
-        T = typeof(knots)
-        points, weights = smolyak_points(dim, level, knots, sparse)
-
-        return new{T}(points, weights, knots)
-    end
-end
-
-Base.eltype(::Type{SparseSmolyakWeights{T}}) where T<:AbstractQuadratureKnots = T
-
-function _determine_knots_from_reference(map::AbstractTransportMap)
-    ref = map.reference.densitytype
-    if ref isa Normal
-        return GaussHermiteKnots()
-    elseif ref isa Uniform
-        return GaussLegendreKnots(support(ref))
-    end
 end
 
 # Display methods for TensorProductWeights

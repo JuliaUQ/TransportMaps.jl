@@ -99,7 +99,7 @@ target = MapTargetDensity(x -> logposterior(x))
 M = PolynomialMap(2, 3, :normal, Softplus(), LinearizedHermiteBasis())
 
 # Set up Gauss-Hermite quadrature for optimization:
-quadrature = GaussHermiteWeights(10, 2)
+quadrature = GaussHermiteWeights(3, 2)
 
 # Optimize the map coefficients:
 res = optimize!(M, target, quadrature)

@@ -1,4 +1,13 @@
 
+"""
+    GaussHermiteKnots
+
+One-dimensional Gauss-Hermite quadrature weights for computing integrals for the form:
+
+`` \\int_{-\\infty}^{\\infty} f(x) \\phi(x) \\ \\mathrm{d}x \\approx \\sum_{i=1}^{n} w_i f(x_i),``
+
+where ``\\phi(x)`` is the standard normal density.
+"""
 struct GaussHermiteKnots <: AbstractQuadratureKnots
 end
 
@@ -13,6 +22,15 @@ function (knots::GaussHermiteKnots)(level::Int)
     end
 end
 
+"""
+    GaussLegendreKnots
+
+One-dimensional Gauss-Legendre quadrature weights for computing integrals for the form:
+
+`` \\int_{-1}^{1} f(x) u(x) \\ \\mathrm{d}x \\approx \\sum_{i=1}^{n} w_i f(x_i),``
+
+where ``u(x)`` is the uniform density.
+"""
 struct GaussLegendreKnots <: AbstractQuadratureKnots
     domain::RealInterval{<:Real}
 
@@ -49,6 +67,15 @@ function transform_to_domain!(knots::GaussLegendreKnots, quadrature_points, quad
     quadrature_weights .= quadrature_weights ./ 2
 end
 
+"""
+    ClenshawCurtisKnots
+
+One-dimensional Clenshaw-Curtis quadrature weights for computing integrals for the form:
+
+`` \\int_{-1}^{1} f(x) u(x) \\ \\mathrm{d}x \\approx \\sum_{i=1}^{n} w_i f(x_i),``
+
+where ``u(x)`` is the uniform density.
+"""
 struct ClenshawCurtisKnots <: AbstractQuadratureKnots
     domain::RealInterval{<:Real}
 

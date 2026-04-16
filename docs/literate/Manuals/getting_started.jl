@@ -74,7 +74,7 @@ target_density = MapTargetDensity(correlated_gaussian)
 # Choose an appropriate quadrature scheme for map optimization:
 
 # Gauss-Hermite quadrature (good for Gaussian-like targets)
-quadrature = GaussHermiteWeights(5, 2)  # 5 points per dimension, 2D
+quadrature = GaussHermiteWeights(3, 2)  # 5 points per dimension, 2D
 ## alternative options:
 ## quadrature = MonteCarloWeights(1000, 2)  # 1000 samples, 2D
 ## quadrature = LatinHypercubeWeights(1000, 2)

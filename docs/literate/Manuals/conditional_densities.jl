@@ -43,7 +43,7 @@ target = MapTargetDensity(banana_density)
 
 # Define the map and quadrature; and optimize the map:
 M = PolynomialMap(2, 2, :normal, Softplus(), HermiteBasis())
-quadrature = GaussHermiteWeights(10, 2)
+quadrature = GaussHermiteWeights(3, 2)
 
 ## Optimize the map:
 optimize!(M, target, quadrature)
