@@ -35,7 +35,7 @@ target = MapTargetDensity(x -> logposterior(x))
 
 M = PolynomialMap(2, 3, :normal, Softplus(), LinearizedHermiteBasis())
 
-quadrature = GaussHermiteWeights(10, 2)
+quadrature = GaussHermiteWeights(3, 2)
 
 res = optimize!(M, target, quadrature)
 println("Optimization result: ", res)

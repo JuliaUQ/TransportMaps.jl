@@ -32,6 +32,7 @@ struct TensorProductWeights{T<:AbstractQuadratureKnots} <: AbstractQuadratureWei
     function TensorProductWeights(level::Int64, map::AbstractTransportMap)
         dim = numberdimensions(map)
         knots = _determine_knots_from_reference(map)
+        T = typeof(knots)
 
         points, weights = full_tensor_points(dim, level, knots)
         return new{T}(points, weights, knots)
@@ -60,7 +61,7 @@ Returns a [`TensorProductWeights`](@ref) object.
 """
 function GaussHermiteWeights(level::Int64, map::AbstractTransportMap)
     if !(map.reference.densitytype isa Normal)
-        error("GaussHermiteWeights requires Normal reference distribution, got $(typeof(ref_dist))")
+        error("GaussHermiteWeights requires Normal reference distribution, got $(typeof(map.reference.densitytype))")
     end
 
     return TensorProductWeights(level, numberdimensions(map), GaussHermiteKnots())
@@ -86,10 +87,10 @@ Returns a [`TensorProductWeights`](@ref) object.
 function GaussLegendreWeights(level::Int64, map::AbstractTransportMap)
 
     if !(map.reference.densitytype isa Uniform)
-        error("GaussLegendreWeights requires Uniform reference distribution, got $(typeof(ref_dist))")
+        error("GaussLegendreWeights requires Uniform reference distribution, got $(typeof(map.reference.densitytype))")
     end
 
-    return TensorProductWeights(level, numberdimensions(map), _determine_knots_from_reference(ref))
+    return TensorProductWeights(level, numberdimensions(map), _determine_knots_from_reference(map))
 end
 
 """
@@ -144,32 +145,34 @@ end
 """
     MonteCarloWeights
 
-Monte Carlo quadrature using random samples from the reference distribution.
+Monte Carlo quadrature using random samples from a reference distribution.
 All points receive uniform weights `1/numberpoints`.
 
 # Fields
 - `points::Matrix{Float64}`: Quadrature points (random samples)
 - `weights::Vector{Float64}`: Quadrature weights (uniform)
+- `distribution::Distributions.UnivariateDistribution`: Reference distribution
 
 # Constructors
-- `MonteCarloWeights(numberpoints::Int64, dimension::Int64)`: Construct weights with random sampling from `Normal()`.
+- `MonteCarloWeights(numberpoints::Int64, dimension::Int64, distr::Distributions.UnivariateDistribution=Normal())`: Construct weights with random sampling from `distr` (defaults to `Normal()`).
 - `MonteCarloWeights(numberpoints::Int64, map::AbstractTransportMap)`: Get number of dimensions and sample from the map's reference density.
 - `MonteCarloWeights(points::Matrix{Float64}, weights::Vector{Float64}=Float64[])`: Construct from custom points and weights.
 """
 struct MonteCarloWeights <: AbstractQuadratureWeights
     points::Matrix{Float64}
     weights::Vector{Float64}
+    distribution::Union{Distributions.UnivariateDistribution,Nothing}
 
-    function MonteCarloWeights(numberpoints::Int64, dimension::Int64)
-        points, weights = montecarlo_weights(numberpoints, dimension)
-        return new(points, weights)
+    function MonteCarloWeights(numberpoints::Int64, dimension::Int64, dist::Distributions.UnivariateDistribution=Normal())
+        points, weights = montecarlo_weights(numberpoints, dimension, dist)
+        return new(points, weights, dist)
     end
 
     function MonteCarloWeights(numberpoints::Int64, map::AbstractTransportMap)
         # Generate random points in the reference space
         points, weights = montecarlo_weights(numberpoints, numberdimensions(map), map.reference.densitytype)
 
-        return new(points, weights)
+        return new(points, weights, map.reference.densitytype)
     end
 
     function MonteCarloWeights(points::Matrix{Float64}, weights::Vector{Float64}=Float64[])
@@ -177,12 +180,12 @@ struct MonteCarloWeights <: AbstractQuadratureWeights
             # If no weights are provided, assume uniform weights
             weights = 1 / size(points, 1) * ones(size(points, 1))
         end
-        return new(points, weights)
+        return new(points, weights, nothing)
     end
 end
 
-function montecarlo_weights(numberpoints::Int64, dimension::Int64, distr::Distributions.UnivariateDistribution=Normal())
-    points = rand(distr, numberpoints, dimension)
+function montecarlo_weights(numberpoints::Int64, dimension::Int64, dist::Distributions.UnivariateDistribution)
+    points = rand(dist, numberpoints, dimension)
     weights = 1 / numberpoints * ones(numberpoints)
     return points, weights
 end
@@ -197,29 +200,31 @@ weights `1/n`.
 # Fields
 - `points::Matrix{Float64}`: Quadrature points (Latin Hypercube samples)
 - `weights::Vector{Float64}`: Quadrature weights (uniform)
+- `distribution::Distributions.UnivariateDistribution`: Reference distribution
 
 # Constructors
-- `LatinHypercubeWeights(n::Int64, d::Int64)`: Construct Latin Hypercube samples for `d` dimensions using `Normal()`.
+- `LatinHypercubeWeights(n::Int64, d::Int64, dist::Distributions.UnivariateDistribution=Normal())`: Construct Latin Hypercube samples for `d` dimensions using `dist` (defaults to `Normal()`).
 - `LatinHypercubeWeights(n::Int64, map::AbstractTransportMap)`: Get number of dimensions and sample according to the map's reference density.
 """
 struct LatinHypercubeWeights <: AbstractQuadratureWeights
     points::Matrix{Float64}
     weights::Vector{Float64}
+    distribution::Distributions.UnivariateDistribution
 
-    function LatinHypercubeWeights(n::Int64, d::Int64)
-        points, weights = latinhypercube_weights(n, d)
-        return new(points, weights)
+    function LatinHypercubeWeights(n::Int64, d::Int64, dist::Distributions.UnivariateDistribution=Normal())
+        points, weights = latinhypercube_weights(n, d, dist)
+        return new(points, weights, dist)
     end
 
     function LatinHypercubeWeights(n::Int64, map::AbstractTransportMap)
         # Generate Latin Hypercube points in the reference space
         points, weights = latinhypercube_weights(n, numberdimensions(map), map.reference.densitytype)
-        return new(points, weights)
+        return new(points, weights, map.reference.densitytype)
     end
 end
 
-function latinhypercube_weights(numberpoints::Int64, dimension::Int64, distr::Distributions.UnivariateDistribution=Normal())
-    points = reshape([quantile(distr, u) for u in QuasiMonteCarlo.sample(numberpoints, dimension, LatinHypercubeSample())], numberpoints, dimension)
+function latinhypercube_weights(numberpoints::Int64, dimension::Int64, dist::Distributions.UnivariateDistribution)
+    points = reshape([quantile(dist, u) for u in QuasiMonteCarlo.sample(numberpoints, dimension, LatinHypercubeSample())], numberpoints, dimension)
     weights = 1 / numberpoints * ones(numberpoints)
     return points, weights
 end
@@ -231,76 +236,58 @@ function Base.show(io::IO, w::TensorProductWeights{T}) where T<:AbstractQuadratu
     print(io, "TensorProductWeights{$T}(number_pts=$npts, dim=$dim, support=$(domain))")
 end
 
-# todo: update doc strings, test and documentation !
+function Base.show(io::IO, ::MIME"text/plain", w::TensorProductWeights)
+    npts, dim = size(w.points)
 
-# function Base.show(io::IO, ::MIME"text/plain", w::TensorProductWeights)
-#     npts, dim = size(w.points)
-#     weight_min = minimum(w.weights)
-#     weight_max = maximum(w.weights)
-#     weight_sum = sum(w.weights)
-
-#     println(io, "TensorProductWeights:")
-#     println(io, "  Number of points: $npts")
-#     println(io, "  Dimensions: $dim")
-#     println(io, "  Quadrature type: Tensor product Gauss-Hermite")
-#     println(io, "  Reference measure: Standard Gaussian")
-#     println(io, "  Weight range: [$weight_min, $weight_max]")
-# end
-
+    println(io, "TensorProductWeights:")
+    println(io, "  Number of points: $npts")
+    println(io, "  Dimensions: $dim")
+    print(io, "  Knots: $(w.knots)")
+end
 
 # Display methods for MonteCarloWeights
 function Base.show(io::IO, w::MonteCarloWeights)
     npts, dim = size(w.points)
-    print(io, "MonteCarloWeights($npts points, $dim dimensions)")
+    print(io, "MonteCarloWeights($npts points, $dim dimensions, $(w.distribution))")
 end
 
 function Base.show(io::IO, ::MIME"text/plain", w::MonteCarloWeights)
     npts, dim = size(w.points)
-    weight_value = w.weights[1]  # All weights are the same for Monte Carlo
+    d = isnothing(w.distribution) ? "nothing; Samples from data" : w.distribution
 
     println(io, "MonteCarloWeights:")
     println(io, "  Number of points: $npts")
     println(io, "  Dimensions: $dim")
-    println(io, "  Sampling type: Random (Gaussian)")
-    println(io, "  Reference measure: Standard Gaussian")
-    println(io, "  Weight (uniform): $weight_value")
+    print(io, "  Distribution: $d")
 end
 
 # Display methods for LatinHypercubeWeights
 function Base.show(io::IO, w::LatinHypercubeWeights)
     npts, dim = size(w.points)
-    print(io, "LatinHypercubeWeights($npts points, $dim dimensions)")
+    print(io, "LatinHypercubeWeights($npts points, $dim dimensions, $(w.distribution))")
 end
 
 function Base.show(io::IO, ::MIME"text/plain", w::LatinHypercubeWeights)
     npts, dim = size(w.points)
-    weight_value = w.weights[1]  # All weights are the same for Latin Hypercube
 
     println(io, "LatinHypercubeWeights:")
     println(io, "  Number of points: $npts")
     println(io, "  Dimensions: $dim")
-    println(io, "  Sampling type: Latin Hypercube")
-    println(io, "  Reference measure: Standard Gaussian (via inverse CDF)")
-    println(io, "  Weight (uniform): $weight_value")
+    print(io, "  Distribution: $(w.distribution)")
 end
 
 function Base.show(io::IO, w::SparseSmolyakWeights)
     npts, dim = size(w.points)
-    print(io, "SparseSmolyakWeights($npts points, $dim dimensions)")
+    print(io, "SparseSmolyakWeights($npts points, $dim dimensions, $(w.knots))")
 end
 
 function Base.show(io::IO, ::MIME"text/plain", w::SparseSmolyakWeights)
     npts, dim = size(w.points)
-    weight_min = isempty(w.weights) ? 0.0 : minimum(w.weights)
-    weight_max = isempty(w.weights) ? 0.0 : maximum(w.weights)
-    weight_sum = sum(w.weights)
 
     println(io, "SparseSmolyakWeights:")
     println(io, "  Number of points: $npts")
     println(io, "  Dimensions: $dim")
-    println(io, "  Quadrature type: Sparse Smolyak (Gauss-Hermite)")
-    println(io, "  Reference measure: Standard Gaussian")
-    println(io, "  Weight range: [$weight_min, $weight_max]")
+    print(io, "  Knots: $(w.knots)")
 end
 
 function numberdimensions(quad::AbstractQuadratureWeights)

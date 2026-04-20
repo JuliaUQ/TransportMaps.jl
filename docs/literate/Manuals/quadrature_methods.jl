@@ -35,7 +35,7 @@
 # | [`LatinHypercubeWeights`](@ref) | any (default: $\mathcal{N}(0, 1)$)| Quasi-random sampling from the default reference |
 # | [`TensorProductWeights`](@ref) | any | Quadrature by full tensor-product of one-dimensional quadrature rule|
 # | [`GaussHermiteWeights`](@ref) | $\mathcal{N}(0, 1)$ | Tensor-product Gauss-Hermite quadrature |
-# | [`GaussLegendreWeights`](@ref) | $\mathcal{U}(-1, 1)$ (or: $\mathcal{U}(0, 1)$) | Tensor-product Gauss-Legendre quadrature|
+# | [`GaussLegendreWeights`](@ref) | $\mathcal{U}(-1, 1)$ or $\mathcal{U}(0, 1)$ | Tensor-product Gauss-Legendre quadrature|
 # | [`SparseSmolyakWeights`](@ref) | any (default: $\mathcal{N}(0, 1)$)| Sparse grid quadrature rule; fewer points than full tensor product |
 
 
@@ -101,7 +101,7 @@ scatter(hermite.points[:, 1], hermite.points[:, 2],
 # ### Tensor-product Gauss-Legendre
 
 # Gauss–Legendre quadrature is optimized for bounded uniform reference measures on ``[-1, 1]``
-# ``[0,1]`` after rescaling).
+# (or ``[0,1]`` after rescaling).
 
 legendre = GaussLegendreWeights(3, 2)
 ## alias: TensorProductWeights(3, 2, GaussLegendreKnots())

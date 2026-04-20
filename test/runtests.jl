@@ -37,12 +37,15 @@ import DifferentiationInterface: AutoFiniteDiff, AutoForwardDiff, AutoMooncake, 
         include("optimization/test_adaptivetransportmap_fromdensity.jl")
     end
 
+    @testset "Quadrature" begin
+        include("quadrature/test_quadratureknots.jl")
+        include("quadrature/test_quadratureweights.jl")
+    end
+
     # Test Utilities
     @testset "Utilities" begin
         include("util/test_gaussquadrature.jl")
         include("util/test_hybridrootfinder.jl")
-        include("util/test_quadraturepoints.jl")
         include("util/test_mapdensity.jl")
-        include("util/test_smolyak.jl")
     end
 end
