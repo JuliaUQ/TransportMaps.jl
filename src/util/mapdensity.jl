@@ -6,9 +6,9 @@ Stores the log-density function and its gradient, with support for automatic
 differentiation backends via DifferentiationInterface.jl.
 
 # Fields
-- `logdensity<:Function`: Function computing log-density `log π(x)`
+- `logdensity<:Function`: Function computing ``\\log\\pi(x)``
 - `ad_backend<:Union{Nothing,ADTypes.AbstractADType}`: AD backend or `nothing` for analytical
-- `grad_logdensity<:Function`: Function computing gradient `∇ log π(x)`
+- `grad_logdensity<:Function`: Function computing ``\\nabla_x\\log\\pi(x)``
 - `prepared_gradient`: Optional prepared gradient for performance (can be `nothing`)
 - `isvectorized::Bool`: Whether the log-density (and gradient, if analytical) accepts matrix input
 - `threaded::Bool`: Whether to use multithreading for gradient evaluations on matrices (default: `true`)
@@ -100,8 +100,9 @@ The reference density defines the space from which samples are drawn and mapped
 to the target distribution.
 
 # Fields
-- `logdensity<:Function`: Function computing log-density `log ρ(z)`
-- `grad_logdensity<:Function`: Function computing gradient `∇ log ρ(z)` via `gradlogpdf` when available, otherwise via ForwardDiff
+- `logdensity<:Function`: Function computing ``\\log\\rho(z)``
+- `grad_logdensity<:Function`: Function computing ``\\nabla_z\\log\\rho(z)`` via
+  `gradlogpdf` when available, otherwise via ForwardDiff
 - `densitytype::Distributions.UnivariateDistribution`: Univariate density type (e.g., `Normal()`)
 
 # Constructors

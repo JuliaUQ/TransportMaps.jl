@@ -4,11 +4,19 @@
 A linear transport map based on the Laplace approximation of a target density.
 
 The Laplace approximation assumes the target density is approximately Gaussian around its mode.
-The map is defined by a location parameter (mode) and a scale parameter (Cholesky factor of the covariance).
+Let ``\\mu`` denote the mode and let ``LL^\\mathsf{T}=\\Sigma`` be the Cholesky
+factorization of the covariance approximation. The forward and inverse maps are
+
+```math
+z = L^{-1}(x-\\mu),
+\\qquad
+x = Lz+\\mu.
+```
 
 # Fields
 - `mode::Vector{Float64}`: Mode or mean vector of the approximation
-- `chol::Matrix{Float64}`: Lower Cholesky factor L of the covariance matrix (Σ = L * L')
+- `chol::Matrix{Float64}`: Lower Cholesky factor ``L`` satisfying
+  ``\\Sigma=LL^\\mathsf{T}``
 
 # Constructors
 
@@ -77,7 +85,7 @@ end
 """
     evaluate(L::LaplaceMap, x::AbstractVector{<:Real})
 
-Apply the Laplace map transformation: L⁻¹(x - mode).
+Apply the whitening transformation ``L^{-1}(x-\\mu)``.
 """
 function evaluate(L::LaplaceMap, x::AbstractVector{<:Real})
     @assert length(x) == length(L.mode) "Input vector must have the same length as dimensions in the map"
@@ -97,7 +105,7 @@ end
 """
     inverse(L::LaplaceMap, y::AbstractVector{<:Real})
 
-Invert the Laplace map: L * y + mode.
+Invert the Laplace map, returning ``Ly+\\mu``.
 """
 function inverse(L::LaplaceMap, y::AbstractVector{<:Real})
     @assert length(y) == length(L.mode) "Input vector must have the same length as dimensions in the map"
@@ -117,7 +125,7 @@ end
 """
     jacobian(L::LaplaceMap)
 
-Compute the Jacobian determinant of the Laplace map (|det(L)|).
+Return the scale determinant ``|\\det L|``.
 """
 function jacobian(L::LaplaceMap)
     return abs(det(L.chol))
@@ -133,7 +141,7 @@ numberdimensions(L::LaplaceMap) = length(L.mode)
 """
     cov(L::LaplaceMap)
 
-Return the covariance matrix Σ = L * L' of the Laplace approximation.
+Return the covariance matrix ``\\Sigma=LL^\\mathsf{T}``.
 """
 cov(L::LaplaceMap) = L.chol * L.chol'
 

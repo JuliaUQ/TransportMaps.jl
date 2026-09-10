@@ -1,7 +1,14 @@
 """
     GaussianWeightedHermiteBasis
 
-Probabilist Hermite polynomial basis with Gaussian weight for edge control.
+Probabilists' Hermite polynomial basis with Gaussian edge control. For degrees
+``n\\geq2``, the basis function is
+
+```math
+\\psi_n(z)=H_n(z)\\exp\\!\\left(-\\frac{z^2}{4}\\right).
+```
+
+Degrees zero and one remain unweighted.
 """
 struct GaussianWeightedHermiteBasis <: AbstractHermiteBasis end
 
@@ -16,7 +23,7 @@ end
 """
     basisfunction(basis::GaussianWeightedHermiteBasis, αᵢ::Int, zᵢ::Real)
 
-Evaluate `GaussianWeightedHermiteBasis` with degree `αᵢ` at `zᵢ`.
+Evaluate the degree-``\\alpha_i`` Gaussian-weighted Hermite basis at ``z_i``.
 """
 @inline function basisfunction(basis::GaussianWeightedHermiteBasis, αᵢ::Int, zᵢ::Real)
     n = Int(αᵢ)
@@ -31,7 +38,8 @@ end
 """
     basisfunction_derivative(basis::GaussianWeightedHermiteBasis, αᵢ::Int, zᵢ::Real)
 
-Evaluate derivative of `GaussianWeightedHermiteBasis` with degree `αᵢ` at `zᵢ`.
+Evaluate the derivative of the degree-``\\alpha_i`` Gaussian-weighted Hermite
+basis at ``z_i``.
 """
 @inline function basisfunction_derivative(basis::GaussianWeightedHermiteBasis, αᵢ::Int, zᵢ::Real)
     n = Int(αᵢ)

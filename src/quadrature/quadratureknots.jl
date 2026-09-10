@@ -1,12 +1,15 @@
 """
     GaussHermiteKnots([μ = 0, σ = 1])
 
-One-dimensional Gauss-Hermite quadrature weights for computing expectations under
+One-dimensional Gauss-Hermite quadrature rule for expectations under
 `Normal(μ, σ)`. The default is the standard normal distribution.
 
 The quadrature approximates integrals of the form:
 
-`` \\int_{-\\infty}^{\\infty} f(x) \\phi(x) \\ \\mathrm{d}x \\approx \\sum_{i=1}^{n} w_i f(x_i),``
+```math
+\\int_{-\\infty}^{\\infty} f(x)\\phi(x)\\,\\mathrm{d}x
+\\approx \\sum_{i=1}^{n}w_i f(x_i),
+```
 
 where ``\\phi(x)`` is the configured normal density.
 
@@ -42,9 +45,12 @@ end
 """
     GaussLegendreKnots
 
-One-dimensional Gauss-Legendre quadrature weights for computing integrals for the form:
+One-dimensional Gauss-Legendre quadrature rule for expectations of the form
 
-`` \\int_{-1}^{1} f(x) u(x) \\ \\mathrm{d}x \\approx \\sum_{i=1}^{n} w_i f(x_i),``
+```math
+\\int_{-1}^{1}f(x)u(x)\\,\\mathrm{d}x
+\\approx\\sum_{i=1}^{n}w_i f(x_i),
+```
 
 where ``u(x)`` is the uniform density.
 """
@@ -88,9 +94,12 @@ end
 """
     ClenshawCurtisKnots
 
-One-dimensional Clenshaw-Curtis quadrature weights for computing integrals for the form:
+One-dimensional Clenshaw-Curtis quadrature rule for expectations of the form
 
-`` \\int_{-1}^{1} f(x) u(x) \\ \\mathrm{d}x \\approx \\sum_{i=1}^{n} w_i f(x_i),``
+```math
+\\int_{-1}^{1}f(x)u(x)\\,\\mathrm{d}x
+\\approx\\sum_{i=1}^{n}w_i f(x_i),
+```
 
 where ``u(x)`` is the uniform density.
 """

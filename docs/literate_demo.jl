@@ -19,13 +19,17 @@ for file in literate_files
 
     println("Processing: $file -> $output_name")
 
-    # Use Literate.script to generate clean Julia code without documentation
+    strip_hide_markers(content) =
+        replace(content, r"[ \t]+# hide(?=\r?$)"m => "")
+
     Literate.script(
-        input_file, demo_dir;
-        name = splitext(output_name)[1],  # Remove .jl extension, Literate adds it back
-        execute = false,                  # Don't execute the code
-        documenter = false,               # Don't add Documenter.jl specific code
-        credit = true
-    )                    # Add Literate.jl credit comment
+        input_file,
+        demo_dir;
+        name = splitext(output_name)[1],
+        execute = false,
+        documenter = false,
+        credit = true,
+        preprocess = strip_hide_markers,
+    )
 
 end

@@ -112,20 +112,37 @@ end
         interactions_only = false
     )
 
-Optimize polynomial map coefficients to minimize KL divergence to a target density.
+Optimize the polynomial map by minimizing, up to a constant,
+
+```math
+D_{\\mathrm{KL}}\\!\\left(\\rho\\,\\|\\,M^*\\pi\\right)
+= \\mathbb{E}_{Z\\sim\\rho}\\!\\left[
+    \\log\\rho(Z)-\\log\\pi(M(Z))-\\log|\\det\\nabla M(Z)|
+  \\right].
+```
+
+The optional coefficient penalty is
+
+```math
+R(c)=\\lambda_1\\sum_{j\\in\\mathcal{I}}
+\\sqrt{c_j^2+\\varepsilon^2}
++\\frac{\\lambda_2}{2}\\sum_{j\\in\\mathcal{I}}c_j^2,
+```
+
+where ``\\mathcal{I}`` contains the selected nonlinear terms.
 
 # Arguments
 - `M::PolynomialMap`: The polynomial map to optimize.
-- `target::AbstractMapDensity`: Target map density object (provides the target density π(x) and any needed operations).
+- `target::AbstractMapDensity`: Target density ``\\pi(x)``
 - `quadrature::AbstractQuadratureWeights`: Quadrature points and weights used for numerical integration.
 
 # Keyword Arguments
 - `optimizer`: Optimizer from Optim.jl to use (default: `LBFGS()`).
 - `options`: Options passed to the optimizer (default: `Optim.Options()`).
-- `δ::Real`: Stability perturbation added to mapped quadrature points before target
+- `δ::Real`: Stability perturbation ``\\delta Z`` added to mapped quadrature points before target
   density evaluation (default: `1e-9`). Set it to zero for the exact KL objective.
-- `λ1::Real`: Strength of the smoothed L1 penalty (default: `0`).
-- `λ2::Real`: Strength of the L2 penalty (default: `0`).
+- `λ1::Real`: Strength ``\\lambda_1`` of the smoothed L1 penalty (default: `0`).
+- `λ2::Real`: Strength ``\\lambda_2`` of the L2 penalty (default: `0`).
 - `l1_eps::Real`: Positive smoothing parameter used by the L1 approximation
   ``\\sqrt{a^2 + \\varepsilon^2}`` (default: `1e-8`).
 - `interactions_only::Bool`: If `false`, penalize all terms of total degree two or
@@ -133,7 +150,7 @@ Optimize polynomial map coefficients to minimize KL divergence to a target densi
 
 Constant and linear terms are never penalized. The L1 term is differentiable and
 therefore approximates, rather than exactly equals, the L1 norm. Each penalized
-coefficient contributes `λ1 * l1_eps` at zero; this additive constant does not affect
+coefficient contributes ``\\lambda_1\\varepsilon`` at zero; this additive constant does not affect
 the minimizer.
 
 # Returns
@@ -224,18 +241,30 @@ end
 
 Compute a variance-based diagnostic for assessing the quality of a transport map.
 
-The diagnostic measures the variance of the log-ratio between the pushforward density
-and the reference density. A smaller variance indicates a better approximation of the
-target density by the transport map.
+For reference samples ``Z_i \\sim \\rho``, the diagnostic is
+
+```math
+\\mathcal{D}_{\\mathrm{var}}(M)
+= \\frac{1}{2}\\operatorname{Var}_{Z \\sim \\rho}
+\\left[
+    \\log \\pi\\!\\left(M(Z)\\right)
+    + \\log\\left|\\det \\nabla M(Z)\\right|
+    - \\log \\rho(Z)
+\\right].
+```
+
+The expression in brackets is constant when ``M`` exactly pushes the reference
+density ``\\rho`` forward to the target density ``\\pi``. Consequently, a value near
+zero indicates a good approximation.
 
 # Arguments
-- `M::PolynomialMap`: The transport map to be evaluated
-- `target::MapTargetDensity`: The target density that the map should approximate
+- `M::PolynomialMap`: The transport map to evaluate
+- `target::MapTargetDensity`: The target density ``\\pi``
 - `Z::AbstractArray{<:Real}`: Sample points from the reference distribution, where each
   row is a sample and columns correspond to dimensions
 
 # Returns
-- `Float64`: The computed variance diagnostic
+- `Float64`: The value of ``\\mathcal{D}_{\\mathrm{var}}(M)``
 
 """
 function variance_diagnostic(

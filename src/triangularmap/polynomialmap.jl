@@ -9,9 +9,9 @@ Triangular transport map with polynomial basis.
 - `forwarddirection::Symbol`: `:target` for map from density, `:reference` for map from samples
 
 # Constructors
-- `PolynomialMap(dimension::Int,degree::Int, referencetype::Symbol=:normal, rectifier::AbstractRectifierFunction=Softplus(), basis::AbstractPolynomialBasis=LinearizedHermiteBasis(), map_type::Symbol=:total)`: Initialize polynomial map for map from density. Reference types: `:normal`, `:uniform` (U(-1,1)), `:uniform01` (U(0,1)).
-- `DiagonalMap(dimension::Int, degree::Int, reference::Distributions.UnivariateDistribution=Normal(), rectifier::AbstractRectifierFunction=Softplus(), basis::AbstractPolynomialBasis=LinearizedHermiteBasis())`: Initialize diagonal map with diagonal structure.
-- `NoMixedMap(dimension::Int, degree::Int, reference::Distributions.UnivariateDistribution=Normal(), rectifier::AbstractRectifierFunction=Softplus(), basis::AbstractPolynomialBasis=LinearizedHermiteBasis())`: Initialize diagonal map without mixed terms.
+- `PolynomialMap(dimension::Int, degree::Int, reference::Distributions.UnivariateDistribution=Normal(), rectifier::AbstractRectifierFunction=Softplus(), basis::AbstractPolynomialBasis=_default_basis(reference), map_type::Symbol=:total)`: Initialize a polynomial map. The default basis is selected from the reference distribution.
+- `DiagonalMap(dimension::Int, degree::Int, reference::Distributions.UnivariateDistribution=Normal(), rectifier::AbstractRectifierFunction=Softplus(), basis::AbstractPolynomialBasis=_default_basis(reference))`: Initialize diagonal map with diagonal structure.
+- `NoMixedMap(dimension::Int, degree::Int, reference::Distributions.UnivariateDistribution=Normal(), rectifier::AbstractRectifierFunction=Softplus(), basis::AbstractPolynomialBasis=_default_basis(reference))`: Initialize diagonal map without mixed terms.
 """
 mutable struct PolynomialMap <: AbstractTriangularMap
     components::Vector{PolynomialMapComponent{<:AbstractPolynomialBasis}}  # Vector of map components
@@ -21,29 +21,9 @@ mutable struct PolynomialMap <: AbstractTriangularMap
     function PolynomialMap(
             dimension::Int,
             degree::Int,
-            referencetype::Symbol = :normal,
+            reference::Distributions.UnivariateDistribution = Normal(),
             rectifier::AbstractRectifierFunction = Softplus(),
-            basis::AbstractPolynomialBasis = LinearizedHermiteBasis(),
-            map_type::Symbol = :total,
-            q::Real = 1.0
-        )
-        @assert referencetype in [:normal, :uniform, :uniform01] "Supported reference types: :normal, :uniform (U(-1,1)), :uniform01 (U(0,1))"
-
-        reference = Dict(
-            :normal => Normal(),
-            :uniform => Uniform(-1, 1),
-            :uniform01 => Uniform(0, 1)
-        )
-
-        return PolynomialMap(dimension, degree, reference[referencetype], rectifier, basis, map_type, q)
-    end
-
-    function PolynomialMap(
-            dimension::Int,
-            degree::Int,
-            reference::Distributions.UnivariateDistribution,
-            rectifier::AbstractRectifierFunction = Softplus(),
-            basis::AbstractPolynomialBasis = LinearizedHermiteBasis(),
+            basis::AbstractPolynomialBasis = _default_basis(reference),
             map_type::Symbol = :total,
             q::Real = 1.0
         )
@@ -69,13 +49,63 @@ mutable struct PolynomialMap <: AbstractTriangularMap
     end
 end
 
+_default_basis(::Normal) = LinearizedHermiteBasis()
+
+function _default_basis(reference::Uniform)
+    if reference.a ≈ -1.0 && reference.b ≈ 1.0
+        return LegendreBasis()
+    elseif reference.a ≈ 0.0 && reference.b ≈ 1.0
+        return ShiftedLegendreBasis()
+    end
+    throw(
+        ArgumentError(
+            "No default polynomial basis is available for $reference. " *
+                "Pass a basis with matching support explicitly."
+        )
+    )
+end
+
+function _default_basis(reference::Distributions.UnivariateDistribution)
+    throw(
+        ArgumentError(
+            "No default polynomial basis is available for $(typeof(reference)). " *
+                "Pass a compatible basis explicitly."
+        )
+    )
+end
+
+function _reference_distribution(reference_type::Symbol)
+    @assert reference_type in (:normal, :uniform, :uniform01) "Supported reference types: :normal, :uniform (U(-1,1)), :uniform01 (U(0,1))"
+    reference_type === :normal && return Normal()
+    reference_type === :uniform && return Uniform(-1, 1)
+    return Uniform(0, 1)
+end
+
+# Backwards-compatible constructor accepting the former symbolic reference names.
+function PolynomialMap(
+        dimension::Int,
+        degree::Int,
+        reference_type::Symbol,
+        rectifier::AbstractRectifierFunction = Softplus(),
+        basis::AbstractPolynomialBasis = _default_basis(
+            _reference_distribution(reference_type)
+        ),
+        map_type::Symbol = :total,
+        q::Real = 1.0,
+    )
+    reference = _reference_distribution(reference_type)
+    return PolynomialMap(
+        dimension, degree, reference, rectifier, basis, map_type, q
+    )
+end
+
 # Convenience constructor for DiagonalMap
 function DiagonalMap(
         dimension::Int,
         degree::Int,
         reference::Distributions.UnivariateDistribution = Normal(),
         rectifier::AbstractRectifierFunction = Softplus(),
-        basis::AbstractPolynomialBasis = LinearizedHermiteBasis()
+        basis::AbstractPolynomialBasis = _default_basis(reference)
     )
     return PolynomialMap(dimension, degree, reference, rectifier, basis, :diagonal)
 end
@@ -86,7 +116,7 @@ function NoMixedMap(
         degree::Int,
         reference::Distributions.UnivariateDistribution = Normal(),
         rectifier::AbstractRectifierFunction = Softplus(),
-        basis::AbstractPolynomialBasis = LinearizedHermiteBasis()
+        basis::AbstractPolynomialBasis = _default_basis(reference)
     )
     return PolynomialMap(dimension, degree, reference, rectifier, basis, :no_mixed)
 end
@@ -97,7 +127,7 @@ function HyperbolicMap(
         q::Real,
         reference::Distributions.UnivariateDistribution = Normal(),
         rectifier::AbstractRectifierFunction = Softplus(),
-        basis::AbstractPolynomialBasis = LinearizedHermiteBasis()
+        basis::AbstractPolynomialBasis = _default_basis(reference)
     )
 
     return PolynomialMap(dimension, degree, reference, rectifier, basis, :hyperbolic, q)
@@ -164,7 +194,8 @@ end
 
 Compute the diagonal of the Jacobian matrix at point z.
 
-Returns a vector [∂M¹/∂z₁, ∂M²/∂z₂, ..., ∂Mᵈ/∂zᵈ].
+Return the Jacobian diagonal,
+``[\\partial M^1/\\partial z_1,\\ldots,\\partial M^d/\\partial z_d]``.
 """
 function gradient_zk(M::PolynomialMap, z::AbstractVector{<:Real})
     @assert length(z) == length(M.components) "Dimension mismatch: z and components must have same length"
@@ -178,7 +209,8 @@ end
 
 Compute the diagonal Jacobian elements at multiple points using multithreading.
 
-Each row of Z is a point. Returns a matrix where row i contains the diagonal of J_M(Z[i,:]).
+Each row of `Z` is a point. Row `i` of the result contains the diagonal of
+``\\nabla M(Z_{i,:})``.
 """
 function gradient_zk(M::PolynomialMap, Z::AbstractMatrix{<:Real})
     @assert size(Z, 2) == length(M.components) "Number of columns must match the dimension of the map"
@@ -204,33 +236,35 @@ end
 
 Compute the gradient of the polynomial map with respect to all its coefficients at point z.
 
-For a triangular polynomial map M(z) = [M¹(z₁), M²(z₁,z₂), ..., Mᵈ(z₁,...,zᵈ)],
+For a triangular polynomial map
+``M(z) = [M^1(z_1),M^2(z_1,z_2),\\ldots,M^d(z_1,\\ldots,z_d)]^\\mathsf{T}``,
 this function returns the gradient matrix where:
-- Each row i corresponds to component Mⁱ
-- Each column j corresponds to a coefficient across all components
+- Each row ``i`` corresponds to component ``M^i``.
+- Each column ``j`` corresponds to a coefficient across all components.
 
-The coefficients are ordered by component: [c₁₁, c₁₂, ..., c₂₁, c₂₂, ..., cᵈₙ]
-where cᵢⱼ is the j-th coefficient of the i-th component.
+The coefficients are ordered by component:
+``[c_{11},c_{12},\\ldots,c_{21},c_{22},\\ldots,c_{dn}]``,
+where ``c_{ij}`` is the ``j``th coefficient of component ``i``.
 
 # Arguments
 - `M::PolynomialMap`: The polynomial map
 - `z::Vector{Float64}`: Point at which to evaluate the gradient
 
 # Returns
-- `Matrix{Float64}`: Gradient matrix of size (dimension × total_coefficients)
-  - Element (i,j) = ∂Mⁱ/∂cⱼ at point z
+- `Matrix{Float64}`: Gradient matrix with entry
+  ``(\\nabla_c M(z))_{ij} = \\partial M^i(z)/\\partial c_j``
 
 # Examples
 ```julia
 # Create a 2D polynomial map
-M = PolynomialMap(2, 2, Softplus())
+M = PolynomialMap(2, 2)
 setcoefficients!(M, randn(numbercoefficients(M)))
 
 # Evaluate gradient at point z = [0.5, 1.2]
 z = [0.5, 1.2]
 grad_matrix = gradient_coefficients(M, z)
 
-# grad_matrix[i, j] = ∂Mⁱ/∂cⱼ
+# grad_matrix[i, j] is the derivative of component i with respect to coefficient j
 ```
 """
 function gradient_coefficients(M::PolynomialMap, z::AbstractVector{<:Real})
@@ -269,7 +303,8 @@ end
 
 Compute coefficient gradients at multiple points using multithreading.
 
-Returns a 3D array of size (n_points × n_dims × n_coeffs).
+Return an array whose entry `[i, k, j]` is
+``\\partial M^k(Z_{i,:})/\\partial c_j``.
 """
 function gradient_coefficients(M::PolynomialMap, Z::AbstractMatrix{<:Real})
     @assert size(Z, 2) == length(M.components) "Number of columns must match the dimension of the map"
@@ -293,9 +328,13 @@ end
 """
     jacobian(M::PolynomialMap, z::AbstractVector{<:Real})
 
-Compute the Jacobian determinant det(J_M(z)) at point z.
+Compute the Jacobian determinant ``\\det \\nabla M(z)``.
 
-For triangular maps, this is the product of diagonal elements: ∏ᵢ ∂Mⁱ/∂zᵢ.
+For a triangular map,
+
+```math
+\\det \\nabla M(z) = \\prod_{k=1}^d \\frac{\\partial M^k(z)}{\\partial z_k}.
+```
 """
 function jacobian(M::PolynomialMap, z::AbstractVector{<:Real})
     @assert length(M.components) == length(z) "Number of components must match the dimension of z"
@@ -308,7 +347,7 @@ end
 
 Compute Jacobian determinants at multiple points using multithreading.
 
-Returns a vector where element i is det(J_M(Z[i,:])).
+Return a vector whose ``i``th element is ``\\det\\nabla M(Z_{i,:})``.
 """
 function jacobian(M::PolynomialMap, Z::AbstractMatrix{<:Real})
     @assert size(Z, 2) == length(M.components) "Number of columns must match the dimension of the map"
@@ -331,9 +370,16 @@ end
 """
     jacobian_logdet_gradient(M::PolynomialMap, z::AbstractVector{<:Real})
 
-Compute the gradient of log|det J_M(z)| with respect to all coefficients.
+Compute the coefficient gradient of ``\\log|\\det\\nabla M(z)|``.
 
-For triangular maps: ∂log|det J_M|/∂c = ∑ᵢ (1/(∂Mⁱ/∂zᵢ)) * ∂²Mⁱ/(∂zᵢ∂c).
+For triangular maps,
+
+```math
+\\nabla_c \\log|\\det\\nabla M|
+= \\sum_{k=1}^d
+  \\frac{\\nabla_c(\\partial M^k/\\partial z_k)}
+       {\\partial M^k/\\partial z_k}.
+```
 """
 function jacobian_logdet_gradient(M::PolynomialMap, z::AbstractVector{<:Real})
     n_coeffs = numbercoefficients(M)
@@ -391,7 +437,7 @@ end
 
 Compute the inverse of the first k components of the map at point x.
 
-Returns z such that M(z)[1:k] = x[1:k].
+Return ``z_{1:k}`` such that ``M(z)_{1:k}=x_{1:k}``.
 """
 function inverse(M::PolynomialMap, x::AbstractVector{<:Real}, k::Int = numberdimensions(M))
     @assert k <= length(x) <= numberdimensions(M) "x must have at least k dimensions and at most the map dimension"
@@ -410,7 +456,7 @@ end
 
 Compute the inverse at multiple points using multithreading.
 
-Returns a matrix where row i contains M⁻¹(X[i,:])[1:k].
+Return a matrix whose ``i``th row is ``M^{-1}(X_{i,:})_{1:k}``.
 """
 function inverse(M::PolynomialMap, X::AbstractMatrix{<:Real}, k::Int = numberdimensions(M))
     @assert k <= size(X, 2) == numberdimensions(M) "X must have at least k columns and at most the map dimension"
@@ -434,7 +480,8 @@ end
 
 Compute the Jacobian determinant of the inverse map at point x.
 
-Returns det(J_{M⁻¹}(x)) = 1/det(J_M(M⁻¹(x))).
+Return
+``\\det\\nabla M^{-1}(x) = [\\det\\nabla M(M^{-1}(x))]^{-1}``.
 """
 function inverse_jacobian(M::PolynomialMap, x::AbstractVector{<:Real})
     @assert length(M.components) == length(x) "Number of components must match the dimension of x"
@@ -449,7 +496,7 @@ end
 
 Compute inverse Jacobian determinants at multiple points using multithreading.
 
-Returns a vector where element i is det(J_{M⁻¹}(X[i,:])).
+Return a vector whose ``i``th element is ``\\det\\nabla M^{-1}(X_{i,:})``.
 """
 function inverse_jacobian(M::PolynomialMap, X::AbstractMatrix{<:Real})
     @assert size(X, 2) == length(M.components) "Number of columns must match the dimension of the map"
@@ -471,9 +518,21 @@ end
 """
     pullback(M::PolynomialMap, x::AbstractVector{<:Real})
 
-Compute the pullback density π̂(x) = ρ(M⁻¹(x)) |det J_{M⁻¹}(x)|.
+Evaluate the target-density approximation induced by the map.
 
-Maps the reference density through M to approximate the target density.
+For a map from density, ``M:z\\mapsto x``,
+
+```math
+\\widehat\\pi(x)
+= \\rho(M^{-1}(x))\\left|\\det\\nabla M^{-1}(x)\\right|.
+```
+
+For a map from samples, ``M:x\\mapsto z``,
+
+```math
+\\widehat\\pi(x)
+= \\rho(M(x))\\left|\\det\\nabla M(x)\\right|.
+```
 """
 function pullback(M::PolynomialMap, x::AbstractVector{<:Real})
     @assert length(M.components) == length(x) "Number of components must match the dimension of x"
@@ -513,7 +572,12 @@ end
 """
     pushforward(M::PolynomialMap, target::MapTargetDensity, z::AbstractVector{<:Real})
 
-Compute the pushforward density ρ(z) = π(M(z)) |det J_M(z)|.
+Compute the target density represented in reference coordinates:
+
+```math
+\\widetilde\\rho(z)
+= \\pi(M(z))\\left|\\det\\nabla M(z)\\right|.
+```
 
 Maps the target density back through M to the reference space.
 """
@@ -556,7 +620,8 @@ end
 
 Set all coefficients of the polynomial map.
 
-Coefficients are ordered by component: [c₁₁, c₁₂, ..., c₂₁, c₂₂, ..., cᵈₙ].
+Coefficients are ordered by component:
+``[c_{11},c_{12},\\ldots,c_{21},c_{22},\\ldots,c_{dn}]``.
 """
 function setcoefficients!(M::PolynomialMap, coefficients::AbstractVector{<:Real})
     counter = 1

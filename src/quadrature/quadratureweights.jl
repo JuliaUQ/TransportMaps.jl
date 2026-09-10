@@ -150,7 +150,7 @@ end
     MonteCarloWeights
 
 Monte Carlo quadrature using random samples from a reference distribution.
-All points receive uniform weights `1/numberpoints`.
+All points receive uniform weights ``w_i=1/N``, where ``N`` is `numberpoints`.
 
 # Fields
 - `points::Matrix{Float64}`: Quadrature points (random samples)
@@ -199,7 +199,7 @@ end
 
 Latin Hypercube sampling for quasi-Monte Carlo integration. Provides better
 space-filling properties than pure Monte Carlo. All points receive uniform
-weights `1/n`.
+weights ``w_i=1/n``.
 
 # Fields
 - `points::Matrix{Float64}`: Quadrature points (Latin Hypercube samples)

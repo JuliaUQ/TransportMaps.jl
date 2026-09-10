@@ -31,6 +31,14 @@ end
         @test softplus_beta_2(-10.0) ≈ exp(-20.0) / 2.0 atol = 1.0e-9
         @test softplus_beta_2(10.0) ≈ 10.0 atol = 1.0e-4
 
+        for x in (-2.0, 0.0, 2.0)
+            finite_difference = TransportMaps.FiniteDiff.finite_difference_derivative(
+                y -> TransportMaps.derivative(softplus_beta_2, y), x
+            )
+            @test TransportMaps.second_derivative(softplus_beta_2, x) ≈
+                finite_difference rtol = 1.0e-6
+        end
+
     end
 
     @testset "ShiftedELU" begin
@@ -54,6 +62,10 @@ end
         @test shifted_elu(0.0) > 0.0
         @test shifted_elu(100.0) > 0.0
 
+        @test TransportMaps.second_derivative(shifted_elu, -1.0) ≈ exp(-1.0)
+        @test TransportMaps.second_derivative(shifted_elu, 0.0) == 0.5
+        @test TransportMaps.second_derivative(shifted_elu, 1.0) == 0.0
+
         # Test type stability
         @test shifted_elu(1) isa Real
         @test shifted_elu(1.0) isa Float64
@@ -67,6 +79,7 @@ end
         @test identity_rect(1.0) ≈ 1.0
         @test identity_rect(-1.0) ≈ -1.0
         @test identity_rect(π) ≈ π
+        @test TransportMaps.second_derivative(identity_rect, 1.0) == 0.0
 
         # Test linearity
         @test identity_rect(2.0 * 3.0) ≈ 2.0 * identity_rect(3.0)
@@ -93,6 +106,7 @@ end
         @test TransportMaps.derivative(exponential_rect, 0.0) ≈ exp(0.0)
         @test TransportMaps.derivative(exponential_rect, 1.0) ≈ exp(1.0)
         @test TransportMaps.derivative(exponential_rect, -1.0) ≈ exp(-1.0)
+        @test TransportMaps.second_derivative(exponential_rect, 1.0) ≈ exp(1.0)
 
         # Test type stability
         @test exponential_rect(1) isa Real

@@ -1,7 +1,16 @@
 """
     CubicSplineHermiteBasis
 
-Probabilist Hermite polynomial basis with cubic spline edge control.
+Probabilists' Hermite polynomial basis with cubic edge control. For degrees
+``n\\geq2``,
+
+```math
+\\psi_n(z)=H_n(z)w(z),\\qquad
+w(z)=2m^3-3m^2+1,\\qquad
+m=\\min\\!\\left(1,\\frac{|z|}{r}\\right).
+```
+
+Degrees zero and one remain unweighted.
 
 # Fields
 - `radius::Float64`: radius of the spline for edge control.
@@ -48,7 +57,7 @@ end
 """
     basisfunction(basis::CubicSplineHermiteBasis, αᵢ::Int, zᵢ::Real)
 
-Evaluate `CubicSplineHermiteBasis` with degree `αᵢ` at `zᵢ`.
+Evaluate the degree-``\\alpha_i`` spline-controlled Hermite basis at ``z_i``.
 """
 function basisfunction(basis::CubicSplineHermiteBasis, αᵢ::Int, zᵢ::Real)
     n = Int(αᵢ)
@@ -63,7 +72,8 @@ end
 """
     basisfunction_derivative(basis::CubicSplineHermiteBasis, αᵢ::Int, zᵢ::Real)
 
-Evaluate derivative of `CubicSplineHermiteBasis` with degree `αᵢ` at `zᵢ`.
+Evaluate the derivative of the degree-``\\alpha_i`` spline-controlled Hermite
+basis at ``z_i``.
 """
 function basisfunction_derivative(basis::CubicSplineHermiteBasis, αᵢ::Int, zᵢ::Real)
     n = Int(αᵢ)

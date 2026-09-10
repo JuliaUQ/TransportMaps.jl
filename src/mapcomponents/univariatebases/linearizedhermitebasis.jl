@@ -1,7 +1,17 @@
 """
     LinearizedHermiteBasis
 
-Probabilist Hermite polynomial basis with linearization outside specified bounds.
+Probabilists' Hermite polynomial basis with linear extrapolation outside bounds
+``[a,b]``:
+
+```math
+\\widetilde H_n(z)=
+\\begin{cases}
+H_n(a)+H_n'(a)(z-a), & z<a,\\\\
+H_n(z),               & a\\leq z\\leq b,\\\\
+H_n(b)+H_n'(b)(z-b), & z>b.
+\\end{cases}
+```
 
 # Fields
 - `linearizationbounds::Vector{Float64}`: lower and upper bounds for linearization.
@@ -73,7 +83,7 @@ end
 """
     basisfunction(basis::LinearizedHermiteBasis, αᵢ::Int, zᵢ::Real)
 
-Evaluate `LinearizedHermiteBasis` with degree `αᵢ` at `zᵢ`.
+Evaluate the degree-``\\alpha_i`` linearized Hermite basis at ``z_i``.
 """
 @inline function basisfunction(basis::LinearizedHermiteBasis, αᵢ::Int, zᵢ::Real)
     n = Int(αᵢ)
@@ -87,7 +97,8 @@ end
 """
     basisfunction_derivative(basis::LinearizedHermiteBasis, αᵢ::Int, zᵢ::Real)
 
-Evaluate derivative of `LinearizedHermiteBasis` with degree `αᵢ` at `zᵢ`.
+Evaluate the derivative of the degree-``\\alpha_i`` linearized Hermite basis at
+``z_i``.
 """
 @inline function basisfunction_derivative(basis::LinearizedHermiteBasis, αᵢ::Int, zᵢ::Real)
     n = Int(αᵢ)

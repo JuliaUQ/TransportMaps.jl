@@ -20,10 +20,10 @@ the multi-index set across all components simultaneously.
 - `basis::AbstractPolynomialBasis=LinearizedHermiteBasis()`: Polynomial basis
 - `optimizer::Optim.AbstractOptimizer=LBFGS()`: Optimization algorithm
 - `options::Optim.Options=Optim.Options()`: Optimizer options
-- `λ1::Real=0`: Strength of the smoothed L1 penalty
-- `λ2::Real=0`: Strength of the L2 penalty
-- `l1_eps::Real=1e-8`: Positive smoothing parameter for the L1 penalty
-- `δ::Real=1e-9`: Stability perturbation for mapped quadrature points during target
+- `λ1::Real=0`: Strength ``\\lambda_1`` of the smoothed L1 penalty
+- `λ2::Real=0`: Strength ``\\lambda_2`` of the L2 penalty
+- `l1_eps::Real=1e-8`: Positive smoothing parameter ``\\varepsilon`` for the L1 penalty
+- `δ::Real=1e-9`: Stability perturbation ``\\delta`` for mapped quadrature points during target
   density evaluation
 - `interactions_only::Bool=false`: Penalize only terms involving multiple coordinates
 - `validation::Union{AbstractQuadratureWeights,Nothing}=nothing`: Quadrature rule used for validation diagnostics

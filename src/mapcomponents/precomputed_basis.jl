@@ -7,16 +7,23 @@ When optimizing map coefficients from samples, the basis functions are evaluated
 repeatedly at the same sample points with different coefficients. This structure
 precomputes and stores these evaluations to avoid redundant computation.
 
-For exact computation of Mᵏ(z) = f(z₁,...,z_{k-1},0) + ∫₀^{z_k} g(∂f/∂x_k) dx_k,
-we precompute basis evaluations at quadrature nodes for each sample.
+To evaluate
+
+```math
+M^k(z)
+= f(z_1,\\ldots,z_{k-1},0)
++ \\int_0^{z_k} g\\!\\left(\\partial_k f(z_1,\\ldots,z_{k-1},t)\\right)\\,\\mathrm{d}t,
+```
+
+basis values and derivatives are precomputed at the quadrature nodes for each sample.
 
 # Fields
-- `Ψ₀::Matrix{Float64}`: Basis evaluations at (z₁,...,z_{k-1},0) (n_samples × n_basis)
-- `∂Ψ_z::Matrix{Float64}`: Partial derivatives ∂ψⱼ/∂zₖ at the sample points z (n_samples × n_basis)
-- `Ψ_quad::Array{Float64,3}`: Basis evaluations at quadrature nodes (n_samples × n_quad × n_basis)
-- `∂Ψ_quad::Array{Float64,3}`: Partial derivatives at quadrature nodes (n_samples × n_quad × n_basis)
-- `quad_weights::Vector{Float64}`: Quadrature weights (n_quad,)
-- `quad_scales::Vector{Float64}`: Integration scale factors 0.5*(z_k - 0) for each sample (n_samples,)
+- `Ψ₀::Matrix{Float64}`: Basis evaluations at ``(z_1,\\ldots,z_{k-1},0)``
+- `∂Ψ_z::Matrix{Float64}`: Partial derivatives ``\\partial\\psi_j/\\partial z_k`` at the samples
+- `Ψ_quad::Array{Float64,3}`: Basis evaluations at quadrature nodes
+- `∂Ψ_quad::Array{Float64,3}`: Basis derivatives at quadrature nodes
+- `quad_weights::Vector{Float64}`: Quadrature weights
+- `quad_scales::Vector{Float64}`: Integration scale ``z_k/2`` for each sample
 - `n_samples::Int`: Number of sample points
 - `n_basis::Int`: Number of basis functions
 - `n_quad::Int`: Number of quadrature points
@@ -61,7 +68,7 @@ using precomputed values.
 
 # Arguments
 - `component::PolynomialMapComponent`: The map component whose basis functions to evaluate
-- `samples::Matrix{Float64}`: Sample points (n_samples × dimension)
+- `samples::Matrix{Float64}`: Sample points, with one sample per row
 - `n_quad::Int=64`: Number of Gauss-Legendre quadrature points (default: 64)
 
 # Returns
@@ -136,14 +143,15 @@ end
 """
     evaluate_f₀(precomp::PrecomputedBasis, coefficients::Vector{Float64})
 
-Evaluate f₀(z) = f(z₁,...,z_{k-1},0) = Σⱼ cⱼ ψⱼ(z₁,...,z_{k-1},0) for all samples.
+Evaluate
+``f_0(z) = \\sum_j c_j\\psi_j(z_1,\\ldots,z_{k-1},0)`` for all samples.
 
 # Arguments
 - `precomp::PrecomputedBasis`: Precomputed basis evaluations
 - `coefficients::Vector{Float64}`: Coefficient vector
 
 # Returns
-- `Vector{Float64}`: f₀ evaluated at all sample points (n_samples,)
+- `Vector{Float64}`: ``f_0`` evaluated at all sample points
 """
 function evaluate_f₀(precomp::PrecomputedBasis, coefficients::Vector{Float64})
     @assert length(coefficients) == precomp.n_basis "Coefficients length must match number of basis functions"
@@ -153,18 +161,20 @@ end
 """
     evaluate_integral(precomp::PrecomputedBasis, coefficients::Vector{Float64}, rectifier::AbstractRectifierFunction)
 
-Evaluate the integral ∫₀^{z_k} g(∂f/∂x_k) dx_k for all samples using precomputed
-quadrature node evaluations.
+Evaluate, for every sample,
 
-For each sample, this computes:
-∫₀^{z_k} g(Σⱼ cⱼ ∂ψⱼ/∂x_k) dx_k
+```math
+\\int_0^{z_k}
+g\\!\\left(\\sum_j c_j\\,\\partial_k\\psi_j(z_1,\\ldots,z_{k-1},t)\\right)
+\\,\\mathrm{d}t
+```
 
 using Gauss-Legendre quadrature with precomputed basis derivative values.
 
 # Arguments
 - `precomp::PrecomputedBasis`: Precomputed basis evaluations at quadrature nodes
 - `coefficients::Vector{Float64}`: Coefficient vector
-- `rectifier::AbstractRectifierFunction`: Rectifier function g
+- `rectifier::AbstractRectifierFunction`: Rectifier ``g``
 
 # Returns
 - `Vector{Float64}`: Integral evaluated at all sample points (n_samples,)
@@ -191,28 +201,56 @@ function evaluate_integral(precomp::PrecomputedBasis, coefficients::Vector{Float
 end
 
 """
+    evaluate_M!(values, precomp, coefficients, rectifier)
+
+Evaluate the full map component in place, writing the result into `values`.
+"""
+function evaluate_M!(
+        values::Vector{Float64},
+        precomp::PrecomputedBasis,
+        coefficients::Vector{Float64},
+        rectifier::AbstractRectifierFunction,
+    )
+    @assert length(values) == precomp.n_samples "Output length must match number of samples"
+    @assert length(coefficients) == precomp.n_basis "Coefficients length must match number of basis functions"
+
+    mul!(values, precomp.Ψ₀, coefficients)
+    @inbounds for i in 1:precomp.n_samples
+        integral = 0.0
+        for q in 1:precomp.n_quad
+            derivative_basis = view(precomp.∂Ψ_quad, i, q, :)
+            ∂f = dot(derivative_basis, coefficients)
+            integral += precomp.quad_weights[q] * rectifier(∂f)
+        end
+        values[i] += precomp.quad_scales[i] * integral
+    end
+    return values
+end
+
+"""
     evaluate_M(precomp::PrecomputedBasis, coefficients::Vector{Float64}, rectifier::AbstractRectifierFunction)
 
-Evaluate the full map component Mᵏ(z) = f₀ + ∫₀^{z_k} g(∂f/∂x_k) dx_k for all samples.
+Evaluate the full map component
+``M^k(z) = f_0(z) + \\int_0^{z_k}g(\\partial_k f(z_{1:k-1},t))\\,\\mathrm{d}t``
+for all samples.
 
 # Arguments
 - `precomp::PrecomputedBasis`: Precomputed basis evaluations
 - `coefficients::Vector{Float64}`: Coefficient vector
-- `rectifier::AbstractRectifierFunction`: Rectifier function g
+- `rectifier::AbstractRectifierFunction`: Rectifier ``g``
 
 # Returns
-- `Vector{Float64}`: Mᵏ evaluated at all sample points (n_samples,)
+- `Vector{Float64}`: ``M^k`` evaluated at all sample points
 """
 function evaluate_M(precomp::PrecomputedBasis, coefficients::Vector{Float64}, rectifier::AbstractRectifierFunction)
-    f₀ = evaluate_f₀(precomp, coefficients)
-    integral = evaluate_integral(precomp, coefficients, rectifier)
-    return f₀ .+ integral
+    values = Vector{Float64}(undef, precomp.n_samples)
+    return evaluate_M!(values, precomp, coefficients, rectifier)
 end
 
 """
     evaluate_∂M(precomp::PrecomputedBasis, coefficients::Vector{Float64}, rectifier::AbstractRectifierFunction)
 
-Evaluate ∂Mᵏ/∂zₖ = g(∂f/∂zₖ) for all samples at their actual z_k values.
+Evaluate ``\\partial M^k/\\partial z_k = g(\\partial f/\\partial z_k)`` for all samples.
 
 # Arguments
 - `precomp::PrecomputedBasis`: Precomputed basis evaluations
@@ -220,7 +258,7 @@ Evaluate ∂Mᵏ/∂zₖ = g(∂f/∂zₖ) for all samples at their actual z_k v
 - `rectifier::AbstractRectifierFunction`: Rectifier function g
 
 # Returns
-- `Vector{Float64}`: ∂Mᵏ/∂zₖ evaluated at all sample points (n_samples,)
+- `Vector{Float64}`: ``\\partial M^k/\\partial z_k`` at all sample points
 """
 function evaluate_∂M(precomp::PrecomputedBasis, coefficients::Vector{Float64}, rectifier::AbstractRectifierFunction)
     @assert length(coefficients) == precomp.n_basis "Coefficients length must match number of basis functions"

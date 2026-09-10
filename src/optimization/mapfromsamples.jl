@@ -55,22 +55,33 @@ function objective_gradient!(
     return grad
 end
 
+# Write ∂Mᵏ(xⁱ)/∂c for one sample into `gradient`.
+function _map_coefficient_gradient!(
+        gradient::AbstractVector{Float64},
+        component::PolynomialMapComponent,
+        precomp::PrecomputedBasis,
+        sample_index::Int,
+    )
+    c = component.coefficients
+    copyto!(gradient, view(precomp.Ψ₀, sample_index, :))
+    scale = precomp.quad_scales[sample_index]
+
+    @inbounds for q in 1:precomp.n_quad
+        ∂f = dot(view(precomp.∂Ψ_quad, sample_index, q, :), c)
+        weight = precomp.quad_weights[q] * derivative(component.rectifier, ∂f) * scale
+        gradient .+= weight .* view(precomp.∂Ψ_quad, sample_index, q, :)
+    end
+    return gradient
+end
+
 # Return ∂Mᵏ(xⁱ)/∂c for one sample from a precomputed basis.
 function _map_coefficient_gradient(
         component::PolynomialMapComponent,
         precomp::PrecomputedBasis,
         sample_index::Int,
     )
-    c = component.coefficients
-    grad = copy(view(precomp.Ψ₀, sample_index, :))
-    scale = precomp.quad_scales[sample_index]
-
-    @inbounds for q in 1:precomp.n_quad
-        ∂f = dot(view(precomp.∂Ψ_quad, sample_index, q, :), c)
-        weight = precomp.quad_weights[q] * derivative(component.rectifier, ∂f) * scale
-        grad .+= weight .* view(precomp.∂Ψ_quad, sample_index, q, :)
-    end
-    return grad
+    gradient = Vector{Float64}(undef, precomp.n_basis)
+    return _map_coefficient_gradient!(gradient, component, precomp, sample_index)
 end
 
 function objective_gradient!(
@@ -83,9 +94,11 @@ function objective_gradient!(
     ∂M_vals = evaluate_∂M(precomp, c, component.rectifier)
     negative_scores = -grad_logpdf(reference, M_vals)
     grad = zeros(Float64, precomp.n_basis)
+    map_gradient = similar(grad)
 
     @inbounds for i in 1:precomp.n_samples
-        grad .+= negative_scores[i] .* _map_coefficient_gradient(component, precomp, i)
+        _map_coefficient_gradient!(map_gradient, component, precomp, i)
+        grad .+= negative_scores[i] .* map_gradient
 
         ∂f_at_z = dot(view(precomp.∂Ψ_z, i, :), c)
         g_prime_at_z = derivative(component.rectifier, ∂f_at_z)
@@ -165,7 +178,20 @@ end
         test_fraction::Float64 = 0.0
     )
 
-Optimize polynomial map coefficients to minimize KL divergence to a target density.
+Fit the inverse transport ``S:x\\mapsto z`` by minimizing the empirical objective
+
+```math
+\\widehat J(S)
+= -\\frac{1}{N}\\sum_{i=1}^N
+  \\left[
+    \\log\\rho(S(x_i))
+    +\\log|\\det\\nabla S(x_i)|
+  \\right].
+```
+
+For a triangular map, this separates into one optimization problem per component.
+If ``\\rho`` is uniform on ``[a,b]^d``, the fit additionally enforces
+``a<S^k(x_i)<b`` at every training sample.
 
 # Arguments
 - `M::PolynomialMap`: The polynomial map to optimize.
@@ -291,6 +317,50 @@ function optimize!(
     return result
 end
 
+function _uniform_objective_hessian!(
+        hessian::Matrix{Float64},
+        component::PolynomialMapComponent,
+        precomp::PrecomputedBasis,
+        coefficients::Vector{Float64},
+    )
+    fill!(hessian, 0.0)
+    @inbounds for i in 1:precomp.n_samples
+        derivative_basis = view(precomp.∂Ψ_z, i, :)
+        ∂f = dot(derivative_basis, coefficients)
+        diagonal_derivative = component.rectifier(∂f)
+        rectifier_derivative = derivative(component.rectifier, ∂f)
+        rectifier_second_derivative = second_derivative(component.rectifier, ∂f)
+        curvature =
+            (rectifier_derivative / diagonal_derivative)^2 -
+            rectifier_second_derivative / diagonal_derivative
+        BLAS.ger!(curvature, derivative_basis, derivative_basis, hessian)
+    end
+    return hessian
+end
+
+function _uniform_constraint_hessian!(
+        hessian::Matrix{Float64},
+        component::PolynomialMapComponent,
+        precomp::PrecomputedBasis,
+        coefficients::Vector{Float64},
+        multipliers::Vector{Float64},
+    )
+    @assert length(multipliers) == precomp.n_samples "Multiplier length must match number of samples"
+    @inbounds for i in 1:precomp.n_samples
+        sample_scale = multipliers[i] * precomp.quad_scales[i]
+        iszero(sample_scale) && continue
+        for q in 1:precomp.n_quad
+            derivative_basis = view(precomp.∂Ψ_quad, i, q, :)
+            ∂f = dot(derivative_basis, coefficients)
+            curvature =
+                sample_scale * precomp.quad_weights[q] *
+                second_derivative(component.rectifier, ∂f)
+            BLAS.ger!(curvature, derivative_basis, derivative_basis, hessian)
+        end
+    end
+    return hessian
+end
+
 function _optimize_uniform_component!(
         component::PolynomialMapComponent,
         reference::MapReferenceDensity,
@@ -327,29 +397,26 @@ function _optimize_uniform_component!(
     end
 
     constraint_fun! = (values, c) -> begin
-        values .= evaluate_M(precomp, c, component.rectifier)
+        evaluate_M!(values, precomp, c, component.rectifier)
     end
 
     objective_hessian! = (hessian, c) -> begin
-        FiniteDiff.finite_difference_jacobian!(hessian, grad_fun!, c)
-        hessian .= (hessian .+ hessian') ./ 2
+        _uniform_objective_hessian!(hessian, component, precomp, c)
     end
 
     constraint_jacobian! = (jacobian, c) -> begin
         setcoefficients!(component, c)
         @inbounds for i in 1:precomp.n_samples
-            jacobian[i, :] .= _map_coefficient_gradient(component, precomp, i)
+            _map_coefficient_gradient!(
+                view(jacobian, i, :), component, precomp, i
+            )
         end
     end
 
     constraint_hessian! = (hessian, c, multipliers) -> begin
-        weighted_constraints = coefficients -> begin
-            values = evaluate_M(precomp, coefficients, component.rectifier)
-            return dot(multipliers, values)
-        end
-        contribution = similar(hessian)
-        FiniteDiff.finite_difference_hessian!(contribution, weighted_constraints, c)
-        hessian .+= contribution
+        _uniform_constraint_hessian!(
+            hessian, component, precomp, c, multipliers
+        )
     end
 
     initial_coefficients = getcoefficients(component)

@@ -3,7 +3,21 @@
 """
     multivariate_indices(p::Int, k::Int; mode::Symbol = :total, q::Real = 1.0)
 
-Generate multi-index sets Λ for multivariate polynomial bases.
+Generate a multi-index set ``\\Lambda\\subset\\mathbb{N}_0^k`` for a multivariate
+polynomial basis. The supported truncations are
+
+```math
+\\begin{aligned}
+\\Lambda_{\\mathrm{total}}
+  &= \\{\\alpha:\\|\\alpha\\|_1\\leq p\\},\\\\
+\\Lambda_{\\mathrm{diagonal}}
+  &= \\{\\alpha:\\|\\alpha\\|_1\\leq p,\\ \\alpha_j=0\\text{ for }j\\neq k\\},\\\\
+\\Lambda_{\\mathrm{no\\ mixed}}
+  &= \\{\\alpha:\\|\\alpha\\|_1\\leq p,\\ \\|\\alpha\\|_0\\leq1\\},\\\\
+\\Lambda_{\\mathrm{hyperbolic}}
+  &= \\{\\alpha:\\|\\alpha\\|_q\\leq p\\}.
+\\end{aligned}
+```
 
 # Arguments
 - `p::Int`: Maximum total degree of the polynomials.
@@ -13,7 +27,8 @@ Generate multi-index sets Λ for multivariate polynomial bases.
     - `:diagonal`: Diagonal multi-indices for a fixed coordinate k.
     - `:no_mixed`: No-mixed multi-indices.
     - `:hyperbolic`: Hyperbolic truncation scheme by `q`-norm.
-- `q::Real`: Norm for hyperbolic truncation. `q=1` corresponds to total-order map.
+- `q::Real`: Quasi-norm parameter for hyperbolic truncation.
+  The choice ``q=1`` recovers total-order truncation.
 
 # Returns
 - `Vector{Vector{Int}}`: A vector of multi-indices, where each multi-index is represented as a vector of integers.
@@ -131,13 +146,20 @@ end
 """
     reduced_margin(Λ::Vector{<:Vector{Int}})
 
-Compute the reduced margin of a multi-index set Λ that ensures downward closure.
+Compute the reduced margin of a downward-closed multi-index set ``\\Lambda``:
+
+```math
+\\mathcal{R}(\\Lambda)
+= \\left\\{\\alpha\\notin\\Lambda:
+  \\alpha-e_j\\in\\Lambda\\ \\text{for every }j\\text{ with }\\alpha_j>0
+  \\right\\}.
+```
 
 # Arguments
-- `Λ::Vector{<:Vector{Int}}`: A vector of multi-indices, where each multi-index is represented as a vector of integers.
+- `Λ::Vector{<:Vector{Int}}`: Multi-index set ``\\Lambda``
 
 # Returns
-- `Vector{Vector{Int}}`: The reduced margin of Λ, consisting of multi-indices that ensure downward closure.
+- `Vector{Vector{Int}}`: The reduced margin ``\\mathcal{R}(\\Lambda)``
 """
 function reduced_margin(Λ::Vector{<:Vector{Int}})
     # Handle empty input
