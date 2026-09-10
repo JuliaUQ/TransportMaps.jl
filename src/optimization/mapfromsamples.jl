@@ -48,7 +48,7 @@ function objective_gradient!(
         ∂M = partial_derivative_zk(component, z)
         ∂M_∂c = gradient_coefficients(component, z)
         ∂∂M_∂c = partial_derivative_zk_gradient_coefficients(component, z)
-        denom = max(abs(∂M), eps()) * sign(∂M)
+        denom = max(abs(∂M), eps()) * (signbit(∂M) ? -1.0 : 1.0)
 
         grad .+= negative_scores[i] .* ∂M_∂c .- (1.0 / denom) .* ∂∂M_∂c
     end
@@ -102,7 +102,7 @@ function objective_gradient!(
 
         ∂f_at_z = dot(view(precomp.∂Ψ_z, i, :), c)
         g_prime_at_z = derivative(component.rectifier, ∂f_at_z)
-        denom = max(abs(∂M_vals[i]), eps()) * sign(∂M_vals[i])
+        denom = max(abs(∂M_vals[i]), eps()) * (signbit(∂M_vals[i]) ? -1.0 : 1.0)
         grad .-= (g_prime_at_z / denom) .* view(precomp.∂Ψ_z, i, :)
     end
     return grad
@@ -346,6 +346,7 @@ function _uniform_constraint_hessian!(
         multipliers::Vector{Float64},
     )
     @assert length(multipliers) == precomp.n_samples "Multiplier length must match number of samples"
+    fill!(hessian, 0.0)
     @inbounds for i in 1:precomp.n_samples
         sample_scale = multipliers[i] * precomp.quad_scales[i]
         iszero(sample_scale) && continue
