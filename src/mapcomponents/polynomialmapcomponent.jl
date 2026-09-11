@@ -146,9 +146,17 @@ end
 """
     evaluate(map_component::PolynomialMapComponent, z::AbstractVector{<:Real})
 
-Evaluate the polynomial map component Mᵏ(z) at point z.
+Evaluate the polynomial map component ``M^k(z)``:
 
-Computes Mᵏ(z) = f(z₁,...,zₖ₋₁,0) + ∫₀^{zₖ} g(∂f/∂xₖ) dxₖ, where g is the rectifier.
+```math
+M^k(z)
+= f(z_1,\\ldots,z_{k-1},0)
++ \\int_0^{z_k}
+    g\\!\\left(\\frac{\\partial f}{\\partial z_k}
+      (z_1,\\ldots,z_{k-1},t)\\right)\\,\\mathrm{d}t,
+```
+
+where ``g`` is the rectifier.
 """
 function evaluate(map_component::PolynomialMapComponent, z::AbstractVector{<:Real})
     @assert length(map_component.basisfunctions) == length(map_component.coefficients) "Number of basis functions must equal number of coefficients"
@@ -180,7 +188,7 @@ end
 
 Evaluate the map component at multiple points (row-wise) using multithreading.
 
-Returns a vector where element i is Mᵏ(Z[i,:]).
+Return a vector whose ``i``th element is ``M^k(Z_{i,:})``.
 """
 function evaluate(map_component::PolynomialMapComponent, Z::AbstractMatrix{<:Real})
     @assert length(map_component.basisfunctions) == length(map_component.coefficients) "Number of basis functions must equal number of coefficients"
@@ -205,7 +213,8 @@ end
 """
     partial_derivative_zk(map_component::PolynomialMapComponent, z::AbstractVector{<:Real})
 
-Compute the partial derivative ∂Mᵏ/∂zₖ = g(∂f/∂zₖ) at point z.
+Compute the diagonal map derivative
+``\\partial M^k(z) / \\partial z_k = g(\\partial f(z) / \\partial z_k)``.
 """
 function partial_derivative_zk(map_component::PolynomialMapComponent, z::AbstractVector{<:Real})
     @assert length(z) == length(map_component.basisfunctions[1].multiindexset) "Dimension mismatch: z and multiindexset must have same length"
@@ -229,7 +238,7 @@ end
 
 Compute partial derivatives at multiple points using multithreading.
 
-Returns a vector where element i is ∂Mᵏ/∂zₖ at Z[i,:].
+Return ``\\partial M^k / \\partial z_k`` at every row ``Z_{i,:}``.
 """
 function partial_derivative_zk(map_component::PolynomialMapComponent, Z::AbstractMatrix{<:Real})
     @assert size(Z, 2) == length(map_component.basisfunctions[1].multiindexset) "Dimension mismatch: Z columns and multiindexset must have same length"
@@ -251,9 +260,13 @@ end
 """
     partial_derivative_zk_gradient_coefficients(component::PolynomialMapComponent, z::AbstractVector{<:Real})
 
-Compute the gradient of ∂Mᵏ/∂zₖ with respect to coefficients.
+Compute the coefficient gradient of the diagonal map derivative:
 
-Returns ∂²Mᵏ/(∂zₖ∂c) = g'(∂f/∂zₖ) * ∂²f/(∂zₖ∂c).
+```math
+\\nabla_c \\frac{\\partial M^k}{\\partial z_k}
+= g'\\!\\left(\\frac{\\partial f}{\\partial z_k}\\right)
+  \\nabla_c \\frac{\\partial f}{\\partial z_k}.
+```
 """
 function partial_derivative_zk_gradient_coefficients(component::PolynomialMapComponent, z::AbstractVector{<:Real})
     # ∂Mᵏ/∂zₖ = g(∂f/∂zₖ), where g is the rectifier
@@ -280,7 +293,7 @@ end
 """
     gradient_coefficients(map_component::PolynomialMapComponent, z::AbstractVector{<:Real})
 
-Compute the gradient ∂Mᵏ/∂c of the map component with respect to its coefficients at point z.
+Compute the coefficient gradient ``\\nabla_c M^k(z)``.
 """
 function gradient_coefficients(map_component::PolynomialMapComponent, z::AbstractVector{<:Real})
     @assert length(z) == length(map_component.basisfunctions[1].multiindexset) "Dimension mismatch: z and basis functions must have same length"

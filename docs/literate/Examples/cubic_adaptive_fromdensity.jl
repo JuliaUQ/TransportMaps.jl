@@ -60,7 +60,7 @@ T, hist = optimize_adaptive_transportmap(
     target, quadrature, 10;
     validation = LatinHypercubeWeights(100, 2)
 )
-display(hist)
+println(hist)
 
 # The function uses default parameters:
 # - `rectifier = Softplus()`: Monotonicity-enforcing function
@@ -128,7 +128,7 @@ contour!(x1, x2, pdf_val)
 # gradient information, potentially discovering non-trivial interaction structures.
 
 ind_atm = getmultiindexsets(T[1])
-MIS1 = scatter(ind_atm[:, 1], zeros(length(ind_atm)), ms = 30, legend = false)
+MIS1 = scatter(ind_atm[:, 1], zeros(length(ind_atm)), ms = 20, legend = false)
 plot!(
     xlims = (-0.5, maximum(ind_atm[:, 1]) + 0.5), ylims = (-0.5, 0.5),
     aspect_ratio = 1, xlabel = "Multi-index α₁", ylabel = "", title = "Multi-indices Component 1"
@@ -137,7 +137,7 @@ xticks!(0:maximum(ind_atm[:, 1]))
 yticks!(0:0)
 
 ind_atm = getmultiindexsets(T[2])
-MIS2 = scatter(ind_atm[:, 1], ind_atm[:, 2], ms = 30, legend = false)
+MIS2 = scatter(ind_atm[:, 1], ind_atm[:, 2], ms = 20, legend = false)
 plot!(
     xlims = (-0.5, maximum(ind_atm[:, 1]) + 0.5), ylims = (-0.5, maximum(ind_atm[:, 2]) + 0.5),
     aspect_ratio = 1, xlabel = "Multi-index α₁", ylabel = "Multi-index α₂",
@@ -146,7 +146,7 @@ plot!(
 xticks!(0:maximum(ind_atm[:, 1]))
 yticks!(0:maximum(ind_atm[:, 2]))
 
-plot(MIS1, MIS2, layout = (2, 1))
+plot(MIS1, MIS2, layout = (2, 1), size = (600, 600))
 #md savefig("cubic-density-terms.svg"); nothing # hide
 # ![Cubic density: Terms in the multi-index sets of the two map components](cubic-density-terms.svg)
 

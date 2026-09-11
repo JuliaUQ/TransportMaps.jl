@@ -38,6 +38,18 @@ end
             @test size(gh_map.points, 2) == 2
             @test length(gh_map.weights) == n^2
 
+            # Map-derived quadrature must use the configured Normal parameters.
+            P_nonstandard = PolynomialMap(1, 2, Normal(2, 3), Softplus(), HermiteBasis())
+            gh_nonstandard = GaussHermiteWeights(2, P_nonstandard)
+            @test sum(gh_nonstandard.weights .* gh_nonstandard.points[:, 1]) ≈ 2.0
+            @test sum(
+                gh_nonstandard.weights .* (gh_nonstandard.points[:, 1] .- 2.0) .^ 2
+            ) ≈ 9.0
+
+            tensor_nonstandard = TensorProductWeights(2, P_nonstandard)
+            @test tensor_nonstandard.points == gh_nonstandard.points
+            @test tensor_nonstandard.weights == gh_nonstandard.weights
+
             # Knots from map with uniform density
             P_uniform = PolynomialMap(2, 2, Uniform(), Softplus(), ShiftedLegendreBasis())
             @test_throws "GaussHermiteWeights requires Normal" GaussHermiteWeights(2, P_uniform)

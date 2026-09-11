@@ -23,6 +23,15 @@ end
         @test length(p_test) == n
     end
 
+    gh_nonstandard = GaussHermiteKnots(Normal(2, 3))
+    p_nonstandard, w_nonstandard = gh_nonstandard(3)
+    @test sum(w_nonstandard .* p_nonstandard) ≈ 2.0
+    @test sum(w_nonstandard .* (p_nonstandard .- 2.0) .^ 2) ≈ 9.0
+
+    p_0, w_0 = gh_nonstandard(0)
+    @test p_0 == [2.0]
+    @test w_0 == [1.0]
+
     gl = GaussLegendreKnots()
     @test support(gl) == RealInterval(-1, 1)
 

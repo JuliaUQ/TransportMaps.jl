@@ -1,7 +1,12 @@
 """
     HermiteBasis
 
-Probabilist Hermite polynomial basis.
+Probabilists' Hermite polynomial basis, defined by
+
+```math
+H_0(z)=1,\\qquad H_1(z)=z,\\qquad
+H_n(z)=zH_{n-1}(z)-(n-1)H_{n-2}(z).
+```
 """
 struct HermiteBasis <: AbstractHermiteBasis end
 
@@ -30,7 +35,7 @@ end
 """
     basisfunction(basis::HermiteBasis, αᵢ::Int, zᵢ::Real)
 
-Evaluate `HermiteBasis` with degree `αᵢ` at `zᵢ`.
+Evaluate the degree-``\\alpha_i`` Hermite polynomial ``H_{\\alpha_i}(z_i)``.
 """
 @inline function basisfunction(basis::HermiteBasis, αᵢ::Int, zᵢ::Real)
     return hermite_polynomial(Int(αᵢ), zᵢ)
@@ -39,7 +44,8 @@ end
 """
     basisfunction_derivative(basis::HermiteBasis, αᵢ::Int, zᵢ::Real)
 
-Evaluate derivative of `HermiteBasis` with degree `αᵢ` at `zᵢ`.
+Evaluate
+``H'_{\\alpha_i}(z_i)=\\alpha_i H_{\\alpha_i-1}(z_i)``.
 """
 @inline function basisfunction_derivative(basis::HermiteBasis, αᵢ::Int, zᵢ::Real)
     return hermite_derivative(Int(αᵢ), zᵢ)

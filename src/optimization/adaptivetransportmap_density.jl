@@ -20,9 +20,11 @@ the multi-index set across all components simultaneously.
 - `basis::AbstractPolynomialBasis=LinearizedHermiteBasis()`: Polynomial basis
 - `optimizer::Optim.AbstractOptimizer=LBFGS()`: Optimization algorithm
 - `options::Optim.Options=Optim.Options()`: Optimizer options
-- `λ1::Real=0`: Strength of the smoothed L1 penalty
-- `λ2::Real=0`: Strength of the L2 penalty
-- `l1_eps::Real=1e-8`: Positive smoothing parameter for the L1 penalty
+- `λ1::Real=0`: Strength ``\\lambda_1`` of the smoothed L1 penalty
+- `λ2::Real=0`: Strength ``\\lambda_2`` of the L2 penalty
+- `l1_eps::Real=1e-8`: Positive smoothing parameter ``\\varepsilon`` for the L1 penalty
+- `δ::Real=1e-9`: Stability perturbation ``\\delta`` for mapped quadrature points during target
+  density evaluation
 - `interactions_only::Bool=false`: Penalize only terms involving multiple coordinates
 - `validation::Union{AbstractQuadratureWeights,Nothing}=nothing`: Quadrature rule used for validation diagnostics
 
@@ -43,6 +45,7 @@ function optimize_adaptive_transportmap(
         λ1::Real = 0.0,
         λ2::Real = 0.0,
         l1_eps::Real = 1.0e-8,
+        δ::Real = 1.0e-9,
         interactions_only::Bool = false,
         validation::Union{AbstractQuadratureWeights, Nothing} = nothing
     )
@@ -70,7 +73,7 @@ function optimize_adaptive_transportmap(
     # Optimize initial map
     res = optimize!(
         M, target, precomp;
-        optimizer, options, λ1, λ2, l1_eps, interactions_only,
+        optimizer, options, δ, λ1, λ2, l1_eps, interactions_only,
     )
     train_obj = Optim.minimum(res)
 
@@ -78,7 +81,7 @@ function optimize_adaptive_transportmap(
 
     # Perform validation if not set to nothing
     if !isnothing(validation)
-        validation_obj = kldivergence(M, target, validation)
+        validation_obj = kldivergence(M, target, validation; δ)
         @debug "Initial validation KL divergence" objective = validation_obj
     else
         validation_obj = NaN
@@ -120,7 +123,7 @@ function optimize_adaptive_transportmap(
 
             # Compute gradient of KL divergence
             precomp_cand = PrecomputedMapBasis(M_cand, quadrature.points, quadrature.weights)
-            grad = kldivergence_gradient(M_cand, target, precomp_cand)
+            grad = kldivergence_gradient(M_cand, target, precomp_cand; δ)
 
             # Get gradient component corresponding to the new coefficient (last one for component k)
             # Find position of new coefficient in the full coefficient vector
@@ -146,7 +149,7 @@ function optimize_adaptive_transportmap(
             precomp_trial = PrecomputedMapBasis(M_trial, quadrature.points, quadrature.weights)
             res_trial = optimize!(
                 M_trial, target, precomp_trial;
-                optimizer, options, λ1, λ2, l1_eps, interactions_only,
+                optimizer, options, δ, λ1, λ2, l1_eps, interactions_only,
             )
 
             if Optim.converged(res_trial)
@@ -166,7 +169,7 @@ function optimize_adaptive_transportmap(
             @debug "Accepted adaptive term" iteration training_objective = train_obj
 
             if !isnothing(validation)
-                validation_obj = kldivergence(M, target, validation)
+                validation_obj = kldivergence(M, target, validation; δ)
                 @debug "Validation KL divergence" iteration objective = validation_obj
             else
                 validation_obj = NaN

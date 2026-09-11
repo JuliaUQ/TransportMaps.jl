@@ -1,32 +1,56 @@
 """
-    GaussHermiteKnots
+    GaussHermiteKnots([μ = 0, σ = 1])
 
-One-dimensional Gauss-Hermite quadrature weights for computing integrals for the form:
+One-dimensional Gauss-Hermite quadrature rule for expectations under
+`Normal(μ, σ)`. The default is the standard normal distribution.
 
-`` \\int_{-\\infty}^{\\infty} f(x) \\phi(x) \\ \\mathrm{d}x \\approx \\sum_{i=1}^{n} w_i f(x_i),``
+The quadrature approximates integrals of the form:
 
-where ``\\phi(x)`` is the standard normal density.
+```math
+\\int_{-\\infty}^{\\infty} f(x)\\phi(x)\\,\\mathrm{d}x
+\\approx \\sum_{i=1}^{n}w_i f(x_i),
+```
+
+where ``\\phi(x)`` is the configured normal density.
+
+`GaussHermiteKnots(distribution::Normal)` constructs the rule directly from a normal
+distribution.
 """
 struct GaussHermiteKnots <: AbstractQuadratureKnots
+    μ::Float64
+    σ::Float64
+
+    function GaussHermiteKnots(μ::Real = 0.0, σ::Real = 1.0)
+        σ > 0 || throw(ArgumentError("The standard deviation must be positive."))
+        return new(Float64(μ), Float64(σ))
+    end
 end
+
+GaussHermiteKnots(distribution::Normal) =
+    GaussHermiteKnots(mean(distribution), std(distribution))
 
 support(knots::GaussHermiteKnots) = RealInterval(-Inf, Inf)
 
 function (knots::GaussHermiteKnots)(level::Int)
     if level == 0
-        return ([0.0], [1.0])
+        return ([knots.μ], [1.0])
     else
         n = min(2^level + 1, 200)
-        return gausshermite(n; normalize = true)
+        points, weights = gausshermite(n; normalize = true)
+        points .= knots.μ .+ knots.σ .* points
+        return points, weights
     end
 end
 
 """
     GaussLegendreKnots
 
-One-dimensional Gauss-Legendre quadrature weights for computing integrals for the form:
+One-dimensional Gauss-Legendre quadrature rule for expectations of the form
 
-`` \\int_{-1}^{1} f(x) u(x) \\ \\mathrm{d}x \\approx \\sum_{i=1}^{n} w_i f(x_i),``
+```math
+\\int_{-1}^{1}f(x)u(x)\\,\\mathrm{d}x
+\\approx\\sum_{i=1}^{n}w_i f(x_i),
+```
 
 where ``u(x)`` is the uniform density.
 """
@@ -70,9 +94,12 @@ end
 """
     ClenshawCurtisKnots
 
-One-dimensional Clenshaw-Curtis quadrature weights for computing integrals for the form:
+One-dimensional Clenshaw-Curtis quadrature rule for expectations of the form
 
-`` \\int_{-1}^{1} f(x) u(x) \\ \\mathrm{d}x \\approx \\sum_{i=1}^{n} w_i f(x_i),``
+```math
+\\int_{-1}^{1}f(x)u(x)\\,\\mathrm{d}x
+\\approx\\sum_{i=1}^{n}w_i f(x_i),
+```
 
 where ``u(x)`` is the uniform density.
 """

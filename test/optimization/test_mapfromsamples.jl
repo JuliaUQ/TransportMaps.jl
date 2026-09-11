@@ -2,6 +2,10 @@
     using TransportMaps
     using Test
     using Random
+    using Distributions
+    using LinearAlgebra
+    using Optim
+    using Statistics
 
 end
 
@@ -51,5 +55,117 @@ end
 
     @test result2.optimization_results[2].iterations > 0  # Check that optimization ran
     @test isfinite(result2.optimization_results[2].minimum)
+
+    @testset "Non-standard normal reference" begin
+        samples = rand(Normal(4, 2), 300, 1)
+        map = PolynomialMap(1, 1, Normal(2, 3), Softplus(), HermiteBasis())
+        result = optimize!(map, samples)
+        mapped_samples = evaluate(map, samples)
+
+        @test Optim.converged(result.optimization_results[1])
+        @test mean(mapped_samples) ≈ 2 atol = 1.0e-6
+        @test std(mapped_samples) ≈ 3 rtol = 0.02
+    end
+
+    @testset "Uniform reference" begin
+        samples = reshape(collect(range(0.02, 0.98, length = 60)), :, 1)
+        map = PolynomialMap(
+            1, 2, Uniform(0, 1), Softplus(), ShiftedLegendreBasis()
+        )
+        result = optimize!(map, samples)
+        mapped_samples = evaluate(map, samples)
+
+        @test Optim.converged(result.optimization_results[1])
+        @test all((0 .<= mapped_samples) .& (mapped_samples .<= 1))
+        @test first(extrema(mapped_samples)) < 0.05
+        @test last(extrema(mapped_samples)) > 0.95
+        @test isfinite(result.train_objectives[1])
+
+        map_lbfgs = PolynomialMap(
+            1, 2, Uniform(0, 1), Softplus(), ShiftedLegendreBasis()
+        )
+        @test_throws ArgumentError optimize!(map_lbfgs, samples, optimizer = LBFGS())
+
+        @testset "Analytic Hessians and in-place constraints" begin
+            hessian_samples = randn(20, 2)
+            hessian_map = PolynomialMap(
+                2, 3, Uniform(0, 1), Softplus(), ShiftedLegendreBasis()
+            )
+            component = hessian_map[2]
+            TransportMaps._initialize_uniform_component!(
+                component, hessian_samples, Uniform(0, 1)
+            )
+            precomp = PrecomputedBasis(component, hessian_samples)
+            coefficients = copy(component.coefficients)
+            reference = MapReferenceDensity(Uniform(0, 1))
+
+            values = fill(NaN, precomp.n_samples)
+            @test TransportMaps.evaluate_M!(
+                values, precomp, coefficients, component.rectifier
+            ) === values
+            expected_values =
+                TransportMaps.evaluate_f₀(precomp, coefficients) +
+                TransportMaps.evaluate_integral(
+                precomp, coefficients, component.rectifier
+            )
+            @test values ≈ expected_values
+
+            analytic_objective_hessian = zeros(
+                precomp.n_basis, precomp.n_basis
+            )
+            TransportMaps._uniform_objective_hessian!(
+                analytic_objective_hessian, component, precomp, coefficients
+            )
+            finite_difference_objective_hessian = similar(
+                analytic_objective_hessian
+            )
+            objective_gradient! = (gradient, c) -> begin
+                setcoefficients!(component, c)
+                gradient .= TransportMaps.objective_gradient!(
+                    component, reference, precomp
+                )
+            end
+            TransportMaps.FiniteDiff.finite_difference_jacobian!(
+                finite_difference_objective_hessian,
+                objective_gradient!,
+                coefficients,
+            )
+            @test analytic_objective_hessian ≈
+                finite_difference_objective_hessian rtol = 5.0e-4 atol = 1.0e-6
+
+            multipliers = randn(precomp.n_samples)
+            analytic_constraint_hessian = zeros(
+                precomp.n_basis, precomp.n_basis
+            )
+            TransportMaps._uniform_constraint_hessian!(
+                analytic_constraint_hessian,
+                component,
+                precomp,
+                coefficients,
+                multipliers,
+            )
+            finite_difference_constraint_hessian = similar(
+                analytic_constraint_hessian
+            )
+            map_gradient = Vector{Float64}(undef, precomp.n_basis)
+            constraint_gradient! = (gradient, c) -> begin
+                setcoefficients!(component, c)
+                fill!(gradient, 0.0)
+                for i in 1:precomp.n_samples
+                    TransportMaps._map_coefficient_gradient!(
+                        map_gradient, component, precomp, i
+                    )
+                    gradient .+= multipliers[i] .* map_gradient
+                end
+            end
+            TransportMaps.FiniteDiff.finite_difference_jacobian!(
+                finite_difference_constraint_hessian,
+                constraint_gradient!,
+                coefficients,
+            )
+            @test analytic_constraint_hessian ≈
+                finite_difference_constraint_hessian rtol = 5.0e-4 atol = 1.0e-6
+        end
+    end
 
 end

@@ -4,6 +4,7 @@
     using Random
     using LinearAlgebra
     using Optim
+    using Distributions
 
 end
 
@@ -51,7 +52,7 @@ end
         precomp = TransportMaps.PrecomputedBasis(component, train_samples, n_quad = 100)
 
         # Compute objective using precomputed basis
-        obj_precomp = TransportMaps.objective(component, precomp)
+        obj_precomp = TransportMaps.objective(component, M.reference, precomp)
 
         # Compute objective point by point for verification
         obj_direct = 0.0
@@ -59,7 +60,7 @@ end
             z = train_samples[i, :]
             M_val = evaluate(component, z)
             ∂M_val = partial_derivative_zk(component, z)
-            obj_direct += 0.5 * M_val^2 - log(abs(∂M_val))
+            obj_direct += -logpdf(Normal(), M_val) - log(abs(∂M_val))
         end
 
         # Should match to high precision with 100 quadrature points
@@ -79,10 +80,10 @@ end
         precomp = TransportMaps.PrecomputedBasis(component, train_samples, n_quad = 100)
 
         # Compute gradient using precomputed basis
-        grad_precomp = TransportMaps.objective_gradient!(component, precomp)
+        grad_precomp = TransportMaps.objective_gradient!(component, M.reference, precomp)
 
         # Compute using original function
-        grad_original = TransportMaps.objective_gradient!(component, train_samples)
+        grad_original = TransportMaps.objective_gradient!(component, M.reference, train_samples)
         @test isapprox(grad_precomp, grad_original, rtol = 1.0e-10)
 
         # Compute gradient point by point for verification

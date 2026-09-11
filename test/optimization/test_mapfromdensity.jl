@@ -50,6 +50,7 @@ end
     @test_throws AssertionError optimize!(deepcopy(map), target, quadrature; λ1 = -1)
     @test_throws AssertionError optimize!(deepcopy(map), target, quadrature; λ2 = -1)
     @test_throws AssertionError optimize!(deepcopy(map), target, quadrature; l1_eps = 0)
+    @test_throws AssertionError optimize!(deepcopy(map), target, quadrature; δ = -1)
 
     precomputed = TransportMaps.PrecomputedMapBasis(map, quadrature.points, quadrature.weights)
     options = Optim.Options(iterations = 2)
@@ -57,17 +58,22 @@ end
     from_precomputed = deepcopy(map)
     result_quadrature = optimize!(
         from_quadrature, target, quadrature;
-        λ1 = 0.2, λ2 = 0.1, l1_eps = 1.0e-4, interactions_only = true, options,
+        δ = 1.0e-4, λ1 = 0.2, λ2 = 0.1, l1_eps = 1.0e-4,
+        interactions_only = true, options,
     )
     result_precomputed = optimize!(
         from_precomputed, target, precomputed;
-        λ1 = 0.2, λ2 = 0.1, l1_eps = 1.0e-4, interactions_only = true, options,
+        δ = 1.0e-4, λ1 = 0.2, λ2 = 0.1, l1_eps = 1.0e-4,
+        interactions_only = true, options,
     )
     @test Optim.minimum(result_quadrature) ≈ Optim.minimum(result_precomputed)
     @test getcoefficients(from_quadrature) ≈ getcoefficients(from_precomputed)
 
     @test_throws AssertionError optimize_adaptive_transportmap(
         target, quadrature, numbercoefficients(map); initial_map = map, λ1 = -1,
+    )
+    @test_throws AssertionError optimize_adaptive_transportmap(
+        target, quadrature, numbercoefficients(map); initial_map = map, δ = -1,
     )
 end
 
@@ -90,6 +96,80 @@ end
         setcoefficients!(M.components[1], [1.0, 1.0])  # Different map
         kl_shifted = TransportMaps.kldivergence(M, target, quadrature)
         @test isfinite(kl_shifted)  # Should also be finite
+    end
+
+    @testset "KL Divergence Uses the Reference Density" begin
+        configurations = (
+            (Normal(2, 3), HermiteBasis(), GaussHermiteWeights),
+            (Uniform(-1, 1), LegendreBasis(), GaussLegendreWeights),
+        )
+
+        for (reference, basis, quadrature_constructor) in configurations
+            M = PolynomialMap(1, 1, reference, IdentityRectifier(), basis)
+            setcoefficients!(M, [0.0, 1.0])
+            target = MapTargetDensity(x -> logpdf(reference, x[1]))
+            quadrature = quadrature_constructor(5, M)
+            precomputed = TransportMaps.PrecomputedMapBasis(
+                M, quadrature.points, quadrature.weights
+            )
+
+            @test TransportMaps.kldivergence(M, target, quadrature; δ = 0) ≈ 0.0 atol = 1.0e-12
+            @test TransportMaps.kldivergence(M, target, precomputed; δ = 0) ≈ 0.0 atol = 1.0e-12
+        end
+
+        normal_map = PolynomialMap(
+            1, 1, Normal(2, 3), IdentityRectifier(), HermiteBasis()
+        )
+        setcoefficients!(normal_map, [0.0, 1.0])
+        normal_target = MapTargetDensity(x -> logpdf(Normal(2, 3), x[1]))
+        normal_quadrature = GaussHermiteWeights(5, normal_map)
+        exact_kl = TransportMaps.kldivergence(
+            normal_map, normal_target, normal_quadrature; δ = 0
+        )
+        regularized_kl = TransportMaps.kldivergence(
+            normal_map, normal_target, normal_quadrature; δ = 1.0e-3
+        )
+        @test regularized_kl != exact_kl
+    end
+
+    @testset "Non-standard Normal Reference Optimization" begin
+        rng = Xoshiro(72)
+        reference = Normal(2, 3)
+        target_distribution = Normal(-1, 0.5)
+        target = MapTargetDensity(x -> logpdf(target_distribution, x[1]))
+        M = PolynomialMap(1, 1, reference, Softplus(), HermiteBasis())
+        quadrature = GaussHermiteWeights(5, M)
+
+        result = optimize!(M, target, quadrature)
+        reference_samples = reshape(rand(rng, reference, 10_000), :, 1)
+        mapped_samples = evaluate(M, reference_samples)
+
+        @test Optim.converged(result)
+        @test mean(mapped_samples) ≈ mean(target_distribution) atol = 0.03
+        @test std(mapped_samples) ≈ std(target_distribution) atol = 0.03
+        @test Optim.minimum(result) ≈ 0.0 atol = 1.0e-7
+    end
+
+    @testset "Uniform Reference Optimization" begin
+        reference = Uniform(0, 1)
+        target_distribution = Normal()
+        target = MapTargetDensity(x -> logpdf(target_distribution, x[1]))
+        M = PolynomialMap(
+            1, 5, reference, Softplus(), ShiftedLegendreBasis()
+        )
+        quadrature = GaussLegendreWeights(5, M)
+
+        result = optimize!(M, target, quadrature)
+        mapped_points = evaluate(M, quadrature.points)
+        mapped_mean = sum(quadrature.weights .* mapped_points[:, 1])
+        mapped_variance = sum(
+            quadrature.weights .* (mapped_points[:, 1] .- mapped_mean) .^ 2
+        )
+
+        @test Optim.converged(result)
+        @test mapped_mean ≈ 0.0 atol = 0.03
+        @test sqrt(mapped_variance) ≈ 1.0 atol = 0.05
+        @test Optim.minimum(result) < 0.05
     end
 
     @testset "KL Divergence Gradient" begin

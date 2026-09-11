@@ -33,7 +33,7 @@ MultivariateBasis(multiindexset::Vector{Int}, basistype::AbstractPolynomialBasis
 
 Evaluate the tensor product of univariate basis functions.
 
-Returns ∏ᵢ ψᵢ(αᵢ, zᵢ).
+Returns ``\\prod_i \\psi_i(\\alpha_i, z_i)``.
 """
 function Psi(alpha::Vector{<:Real}, z::Vector{<:Real}, univariatebases::Vector{T}) where {T <: AbstractPolynomialBasis}
     @assert length(alpha) == length(z) "Dimension mismatch: alpha and z must have same length"
@@ -54,7 +54,8 @@ end
 """
     f(Ψ::Vector{MultivariateBasis{T}}, coefficients::Vector{<:Real}, z::Vector{<:Real}) where {T <: AbstractPolynomialBasis}
 
-Evaluate the linear combination f(z) = ∑ᵢ cᵢ Ψᵢ(z).
+Evaluate the linear combination
+``f(z) = \\sum_i c_i \\Psi_i(z)``.
 """
 function f(Ψ::Vector{MultivariateBasis{T}}, coefficients::Vector{<:Real}, z::Vector{<:Real}) where {T <: AbstractPolynomialBasis}
     @assert length(Ψ) == length(coefficients) "Number of basis functions must equal number of coefficients"
@@ -64,7 +65,7 @@ end
 """
     f(Ψ::Vector{MultivariateBasis{T}}, coefficients::Vector{<:Real}) where {T <: AbstractPolynomialBasis}
 
-Return a closure z -> f(Ψ, coefficients, z).
+Return a closure representing ``z \\mapsto f(\\Psi, c, z)``.
 """
 function f(Ψ::Vector{MultivariateBasis{T}}, coefficients::Vector{<:Real}) where {T <: AbstractPolynomialBasis}
     return (z::Vector{<:Real}) -> f(Ψ, coefficients, z)
@@ -73,7 +74,7 @@ end
 """
     gradient_z(mvb::MultivariateBasis{T}, z::Vector{<:Real}) where {T <: AbstractPolynomialBasis}
 
-Compute the gradient ∇_z Ψ(z) of the multivariate basis.
+Compute the gradient ``\\nabla_z \\Psi(z)`` of the multivariate basis.
 """
 function gradient_z(mvb::MultivariateBasis{T}, z::Vector{<:Real}) where {T <: AbstractPolynomialBasis}
     return [partial_derivative_z(mvb.univariatebases, mvb.multiindexset, z, j) for j in 1:length(z)]
@@ -82,7 +83,7 @@ end
 """
     partial_derivative_z(bases::Vector{T}, α::Vector{Int}, z::Vector{<:Real}, j::Int) where {T <: AbstractPolynomialBasis}
 
-Compute the partial derivative ∂Ψ/∂zⱼ of the tensor product basis.
+Compute the partial derivative ``\\partial \\Psi / \\partial z_j`` of the tensor-product basis.
 """
 function partial_derivative_z(bases::Vector{T}, α::Vector{Int}, z::Vector{<:Real}, j::Int) where {T <: AbstractPolynomialBasis}
     @assert 1 <= j <= length(z) "Index j must be within bounds of z"
@@ -101,14 +102,15 @@ end
 """
     partial_derivative_z(mvb::MultivariateBasis{T}, z::Vector{<:Real}, j::Int) where {T <: AbstractPolynomialBasis}
 
-Compute ∂Ψ/∂zⱼ for the multivariate basis.
+Compute ``\\partial \\Psi / \\partial z_j`` for the multivariate basis.
 """
 partial_derivative_z(mvb::MultivariateBasis{T}, z::Vector{<:Real}, j::Int) where {T <: AbstractPolynomialBasis} = partial_derivative_z(mvb.univariatebases, mvb.multiindexset, z, j)
 
 """
     partial_derivative_z(Ψ::Vector{MultivariateBasis{T}}, coefficients::Vector{<:Real}, z::Vector{<:Real}, j::Int) where {T <: AbstractPolynomialBasis}
 
-Compute the partial derivative ∂f/∂zⱼ = ∑ᵢ cᵢ ∂Ψᵢ/∂zⱼ.
+Compute
+``\\partial f / \\partial z_j = \\sum_i c_i\\,\\partial \\Psi_i / \\partial z_j``.
 """
 function partial_derivative_z(Ψ::Vector{MultivariateBasis{T}}, coefficients::Vector{<:Real}, z::Vector{<:Real}, j::Int) where {T <: AbstractPolynomialBasis}
     @assert length(Ψ) == length(coefficients) "Number of basis functions must equal number of coefficients"
@@ -118,7 +120,7 @@ end
 """
     gradient_z(Ψ::Vector{MultivariateBasis{T}}, coefficients::Vector{<:Real}, z::Vector{<:Real}) where {T <: AbstractPolynomialBasis}
 
-Compute the gradient ∇_z f(z) of the function f.
+Compute the gradient ``\\nabla_z f(z)``.
 """
 function gradient_z(Ψ::Vector{MultivariateBasis{T}}, coefficients::Vector{<:Real}, z::Vector{<:Real}) where {T <: AbstractPolynomialBasis}
     return [partial_derivative_z(Ψ, coefficients, z, j) for j in 1:length(z)]
@@ -127,7 +129,8 @@ end
 """
     gradient_coefficients(Ψ::Vector{MultivariateBasis{T}}, z::Vector{<:Real}) where {T <: AbstractPolynomialBasis}
 
-Compute the gradient ∂f/∂c = [Ψ₁(z), Ψ₂(z), ...] of f with respect to coefficients.
+Compute the coefficient gradient
+``\\nabla_c f(z) = [\\Psi_1(z), \\Psi_2(z), \\ldots]^\\mathsf{T}``.
 """
 function gradient_coefficients(Ψ::Vector{MultivariateBasis{T}}, z::Vector{<:Real}) where {T <: AbstractPolynomialBasis}
     return [evaluate(mvb, z) for mvb in Ψ]

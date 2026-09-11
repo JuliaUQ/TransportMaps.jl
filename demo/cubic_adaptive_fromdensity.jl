@@ -13,7 +13,7 @@ T, hist = optimize_adaptive_transportmap(
     target, quadrature, 10;
     validation = LatinHypercubeWeights(100, 2)
 )
-display(hist)
+println(hist)
 
 convergence_kl = plot(
     hist.train_objectives, label = "Train Objective", xlabel = "Iteration",
@@ -50,7 +50,7 @@ s = scatter(
 contour!(x1, x2, pdf_val)
 
 ind_atm = getmultiindexsets(T[1])
-MIS1 = scatter(ind_atm[:, 1], zeros(length(ind_atm)), ms = 30, legend = false)
+MIS1 = scatter(ind_atm[:, 1], zeros(length(ind_atm)), ms = 20, legend = false)
 plot!(
     xlims = (-0.5, maximum(ind_atm[:, 1]) + 0.5), ylims = (-0.5, 0.5),
     aspect_ratio = 1, xlabel = "Multi-index α₁", ylabel = "", title = "Multi-indices Component 1"
@@ -59,7 +59,7 @@ xticks!(0:maximum(ind_atm[:, 1]))
 yticks!(0:0)
 
 ind_atm = getmultiindexsets(T[2])
-MIS2 = scatter(ind_atm[:, 1], ind_atm[:, 2], ms = 30, legend = false)
+MIS2 = scatter(ind_atm[:, 1], ind_atm[:, 2], ms = 20, legend = false)
 plot!(
     xlims = (-0.5, maximum(ind_atm[:, 1]) + 0.5), ylims = (-0.5, maximum(ind_atm[:, 2]) + 0.5),
     aspect_ratio = 1, xlabel = "Multi-index α₁", ylabel = "Multi-index α₂",
@@ -68,6 +68,6 @@ plot!(
 xticks!(0:maximum(ind_atm[:, 1]))
 yticks!(0:maximum(ind_atm[:, 2]))
 
-plot(MIS1, MIS2, layout = (2, 1))
+plot(MIS1, MIS2, layout = (2, 1), size = (600, 600))
 
 # This file was generated using Literate.jl, https://github.com/fredrikekre/Literate.jl

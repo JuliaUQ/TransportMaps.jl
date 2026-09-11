@@ -1,7 +1,13 @@
 """
     LegendreBasis
 
-Legendre polynomial basis, orthogonal with respect to uniform measure on [-1, 1].
+Legendre polynomial basis, orthogonal with respect to the uniform measure on
+``[-1,1]``. The recurrence is
+
+```math
+P_0(x)=1,\\qquad P_1(x)=x,\\qquad
+P_n(x)=\\frac{(2n-1)xP_{n-1}(x)-(n-1)P_{n-2}(x)}{n}.
+```
 """
 struct LegendreBasis <: AbstractLegendreBasis end
 
@@ -48,7 +54,7 @@ end
 """
     basisfunction(basis::LegendreBasis, αᵢ::Int, zᵢ::Real)
 
-Evaluate `LegendreBasis` with degree `αᵢ` at `zᵢ`.
+Evaluate the degree-``\\alpha_i`` Legendre polynomial ``P_{\\alpha_i}(z_i)``.
 """
 @inline function basisfunction(basis::LegendreBasis, αᵢ::Int, zᵢ::Real)
     return legendre_polynomial(Int(αᵢ), zᵢ)
@@ -57,7 +63,7 @@ end
 """
     basisfunction_derivative(basis::LegendreBasis, αᵢ::Int, zᵢ::Real)
 
-Evaluate derivative of `LegendreBasis` with degree `αᵢ` at `zᵢ`.
+Evaluate the derivative ``P'_{\\alpha_i}(z_i)``.
 """
 @inline function basisfunction_derivative(basis::LegendreBasis, αᵢ::Int, zᵢ::Real)
     return legendre_derivative(Int(αᵢ), zᵢ)
@@ -71,9 +77,12 @@ end
 """
     ShiftedLegendreBasis
 
-Shifted Legendre polynomial basis, orthogonal with respect to uniform measure on [0, 1].
-The shifted Legendre polynomials ``P_n^*([0,1])(x)`` are obtained by transforming the standard
-Legendre polynomials: ``P_n^*(x) = P_n(2x - 1)``.
+Shifted Legendre polynomial basis, orthogonal with respect to the uniform measure
+on ``[0,1]``:
+
+```math
+P_n^*(x)=P_n(2x-1).
+```
 """
 struct ShiftedLegendreBasis <: AbstractLegendreBasis end
 
@@ -97,7 +106,7 @@ end
 """
     basisfunction(basis::ShiftedLegendreBasis, αᵢ::Int, zᵢ::Real)
 
-Evaluate `ShiftedLegendreBasis` with degree `αᵢ` at `zᵢ` ∈ [0,1].
+Evaluate ``P_{\\alpha_i}^*(z_i)`` for ``z_i\\in[0,1]``.
 """
 @inline function basisfunction(basis::ShiftedLegendreBasis, αᵢ::Int, zᵢ::Real)
     return shifted_legendre_polynomial(Int(αᵢ), zᵢ)
@@ -106,7 +115,8 @@ end
 """
     basisfunction_derivative(basis::ShiftedLegendreBasis, αᵢ::Int, zᵢ::Real)
 
-Evaluate derivative of `ShiftedLegendreBasis` with degree `αᵢ` at `zᵢ` ∈ [0,1].
+Evaluate
+``(P_{\\alpha_i}^*)'(z_i)=2P'_{\\alpha_i}(2z_i-1)`` for ``z_i\\in[0,1]``.
 """
 @inline function basisfunction_derivative(basis::ShiftedLegendreBasis, αᵢ::Int, zᵢ::Real)
     return shifted_legendre_derivative(Int(αᵢ), zᵢ)

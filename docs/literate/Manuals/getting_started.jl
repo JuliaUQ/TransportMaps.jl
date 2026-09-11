@@ -121,7 +121,7 @@ plot(p1, p2, layout = (1, 2), size = (800, 400))
 #
 # Check how well your map approximates the target:
 
-# Variance diagnostic (should be close to 1 for good maps)
+# Variance diagnostic (should be close to zero for a good map)
 var_diag = variance_diagnostic(M, target_density, reference_samples)
 println("Variance diagnostic: ", var_diag)
 

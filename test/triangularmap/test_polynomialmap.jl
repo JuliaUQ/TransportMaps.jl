@@ -19,6 +19,46 @@ end
         @test pm.components[1].index == 1
         @test pm.components[2].index == 2
 
+        # The reference distribution determines the default polynomial basis.
+        @test pm.reference.densitytype == Normal()
+        @test all(
+            basistype(comp.basisfunctions[1]) == LinearizedHermiteBasis for comp in pm.components
+        )
+
+        pm_normal = PolynomialMap(2, 2, Normal(1.0, 2.0))
+        @test pm_normal.reference.densitytype == Normal(1.0, 2.0)
+        @test all(
+            basistype(comp.basisfunctions[1]) == LinearizedHermiteBasis for
+                comp in pm_normal.components
+        )
+
+        pm_uniform = PolynomialMap(2, 2, Uniform(-1.0, 1.0))
+        @test pm_uniform.reference.densitytype == Uniform(-1.0, 1.0)
+        @test all(
+            basistype(comp.basisfunctions[1]) == LegendreBasis for
+                comp in pm_uniform.components
+        )
+
+        pm_uniform01 = PolynomialMap(2, 2, Uniform(0.0, 1.0))
+        @test pm_uniform01.reference.densitytype == Uniform(0.0, 1.0)
+        @test all(
+            basistype(comp.basisfunctions[1]) == ShiftedLegendreBasis for
+                comp in pm_uniform01.components
+        )
+
+        # The former symbolic reference names remain supported.
+        @test basistype(PolynomialMap(1, 2, :uniform)[1].basisfunctions[1]) == LegendreBasis
+        @test basistype(PolynomialMap(1, 2, :uniform01)[1].basisfunctions[1]) == ShiftedLegendreBasis
+
+        # References without a natural built-in basis require an explicit basis.
+        @test_throws ArgumentError PolynomialMap(2, 2, Uniform(2.0, 5.0))
+        @test_throws ArgumentError PolynomialMap(2, 2, Laplace())
+
+        # Convenience constructors use the same reference-dependent defaults.
+        @test basistype(DiagonalMap(1, 2, Uniform(-1.0, 1.0))[1].basisfunctions[1]) == LegendreBasis
+        @test basistype(NoMixedMap(1, 2, Uniform(0.0, 1.0))[1].basisfunctions[1]) == ShiftedLegendreBasis
+        @test basistype(HyperbolicMap(1, 2, 0.8, Uniform(-1.0, 1.0))[1].basisfunctions[1]) == LegendreBasis
+
         # Test construction with custom rectifier
         pm_identity = PolynomialMap(3, 1, :normal, IdentityRectifier())
         # Set manual coefficients to avoid undefined/NaN values

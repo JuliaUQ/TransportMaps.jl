@@ -3,6 +3,14 @@
 
 A linear transformation map that standardizes data using mean and standard deviation.
 
+The forward and inverse transformations are
+
+```math
+z_i = \\frac{x_i-\\mu_i}{\\sigma_i},
+\\qquad
+x_i = \\sigma_i z_i + \\mu_i.
+```
+
 # Fields
 - `μ::Vector{Float64}`: Mean vector for each dimension
 - `σ::Vector{Float64}`: Standard deviation vector for each dimension
@@ -51,7 +59,8 @@ end
 """
     evaluate(L::LinearMap, x::AbstractVector{<:Real})
 
-Apply the linear transformation (x - μ) / σ to standardize the input.
+Standardize the input componentwise:
+``L(x)_i=(x_i-\\mu_i)/\\sigma_i``.
 """
 function evaluate(L::LinearMap, x::AbstractVector{<:Real})
     if numberdimensions(L) == 0
@@ -79,7 +88,8 @@ end
 """
     inverse(L::LinearMap, y::AbstractVector{<:Real})
 
-Invert the linear transformation: y * σ + μ to recover the original scale.
+Recover the original scale with
+``L^{-1}(y)_i=\\sigma_i y_i+\\mu_i``.
 """
 function inverse(L::LinearMap, y::AbstractVector{<:Real})
     if numberdimensions(L) == 0
@@ -107,7 +117,7 @@ end
 """
     jacobian(L::LinearMap)
 
-Compute the Jacobian determinant of the linear map (product of standard deviations).
+Return the scale determinant ``\\prod_{i=1}^d\\sigma_i``.
 """
 function jacobian(L::LinearMap)
     return prod(L.σ)

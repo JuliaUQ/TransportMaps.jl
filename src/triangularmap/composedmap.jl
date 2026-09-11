@@ -3,8 +3,8 @@
 
 A composed transport map consisting of a linear map followed by a polynomial map.
 
-The composition is defined as `S(x) = M(L(x))` where `L` is the linear map of type `T` and `M` is the
-polynomial map. The linear map can be a `LinearMap` or `LaplaceMap`.
+The composition is ``S(x)=M(L(x))``, where `L` is a linear map of type `T` and
+`M` is the polynomial map. The linear map can be a `LinearMap` or `LaplaceMap`.
 
 # Fields
 - `linearmap<:T`: The linear map component
@@ -32,7 +32,7 @@ end
 """
     evaluate(C::ComposedMap, x::AbstractVector{<:Real})
 
-Evaluate the composed map: S(x) = M(L(x)).
+Evaluate the composed map, ``S(x)=M(L(x))``.
 """
 function evaluate(C::ComposedMap{T}, x::AbstractVector{<:Real}) where {T <: AbstractLinearMap}
     y = evaluate(C.linearmap, x)
@@ -52,7 +52,7 @@ end
 """
     inverse(C::ComposedMap, z::AbstractVector{<:Real})
 
-Invert the composed map: S⁻¹(z) = L⁻¹(M⁻¹(z)).
+Invert the composed map, ``S^{-1}(z)=L^{-1}(M^{-1}(z))``.
 """
 function inverse(C::ComposedMap{T}, z::AbstractVector{<:Real}) where {T <: AbstractLinearMap}
     y = inverse(C.polynomialmap, z)
@@ -72,7 +72,13 @@ end
 """
     pullback(C::ComposedMap, x::AbstractVector{<:Real})
 
-Compute the pullback density: π(S(x)) * |det(∇S(x))|.
+Compute the pullback density of the composed map:
+
+```math
+\\operatorname{pullback}(C,x)
+= \\operatorname{pullback}(M,L(x))\\,|\\det\\nabla L(x)|
+= \\frac{\\operatorname{pullback}(M,L(x))}{\\prod_i\\sigma_i}.
+```
 """
 function pullback(C::ComposedMap{T}, x::AbstractVector{<:Real}) where {T <: AbstractLinearMap}
     y = evaluate(C.linearmap, x)

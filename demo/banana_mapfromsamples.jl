@@ -1,123 +1,154 @@
 using TransportMaps
 using Distributions
-using LinearAlgebra
+using Optim
 using Plots
+using Statistics
 
-banana_density(x) = pdf(Normal(), x[1]) * pdf(Normal(), x[2] - x[1]^2)
-
-num_samples = 1000
-
-function generate_banana_samples(n_samples::Int)
-    samples = Matrix{Float64}(undef, n_samples, 2)
-
-    count = 0
-    while count < n_samples
-        x1 = randn() * 2
-        x2 = randn() * 3 + x1^2
-
-        if rand() < banana_density([x1, x2]) / 0.4
-            count += 1
-            samples[count, :] = [x1, x2]
-        end
-    end
-
-    return samples
+function generate_banana_samples(number_samples)
+    latent_samples = randn(number_samples, 2)
+    return hcat(
+        latent_samples[:, 1],
+        latent_samples[:, 1] .^ 2 .+ latent_samples[:, 2],
+    )
 end
 
-println("Generating samples from banana distribution...")
-target_samples = generate_banana_samples(num_samples)
-println("Generated $(size(target_samples, 1)) samples")
+target_samples = generate_banana_samples(1_000)
+linear_map = LinearMap(target_samples)
 
-L = LinearMap(target_samples)
+normal_map = PolynomialMap(2, 2, Normal(), Softplus())
+normal_result = optimize!(normal_map, target_samples, linear_map)
+normal_composed_map = ComposedMap(linear_map, normal_map)
 
-M = PolynomialMap(2, 2, :normal, Softplus())
+validation_samples = generate_banana_samples(1_000)
+normal_validation_samples = evaluate(normal_composed_map, validation_samples)
 
-res = optimize!(M, target_samples, L)
-
-C = ComposedMap(L, M)
-
-new_samples = generate_banana_samples(1000)
-norm_samples = randn(1000, 2)
-
-mapped_samples = evaluate(C, new_samples)
-
-mapped_banana_samples = inverse(C, norm_samples)
-
-p11 = scatter(
-    new_samples[:, 1], new_samples[:, 2],
-    label = "Original Samples", alpha = 0.5, color = 1,
-    title = "Original Banana Distribution Samples",
-    xlabel = "x₁", ylabel = "x₂"
+println(
+    "Mapped normal-reference mean: ",
+    vec(mean(normal_validation_samples; dims = 1)),
+)
+println(
+    "Mapped normal-reference std:  ",
+    vec(std(normal_validation_samples; dims = 1)),
 )
 
-scatter!(
-    p11, mapped_banana_samples[:, 1], mapped_banana_samples[:, 2],
-    label = "Mapped Samples", alpha = 0.5, color = 2,
-    title = "Transport Map Generated Samples",
-    xlabel = "x₁", ylabel = "x₂"
+uniform_distribution = Uniform(0, 1)
+uniform_map = PolynomialMap(
+    2,
+    5,
+    uniform_distribution,
+    Softplus(),
+    ShiftedLegendreBasis(),
+)
+uniform_result = optimize!(
+    uniform_map,
+    target_samples,
+    linear_map;
+    options = Optim.Options(iterations = 120, x_abstol = 1.0e-7),
+)
+uniform_composed_map = ComposedMap(linear_map, uniform_map)
+
+uniform_validation_samples = evaluate(uniform_composed_map, validation_samples)
+
+println(
+    "Mapped uniform-reference mean: ",
+    vec(mean(uniform_validation_samples; dims = 1)),
+)
+println(
+    "Mapped uniform-reference std:  ",
+    vec(std(uniform_validation_samples; dims = 1)),
 )
 
-plot(p11, size = (600, 400))
+x₁ = range(-4, 4, length = 120)
+x₂ = range(-3.5, 7, length = 120)
 
-p12 = scatter(
-    norm_samples[:, 1], norm_samples[:, 2],
-    label = "Original Samples", alpha = 0.5, color = 1,
-    title = "Original Banana Distribution Samples",
-    xlabel = "x₁", ylabel = "x₂"
+grid_points = hcat(
+    repeat(collect(x₁), inner = 120),
+    repeat(collect(x₂), outer = 120),
 )
 
-scatter!(
-    p12, mapped_samples[:, 1], mapped_samples[:, 2],
-    label = "Mapped Samples", alpha = 0.5, color = 2,
-    title = "Transport Map Generated Samples",
-    xlabel = "x₁", ylabel = "x₂"
+normal_pullback = reshape(
+    pullback(normal_composed_map, grid_points),
+    120,
+    120,
 )
 
-plot(p12, size = (600, 400), aspect_ratio = 1)
-
-x₁ = range(-3, 3, length = 100)
-x₂ = range(-2.5, 4.0, length = 100)
-
-true_density = [banana_density([x1, x2]) for x2 in x₂, x1 in x₁]
-
-learned_density = [pullback(C, [x1, x2]) for x2 in x₂, x1 in x₁]
-
-p3 = contour(
-    x₁, x₂, true_density,
-    title = "True Banana Density",
-    xlabel = "x₁", ylabel = "x₂",
-    colormap = :viridis, levels = 10
+uniform_pullback = reshape(
+    pullback(uniform_composed_map, grid_points),
+    120,
+    120,
 )
 
-p4 = contour(
-    x₁, x₂, learned_density,
-    title = "Learned Density (Pullback)",
-    xlabel = "x₁", ylabel = "x₂",
-    colormap = :viridis, levels = 10
+function reference_target_plot(
+        reference_samples,
+        target_pdf;
+        reference_title,
+        reference_limits,
+        target_title,
+    )
+    reference_plot = scatter(
+        reference_samples[:, 1],
+        reference_samples[:, 2];
+        markersize = 3,
+        markerstrokewidth = 0,
+        alpha = 0.6,
+        label = "evaluate(C, x)",
+        xlabel = "z₁",
+        ylabel = "z₂",
+        xlims = reference_limits,
+        ylims = reference_limits,
+        aspect_ratio = 1,
+        title = reference_title,
+    )
+
+    target_plot = contour(
+        x₁,
+        x₂,
+        target_pdf;
+        levels = 8,
+        linewidth = 2,
+        color = :viridis,
+        colorbar = false,
+        label = "Target density",
+        xlabel = "x₁",
+        ylabel = "x₂",
+        aspect_ratio = 1,
+        title = target_title,
+    )
+    scatter!(
+        target_plot,
+        target_samples[:, 1],
+        target_samples[:, 2];
+        markersize = 3,
+        markerstrokewidth = 0,
+        alpha = 0.8,
+        label = "Validation samples",
+    )
+
+    return plot(
+        reference_plot,
+        target_plot;
+        layout = (1, 2),
+        size = (950, 430),
+        margin = 4 * Plots.mm,
+        left_margin = 7 * Plots.mm,
+        bottom_margin = 6 * Plots.mm,
+    )
+end
+
+normal_comparison = reference_target_plot(
+    normal_validation_samples,
+    normal_pullback;
+    reference_title = "Standard-normal reference",
+    reference_limits = (-4, 4),
+    target_title = "Banana samples",
 )
 
-plot(p3, p4, layout = (1, 2), size = (800, 400))
-
-scatter(
-    target_samples[:, 1], target_samples[:, 2],
-    label = "Original Samples", alpha = 0.3, color = 1,
-    xlabel = "x₁", ylabel = "x₂",
-    title = "Banana Distribution: Samples and Learned Density"
+uniform_comparison = reference_target_plot(
+    uniform_validation_samples,
+    uniform_pullback;
+    reference_title = "Uniform reference",
+    reference_limits = (0, 1),
+    target_title = "Banana samples",
 )
-
-contour!(
-    x₁, x₂, learned_density ./ maximum(learned_density),
-    levels = 5, colormap = :viridis, alpha = 0.8,
-    label = "Learned Density Contours"
-)
-
-xlims!(-3, 3)
-ylims!(-2.5, 4.0)
-
-println("Sample Statistics Comparison:")
-println("Original samples - Mean: ", Distributions.mean(target_samples, dims = 1))
-println("Original samples - Std:  ", Distributions.std(target_samples, dims = 1))
-println("Mapped samples - Mean:   ", Distributions.mean(mapped_banana_samples, dims = 1))
-println("Mapped samples - Std:    ", Distributions.std(mapped_banana_samples, dims = 1))
 
 # This file was generated using Literate.jl, https://github.com/fredrikekre/Literate.jl
