@@ -1,6 +1,6 @@
 # TransportMaps.jl
 
-[![Build Status](https://github.com/JuliaUQ/TransportMaps.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/JuliaUQ/TransportMaps.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Build Status](https://github.com/JuliaUQ/TransportMaps.jl/actions/workflows/juliaci.yml/badge.svg?branch=main)](https://github.com/JuliaUQ/TransportMaps.jl/actions/workflows/juliaci.yml?query=branch:main)
 [![codecov](https://codecov.io/github/JuliaUQ/TransportMaps.jl/graph/badge.svg?token=PQTR0PG87A)](https://codecov.io/github/JuliaUQ/TransportMaps.jl)
 [![doc](https://img.shields.io/badge/docs-dev-blue.svg)](https://juliauq.github.io/TransportMaps.jl/dev/)
 [![doc-stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://juliauq.github.io/TransportMaps.jl/stable/)
