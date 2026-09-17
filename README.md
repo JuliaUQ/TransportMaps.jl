@@ -1,5 +1,5 @@
-<h1 align="center"> 
-TransportMaps.jl
+<h1 align="center">
+<img src="docs/src/assets/logo.svg" alt="alt text" width="60" height="60" align="center"> TransportMaps.jl
 </h1>
 
 <div align="center">
