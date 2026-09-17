@@ -16,6 +16,12 @@ authors:
 CurrentModule = TransportMaps
 ```
 
+```@raw html
+<p align="center">
+  <img src="./assets/logo.svg" alt="TransportMaps.jl logo" width="220"/>
+</p>
+```
+
 This is an implementation of triangular transport maps in Julia based on the description in [marzouk2016](@cite).
 For a comprehensive introduction to transport maps, see [ramgraber2025](@cite). The theoretical foundations for monotone triangular transport maps are detailed in [marzouk2016](@cite), [baptista2023](@cite). For practical applications in structural health monitoring and Bayesian inference, see [grashorn2024](@cite).
 
