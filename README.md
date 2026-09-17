@@ -1,13 +1,19 @@
-# TransportMaps.jl
+<h1 align="center"> 
+TransportMaps.jl
+</h1>
+
+<div align="center">
 
 [![Build Status](https://github.com/JuliaUQ/TransportMaps.jl/actions/workflows/juliaci.yml/badge.svg?branch=main)](https://github.com/JuliaUQ/TransportMaps.jl/actions/workflows/juliaci.yml?query=branch:main)
-[![codecov](https://codecov.io/github/JuliaUQ/TransportMaps.jl/graph/badge.svg?token=PQTR0PG87A)](https://codecov.io/github/JuliaUQ/TransportMaps.jl)
 [![doc](https://img.shields.io/badge/docs-dev-blue.svg)](https://juliauq.github.io/TransportMaps.jl/dev/)
 [![doc-stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://juliauq.github.io/TransportMaps.jl/stable/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![DOI](https://zenodo.org/badge/885372338.svg)](https://doi.org/10.5281/zenodo.18309940)
+
+[![codecov](https://codecov.io/github/JuliaUQ/TransportMaps.jl/graph/badge.svg?token=PQTR0PG87A)](https://codecov.io/github/JuliaUQ/TransportMaps.jl)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Aqua QA](https://juliatesting.github.io/Aqua.jl/dev/assets/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![code style: runic](https://img.shields.io/badge/code_style-%E1%9A%B1%E1%9A%A2%E1%9A%BE%E1%9B%81%E1%9A%B2-black)](https://github.com/fredrikekre/Runic.jl)
+</div>
 
 A Julia implementation of triangular transport maps for variational inference.
 
