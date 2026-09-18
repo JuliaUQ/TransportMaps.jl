@@ -7,7 +7,7 @@ using Statistics: cor
 import TransportMaps: mappingplot, mappingplot!, termplot, termplot!
 import TransportMaps: sampleplot, sampleplot!, transportplot, transportplot!
 import TransportMaps: convergenceplot, convergenceplot!, objectiveplot, objectiveplot!
-import TransportMaps: transportmap_theme, reference_target_plot, referenceplot
+import TransportMaps: transportmap_theme, reference_target_plot, referenceplot, plotmatrix
 
 function transportmap_theme(; fontsize = 18, titlesize = 22, size = (600, 400))
     return merge(
@@ -101,18 +101,22 @@ function referenceplot(
     return referenceplot(Z; reference = polynomial.reference, kwargs...)
 end
 
-function diagnostic_data(Z, reference, dims, qqpoints)
+function diagnostic_values(Z, dims)
     size(Z, 1) >= 2 || throw(ArgumentError("at least two observations are required"))
     selected = collect(dims)
     !isempty(selected) && all(i -> i isa Integer && 1 <= i <= size(Z, 2), selected) &&
         length(unique(selected)) == length(selected) ||
         throw(ArgumentError("dims must contain distinct valid column indices"))
     all(isfinite, Z) || throw(ArgumentError("samples must be finite"))
+    return Matrix{Float64}(Z[:, selected]), selected
+end
+
+function diagnostic_data(Z, reference, dims, qqpoints)
+    values, selected = diagnostic_values(Z, dims)
     distribution = reference isa MapReferenceDensity ? reference.densitytype : reference
     distribution isa ContinuousUnivariateDistribution ||
         throw(ArgumentError("reference must be a continuous univariate distribution"))
     qqpoints isa Integer && qqpoints >= 2 || throw(ArgumentError("qqpoints must be at least two"))
-    values = Matrix{Float64}(Z[:, selected])
     n = size(values, 1)
     probabilities = range(0.5 / n, 1 - 0.5 / n; length = min(n, qqpoints))
     theoretical = quantile.(Ref(distribution), probabilities)
@@ -204,6 +208,113 @@ function referenceplot(
             Legend(fig[rows + 1, 1:columns], ax; orientation = :horizontal, framevisible = false)
         end
     end
+    return fig
+end
+
+function plotmatrix_samples(M, samples, input_space, space)
+    polynomial = M isa ComposedMap ? M.polynomialmap : M
+    size(samples, 2) == numberdimensions(polynomial) ||
+        throw(ArgumentError("sample columns must match the map dimension"))
+    input_space in (:target, :reference) && space in (:target, :reference) ||
+        throw(ArgumentError("input_space and space must be :target or :reference"))
+    diagnostic_values(samples, axes(samples, 2))
+    input_space === space && return samples
+    forward_space = polynomial.forwarddirection === :target ? :reference : :target
+    return input_space === forward_space ? evaluate(M, samples) : inverse(M, samples)
+end
+
+function plotmatrix(
+        M::Union{PolynomialMap, ComposedMap}, samples::AbstractMatrix{<:Real};
+        input_space = :target, space = :reference, dims = axes(samples, 2),
+        reference = space === :reference ?
+            (M isa ComposedMap ? M.polynomialmap.reference : M.reference) : nothing,
+        dimlabels = nothing, kwargs...,
+    )
+    values = plotmatrix_samples(M, samples, input_space, space)
+    _, selected = diagnostic_values(values, dims)
+    prefix = space === :reference ? "z" : "x"
+    labels = isnothing(dimlabels) ? [Makie.latexstring("$(prefix)_{$j}") for j in selected] : dimlabels
+    return plotmatrix(values; dims = selected, reference, dimlabels = labels, kwargs...)
+end
+
+function plotmatrix(
+        X::AbstractMatrix{<:Real}; dims = axes(X, 2), style = :compact,
+        dimlabels = nothing, reference = nothing, bins = 25,
+        color = (:steelblue, 0.4), markersize = 3, figure = (;), axis = (;),
+    )
+    style === :correlation && (style = :corr)
+    style in (:compact, :full, :corr) ||
+        throw(ArgumentError("style must be :compact, :full, or :corr"))
+    bins isa Integer && bins >= 1 || throw(ArgumentError("bins must be a positive integer"))
+    values, selected = diagnostic_values(X, dims)
+    d = length(selected)
+    distribution = reference isa MapReferenceDensity ? reference.densitytype : reference
+    isnothing(distribution) || distribution isa ContinuousUnivariateDistribution ||
+        throw(ArgumentError("reference must be a continuous univariate distribution"))
+    prefix = isnothing(distribution) ? "x" : "z"
+    labels = isnothing(dimlabels) ? [Makie.latexstring("$(prefix)_{$j}") for j in selected] : collect(dimlabels)
+    length(labels) == d || throw(ArgumentError("dimlabels must have one label per selected coordinate"))
+    fig = Figure(; merge((; size = (600, 600)), figure)...)
+    panels = Matrix{Union{Nothing, Axis}}(nothing, d, d)
+    correlations = style === :corr ? cor(values; dims = 1) : nothing
+    for i in 1:d, j in 1:d
+        if j > i && style !== :full
+            if style === :corr
+                constant = all(==(values[1, i]), values[:, i]) || all(==(values[1, j]), values[:, j])
+                r = constant ? NaN : correlations[i, j]
+                text = isfinite(r) ? "r = $(round(r; digits = 2))" : "undefined"
+                Label(fig[i, j], text; fontsize = 16, tellwidth = false, tellheight = false)
+            end
+            continue
+        end
+        ax = Axis(
+            fig[i, j]; merge(
+                (;
+                    xlabel = i == d ? labels[j] : "",
+                    ylabel = j == 1 ? (i == j ? "Density" : labels[i]) : "",
+                    xticklabelsvisible = i == d, xticksvisible = i == d,
+                    yticklabelsvisible = j == 1, yticksvisible = j == 1,
+                    xticklabelsize = 12, yticklabelsize = 12, xlabelsize = 18, ylabelsize = 18,
+                ), axis
+            )...
+        )
+        panels[i, j] = ax
+        if i == j
+            hist!(ax, values[:, j]; bins, normalization = :pdf, color)
+            if !isnothing(distribution)
+                probabilities = [0.5 / size(values, 1), 1 - 0.5 / size(values, 1)]
+                lo, hi = quantile.(Ref(distribution), probabilities)
+                all(isfinite, (lo, hi)) || throw(ArgumentError("reference quantiles must be finite"))
+                lo = isfinite(minimum(distribution)) ? minimum(distribution) : min(lo, minimum(values[:, j]))
+                hi = isfinite(maximum(distribution)) ? maximum(distribution) : max(hi, maximum(values[:, j]))
+                grid = range(lo, hi; length = 200)
+                density = [isfinite(v) ? v : NaN for v in pdf.(Ref(distribution), grid)]
+                lines!(ax, grid, density; color = :black, linewidth = 2)
+            end
+        else
+            scatter!(ax, values[:, j], values[:, i]; color, markersize)
+        end
+    end
+    for j in 1:d
+        column = [panels[i, j] for i in 1:d if panels[i, j] !== nothing]
+        length(column) > 1 && linkxaxes!(column...)
+        row = [panels[j, i] for i in 1:d if i != j && panels[j, i] !== nothing]
+        length(row) > 1 && linkyaxes!(row...)
+    end
+    # Equal cell sizes keep empty upper triangles from changing panel dimensions.
+    for i in 1:d
+        rowsize!(fig.layout, i, Relative(1 / d))
+        colsize!(fig.layout, i, Relative(1 / d))
+    end
+    if !isnothing(distribution)
+        Legend(
+            fig[d + 1, 1:d],
+            [MarkerElement(; color, marker = :circle, markersize = 8), LineElement(; color = :black)],
+            ["Samples", "Reference PDF"]; orientation = :horizontal, framevisible = false
+        )
+    end
+    rowgap!(fig.layout, 6)
+    colgap!(fig.layout, 6)
     return fig
 end
 

@@ -209,6 +209,48 @@ correlation_fig = referenceplot(Z; reference = Normal(), kind = :correlation)
 # marginal agreement and zero Pearson correlations do not establish independence:
 # nonlinear dependence can remain. These plots are diagnostics, not goodness-of-fit tests.
 #
+# ## Pairwise scatter-plot matrices
+#
+# [`plotmatrix`](@ref) provides a matrix-only view inspired by
+# [PlotMatrix.jl](https://github.com/lukasfritsch/PlotMatrix.jl): marginal histograms
+# on the diagonal and scatter plots for pairs of coordinates. It accepts one
+# sample matrix per figure and shares coordinate limits between related panels.
+#
+# Reusing the four-dimensional validation samples above, the target-space view
+# reveals nonlinear dependencies that a correlation matrix alone can miss:
+
+pairwise_target_fig = plotmatrix(validation_samples; style = :corr)
+#md save("plotting-pairwise-target.svg", pairwise_target_fig); nothing # hide
+# ![Four-dimensional target samples with marginal histograms, pairwise scatter plots, and Pearson correlations](plotting-pairwise-target.svg)
+#
+# Passing a fitted map transforms target samples to reference space and overlays
+# the configured reference PDF on each diagonal histogram. This works for maps
+# fitted from samples or density, including composed maps:
+
+pairwise_reference_fig = plotmatrix(fitted_map, validation_samples; style = :corr)
+#md save("plotting-pairwise-reference.svg", pairwise_reference_fig); nothing # hide
+# ![Mapped reference samples with pairwise scatter plots and marginal reference PDF overlays](plotting-pairwise-reference.svg)
+#
+# `style=:compact` (the default) leaves the upper triangle empty; `:full` plots
+# every pair; `:corr` displays Pearson correlations above the diagonal. Constant
+# coordinates have correlations labelled `undefined`. Histograms use all samples
+# and PDF normalization. Reference PDFs are shown in black when requested.
+#
+# For high-dimensional maps, select a manageable subset. Labels retain original
+# coordinate indices, or supply one `dimlabels` entry per selected coordinate:
+#
+# ```julia
+# plotmatrix(validation_samples; dims=(1, 3, 4), style=:full)
+# plotmatrix(Z; reference=Normal(), dims=(2, 4), dimlabels=[L"z_2", L"z_4"])
+# plotmatrix(fitted_map, validation_samples; space=:target) # no transformation
+# plotmatrix(fitted_map, Z; input_space=:reference)        # already mapped
+# plotmatrix(fitted_map, Z; input_space=:reference, space=:target) # generate target samples
+# ```
+#
+# Customize with `figure=(; size=(600, 600))`, `axis`, `bins`, `markersize`, and
+# `color`. Pairwise views complement the marginal and Q–Q diagnostics; they still
+# cannot rule out higher-order dependence involving three or more coordinates.
+#
 # ## Term and coefficient contributions
 #
 # [`termplot`](@ref) labels each term by its multi-index ``\alpha``. By default,

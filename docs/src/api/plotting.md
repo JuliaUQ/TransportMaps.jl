@@ -15,6 +15,7 @@ transportmap_theme
 ```@docs
 reference_target_plot
 referenceplot
+plotmatrix
 termplot
 termplot!
 mappingplot

@@ -216,3 +216,39 @@ This is a static figure-building helper; recreate it after changing inputs.
 Load a Makie backend to enable this function.
 """
 function referenceplot end
+
+
+export plotmatrix
+
+"""
+    plotmatrix(X; dims=axes(X, 2), style=:compact, dimlabels=nothing,
+               reference=nothing, bins=25, color=(:steelblue, 0.4),
+               markersize=3, figure=(;), axis=(;))
+    plotmatrix(M, samples; input_space=:target, space=:reference, kwargs...)
+
+Return a scatter-plot matrix for one `N × d` sample matrix (rows are samples).
+Diagonal panels show marginal PDF-normalized histograms. `style=:compact` draws
+only the lower triangle; `:full` draws all pairs; `:corr` adds Pearson correlation
+values in the upper triangle (`:correlation` is an alias). Undefined correlations
+for constant coordinates are labelled `undefined`. All observations are plotted.
+
+Select/reorder coordinates with `dims`. `dimlabels` supplies one label per selected
+coordinate, in that order. Pass a continuous univariate `reference` distribution
+(or `MapReferenceDensity`) to overlay its PDF on each diagonal panel. This assumes
+the same reference marginal in every dimension. No reference is assumed for a
+plain matrix; labels default to `x` coordinates, or `z` when a reference is supplied.
+
+For a `PolynomialMap` or `ComposedMap`, `input_space` identifies the supplied
+samples and `space` selects the plotted space (`:target` or `:reference`). The
+helper chooses `evaluate` or `inverse` using the map's fitted direction, and
+skips transformation when the spaces match. Reference-space plots automatically
+overlay the map's reference PDF; pass `reference=nothing` to suppress it.
+Target-space plots do not assume a known marginal density.
+
+The default figure size is 600 × 600; customize it with `figure=(; size=(600, 600))`
+and axes through `axis`. For many dimensions, select a subset to keep panels
+legible. At least two finite observations are required. This static helper accepts
+one matrix, not DataFrames or multiple overlaid datasets. Pairwise plots and zero
+correlations do not establish joint independence. Load a Makie backend to enable it.
+"""
+function plotmatrix end

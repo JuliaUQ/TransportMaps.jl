@@ -224,3 +224,56 @@ end
     @test_throws ArgumentError referenceplot(P, Z; input_space = :bad)
     @test_throws ArgumentError referenceplot(P, zeros(4, 2))
 end
+
+@testitem "Pairwise plot matrices" begin
+    using CairoMakie, TransportMaps, Test, Distributions
+    ext = Base.get_extension(TransportMaps, :TransportMapsMakieExt)
+    X = [-2.0 4.0 1.0; -1.0 1.0 1.0; 1.0 1.0 1.0; 2.0 4.0 1.0]
+    for (style, panel_count) in ((:compact, 6), (:full, 9), (:corr, 6), (:correlation, 6))
+        fig = plotmatrix(X; style)
+        @test count(b -> b isa Axis, fig.content) == panel_count
+        ax = contents(fig[3, 1])[1]
+        @test ax.scene.plots[1][1][] == Point2f.(X[:, 1], X[:, 3])
+        if style in (:corr, :correlation)
+            @test contents(fig[1, 3])[1].text[] == "undefined"
+            @test contents(fig[1, 2])[1].text[] == "r = 0.0"
+        end
+    end
+    fig = plotmatrix(X; dims = (2, 1), dimlabels = ["B", "A"], reference = Normal())
+    @test contents(fig[2, 1])[1].xlabel[] == "B"
+    @test contents(fig[2, 1])[1].ylabel[] == "A"
+    @test length(contents(fig[1, 1])[1].scene.plots) == 2
+    @test referenceplot(X; dims = (2, 1), kind = :qq) isa Figure
+    for style in (:compact, :full, :corr)
+        @test plotmatrix(X; dims = (3,), style, reference = Uniform()) isa Figure
+    end
+    for kwargs in (
+            (; style = :bad), (; bins = 0), (; dims = (1, 1)),
+            (; dims = (4,)), (; dimlabels = ["A"]), (; reference = Poisson()),
+        )
+        @test_throws ArgumentError plotmatrix(X; kwargs...)
+    end
+    @test_throws ArgumentError plotmatrix(zeros(1, 3))
+    @test_throws ArgumentError plotmatrix([Inf 1.0; 0.0 1.0])
+    P = PolynomialMap(3, 1)
+    M = ComposedMap(LinearMap([1.0, 2.0, 3.0], [2.0, 3.0, 4.0]), P)
+    for direction in (:target, :reference), map in (P, M)
+        P.forwarddirection = direction
+        forward_space = direction === :target ? :reference : :target
+        output_space = direction
+        Y = evaluate(map, X)
+        @test ext.plotmatrix_samples(map, X, forward_space, output_space) == Y
+        @test ext.plotmatrix_samples(map, Y, output_space, forward_space) == inverse(map, Y)
+        @test ext.plotmatrix_samples(map, X, :target, :target) === X
+        @test ext.plotmatrix_samples(map, X, :reference, :reference) === X
+    end
+    @test plotmatrix(M, X; input_space = :reference, dims = (3, 1)) isa Figure
+    @test plotmatrix(M, X; space = :target) isa Figure
+    @test_throws ArgumentError plotmatrix(M, X; space = :bad)
+    @test_throws ArgumentError plotmatrix(M, zeros(4, 2))
+    mktempdir() do dir
+        path = joinpath(dir, "pairwise.png")
+        save(path, fig)
+        @test filesize(path) > 0
+    end
+end
