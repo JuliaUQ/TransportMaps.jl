@@ -59,7 +59,7 @@ variance_diag = variance_diagnostic(M, target, samples_z)
 
 ### Visualization
 
-When a `Makie` package such as [CairoMakie](CairoMakie) is loaded, pre-defined plotting functions are available:
+When a `Makie` package such as [CairoMakie](https://docs.makie.org/dev/explanations/backends/cairomakie) is loaded, pre-defined plotting functions are available:
 
 ```julia
 using CairoMakie
