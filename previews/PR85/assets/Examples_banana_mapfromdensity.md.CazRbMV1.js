@@ -23,7 +23,7 @@ import{_ as l,a as C,b as h}from"./chunks/banana-density-term-contributions.DT0J
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">    |g(x)|                 = 4.11e-09 ≤ 1.0e-08</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * Work counters</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">    Seconds run:   1  (vs limit Inf)</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">    Seconds run:   0  (vs limit Inf)</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">    Iterations:    17</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">    f(x) calls:    20</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">    ∇f(x) calls:   20</span></span>
