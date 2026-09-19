@@ -13,4 +13,5 @@ TransportMaps = "6fd49bf0-03ac-4dd1-b9b3-42e511274d6e"
 
 [compat]
 CairoMakie = "0.15.13"
+DocumenterCitations = "1.5"
 LaTeXStrings = "1"

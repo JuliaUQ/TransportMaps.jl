@@ -5,7 +5,9 @@ using Literate
 using TransportMaps
 
 # Setup bibliography
-bib = CitationBibliography(joinpath(@__DIR__, "bibliography.bib"))
+# Vitepress cannot render the CitationSiteNode wrappers used for backlinks yet.
+# https://github.com/LuxDL/DocumenterVitepress.jl/issues/391
+bib = CitationBibliography(joinpath(@__DIR__, "bibliography.bib"); show_backlinks = false)
 
 # Process Literate.jl files
 const LITERATE_DIR = joinpath(@__DIR__, "literate")
