@@ -35,7 +35,9 @@
 using TransportMaps
 using Distributions
 using Random
-using Plots
+using CairoMakie
+using LaTeXStrings
+set_theme!(transportmap_theme())
 using LinearAlgebra
 
 # Let's create a simple 2D transport map:
@@ -99,22 +101,16 @@ target_samples = evaluate(M, reference_samples)
 
 # ### Visualizing Results
 #
-# Let's plot both the reference and target samples:
+# Let's plot both the reference, target samples and the pdf:
+x₁ = range(-4, 4, length = 120)
+x₂ = range(-4, 4, length = 120)
 
-p1 = scatter(
-    reference_samples[:, 1], reference_samples[:, 2],
-    alpha = 0.6, title = "Reference Samples",
-    xlabel = "Z₁", ylabel = "Z₂", legend = false, aspect_ratio = :equal
+comparison = reference_target_plot(
+    M, reference_samples;
+    density = target_density,
+    xgrid = x₁, ygrid = x₂,
 )
-
-p2 = scatter(
-    target_samples[:, 1], target_samples[:, 2],
-    alpha = 0.6, title = "Target Samples",
-    xlabel = "X₁", ylabel = "X₂", legend = false, aspect_ratio = :equal
-)
-
-plot(p1, p2, layout = (1, 2), size = (800, 400))
-#md savefig("samples.svg"); nothing # hide
+#md save("samples.svg", comparison); nothing # hide
 # ![Transport Map Samples](samples.svg)
 
 # ### Evaluating Map Quality
@@ -143,36 +139,3 @@ var_diag_elu = variance_diagnostic(M_elu, target_density, reference_samples)
 println("Variance diagnostics:")
 println("  Softplus: ", var_diag)
 println("  ShiftedELU: ", var_diag_elu)
-
-# ## More Complex Example: Banana Distribution
-#
-# Now let's try a more challenging target - the banana distribution:
-
-# Define banana density
-banana_density(x) = pdf(Normal(), x[1]) * pdf(Normal(), x[2] - x[1]^2)
-target_density_banana = MapTargetDensity(x -> log.(banana_density(x)))
-
-# Create a new map for this target and optimize:
-M_banana = PolynomialMap(2, 2, Normal(), Softplus())
-result_banana = optimize!(M_banana, target_density_banana, quadrature)
-
-# Generate samples
-banana_samples = evaluate(M_banana, reference_samples)
-
-# Visualize the banana distribution
-x1_grid = range(-3, 3, length = 100)
-x2_grid = range(-3, 6, length = 100)
-posterior_values = [banana_density([x₁, x₂]) for x₂ in x2_grid, x₁ in x1_grid]
-
-scatter(
-    banana_samples[:, 1], banana_samples[:, 2],
-    alpha = 0.6, title = "Banana Distribution Samples",
-    xlabel = "X₁", ylabel = "X₂", legend = false, aspect_ratio = :equal
-)
-contour!(x1_grid, x2_grid, posterior_values, colormap = :viridis, label = "Posterior Density")
-#md savefig("banana_samples.svg"); nothing # hide
-# ![Banana Distribution Samples](banana_samples.svg)
-
-# Check quality
-var_diag_banana = variance_diagnostic(M_banana, target_density_banana, reference_samples)
-println("Banana distribution variance diagnostic: ", var_diag_banana)

@@ -62,7 +62,9 @@
 # We will now demonstrate how to construct and compare the three types of map parameterizations using `TransportMaps.jl`.
 # We start by importing the necessary packages:
 using TransportMaps
-using Plots
+using CairoMakie
+using LaTeXStrings
+set_theme!(transportmap_theme())
 using Distributions
 
 # Then we define the three types of (sparse) maps. We consider a two-dimensional map with polynomial degree $p=3$,
@@ -100,15 +102,16 @@ ind_d = getmultiindexsets(M_d.components[2])
 
 # Finally, we plot the multi-index sets for each map type. This allows us to reproduce the
 # comparison of multi-index sets as shown in Figure 1 in [marzouk2016](@cite):
-scatter(ind_to[:, 1], ind_to[:, 2], ms = 20, label = "Total Order")
-scatter!(ind_nm[:, 1], ind_nm[:, 2], ms = 12, label = "No Mixed")
-scatter!(ind_d[:, 1], ind_d[:, 2], ms = 6, label = "Diagonal")
-scatter!(
-    xlim = (-0.5, 3.5), ylim = (-0.5, 3.5), aspect_ratio = 1, legend = :topright,
-    xlabel = "Multi-index α₁", ylabel = "Multi-index α₂",
-    title = "Multi-index Set of Map Component M²"
+fig = Figure(size = (600, 600))
+ax = Axis(
+    fig[1, 1]; limits = (-0.5, 3.5, -0.5, 3.5), aspect = DataAspect(),
+    xticks = 0:3, yticks = 0:3, xlabel = L"Multi-index $\alpha_1$", ylabel = L"Multi-index $\alpha_2$"
 )
-#md savefig("multi_indices.svg"); nothing # hide
+scatter!(ax, ind_to[:, 1], ind_to[:, 2]; markersize = 32, label = "Total Order")
+scatter!(ax, ind_nm[:, 1], ind_nm[:, 2]; markersize = 20, label = "No Mixed")
+scatter!(ax, ind_d[:, 1], ind_d[:, 2]; markersize = 10, label = "Diagonal")
+axislegend(ax; position = :rt)
+#md save("multi_indices.svg", fig); nothing # hide
 # ![Multi Index Sets](multi_indices.svg)
 
 # ### Visualize the Hyperbolic truncation
@@ -130,12 +133,12 @@ cubic_density(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2] - x[1]^3 - x[1
 x₁ = range(-3, 3, length = 1000)
 x₂ = range(-10, 20, length = 1000)
 
-true_density = [exp(cubic_density([x1, x2])) for x2 in x₂, x1 in x₁]
-contour(
-    x₁, x₂, true_density;
-    label = "x₁", ylabel = "x₂", colormap = :viridis, levels = 10
+true_density = [exp(cubic_density([x1, x2])) for x1 in x₁, x2 in x₂]
+fig, ax, plt = contour(
+    x₁, x₂, true_density; colormap = :viridis, levels = 10,
+    axis = (; xlabel = L"x_1", ylabel = L"x_2"),
 )
-#md savefig("cubic_contour.svg"); nothing # hide
+#md save("cubic_contour.svg", fig); nothing # hide
 # ![Cubic Density](cubic_contour.svg)
 
 # We create the `MapTargetDensity` and quadrature weights for optimization:
@@ -157,12 +160,11 @@ mapped_samples = evaluate(M_to, samples_z)
 var_diag = variance_diagnostic(M_to, target, samples_z)
 println("Variance Diagnostic: ", var_diag)
 
-scatter(
-    mapped_samples[:, 1], mapped_samples[:, 2],
-    ms = 4, label = nothing, c = 1, title = "Total Order",
-    xlabel = "x₁", ylabel = "x₂"
+fig, ax, plt = sampleplot(
+    mapped_samples; markersize = 6, color = :steelblue,
+    axis = (; xlabel = L"x_1", ylabel = L"x_2"),
 )
-#md savefig("total_order.svg"); nothing # hide
+#md save("total_order.svg", fig); nothing # hide
 # ![Total Order](total_order.svg)
 
 # ### No Mixed Terms Map
@@ -173,12 +175,11 @@ mapped_samples_no_mixed = evaluate(M_nm, samples_z)
 var_diag_no_mixed = variance_diagnostic(M_nm, target, samples_z)
 println("Variance Diagnostic: ", var_diag_no_mixed)
 
-scatter(
-    mapped_samples_no_mixed[:, 1], mapped_samples_no_mixed[:, 2],
-    ms = 4, label = nothing, c = 2, title = "No Mixed",
-    xlabel = "x₁", ylabel = "x₂"
+fig, ax, plt = sampleplot(
+    mapped_samples_no_mixed; markersize = 6, color = :orange,
+    axis = (; xlabel = L"x_1", ylabel = L"x_2"),
 )
-#md savefig("no_mixed.svg"); nothing # hide
+#md save("no_mixed.svg", fig); nothing # hide
 # ![No Mixed](no_mixed.svg)
 
 # ### Diagonal Map
@@ -189,12 +190,11 @@ mapped_samples_diagonal = evaluate(M_d, samples_z)
 var_diag_diagonal = variance_diagnostic(M_d, target, samples_z)
 println("Variance Diagnostic: ", var_diag_diagonal)
 
-scatter(
-    mapped_samples_diagonal[:, 1], mapped_samples_diagonal[:, 2],
-    ms = 4, label = nothing, c = 3, title = "Diagonal",
-    xlabel = "x₁", ylabel = "x₂"
+fig, ax, plt = sampleplot(
+    mapped_samples_diagonal; markersize = 6, color = :seagreen,
+    axis = (; xlabel = L"x_1", ylabel = L"x_2"),
 )
-#md savefig("diagonal.svg"); nothing # hide
+#md save("diagonal.svg", fig); nothing # hide
 # ![Diagonal](diagonal.svg)
 
 # We observe that the total order and no-mixed-terms maps achieve similar variance diagnostics,

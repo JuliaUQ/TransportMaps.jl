@@ -48,16 +48,19 @@
 
 #md using TransportMaps # hide
 #md using Distributions # hide
-#md using Plots # hide
+#md using CairoMakie # hide
+#md using LaTeXStrings # hide
+#md set_theme!(transportmap_theme()) # hide
 
 #md using Random # hide
 #md Random.seed!(42) # hide
 mc = MonteCarloWeights(500, 2)
-scatter(
-    mc.points[:, 1], mc.points[:, 2], ms = 3,
-    label = "MC samples", title = "Monte Carlo (500 pts)", aspect_ratio = 1
+fig, ax, plt = sampleplot(
+    mc.points; markersize = 6,
+    figure = (; size = (500, 500)),
+    axis = (; xlabel = L"z_1", ylabel = L"z_2", aspect = DataAspect()),
 )
-#md savefig("quadrature_mc.svg"); nothing # hide
+#md save("quadrature_mc.svg", fig); nothing # hide
 # ![Monte Carlo samples](quadrature_mc.svg)
 
 # ### Latin Hypercube Sampling
@@ -66,11 +69,12 @@ scatter(
 # over plain Monte Carlo; weights remain uniform. It often reduces variance
 # for low to moderate dimensions.
 lhs = LatinHypercubeWeights(500, 2)
-scatter(
-    lhs.points[:, 1], lhs.points[:, 2], ms = 3,
-    label = "LHS samples", title = "Latin Hypercube (500 pts)", aspect_ratio = 1
+fig, ax, plt = sampleplot(
+    lhs.points; markersize = 6,
+    figure = (; size = (500, 500)),
+    axis = (; xlabel = L"z_1", ylabel = L"z_2", aspect = DataAspect()),
 )
-#md savefig("quadrature_lhs.svg"); nothing # hide
+#md save("quadrature_lhs.svg", fig); nothing # hide
 # ![Latin Hypercube samples](quadrature_lhs.svg)
 
 # ## Tensor-Product Quadrature
@@ -96,11 +100,12 @@ scatter(
 
 hermite = GaussHermiteWeights(3, 2)
 ## alias: TensorProductWeights(3, 2, GaussHermiteKnots())
-scatter(
-    hermite.points[:, 1], hermite.points[:, 2],
-    ms = 4, label = "Gauss–Hermite", title = "Tensor Gauss–Hermite (level 3)", aspect_ratio = 1
+fig, ax, plt = sampleplot(
+    hermite.points; markersize = 8,
+    figure = (; size = (500, 500)),
+    axis = (; xlabel = L"z_1", ylabel = L"z_2", aspect = DataAspect()),
 )
-#md savefig("quadrature_hermite.svg"); nothing # hide
+#md save("quadrature_hermite.svg", fig); nothing # hide
 # ![Gauss-Hermite tensor product sample](quadrature_hermite.svg)
 
 # ### Tensor-product Gauss-Legendre
@@ -110,19 +115,21 @@ scatter(
 
 legendre = GaussLegendreWeights(3, 2)
 ## alias: TensorProductWeights(3, 2, GaussLegendreKnots())
-scatter(
-    legendre.points[:, 1], legendre.points[:, 2],
-    ms = 4, label = "Gauss–Legendre", title = "Tensor Gauss–Legendre (level 3) on [-1, 1]", aspect_ratio = 1
+fig, ax, plt = sampleplot(
+    legendre.points; markersize = 8,
+    figure = (; size = (500, 500)),
+    axis = (; xlabel = L"z_1", ylabel = L"z_2", aspect = DataAspect()),
 )
-#md savefig("quadrature_legendre.svg"); nothing # hide
+#md save("quadrature_legendre.svg", fig); nothing # hide
 # ![Gauss-Legendre tensor product sample](quadrature_legendre.svg)
 
 legendre_scaled = GaussLegendreWeights(3, 2, [0, 1])
-scatter(
-    legendre_scaled.points[:, 1], legendre_scaled.points[:, 2],
-    ms = 4, label = "Gauss–Legendre", title = "Tensor Gauss–Legendre (level 3) on [0, 1]", aspect_ratio = 1
+fig, ax, plt = sampleplot(
+    legendre_scaled.points; markersize = 8,
+    figure = (; size = (500, 500)),
+    axis = (; xlabel = L"z_1", ylabel = L"z_2", aspect = DataAspect()),
 )
-#md savefig("quadrature_legendre_scaled.svg"); nothing # hide
+#md save("quadrature_legendre_scaled.svg", fig); nothing # hide
 # ![Gauss-Legendre tensor product scaled sample](quadrature_legendre_scaled.svg)
 
 # ## Sparse-Grid Quadrature
@@ -139,25 +146,28 @@ scatter(
 # similar to their tensor-product counterparts:
 
 sparse = SparseSmolyakWeights(3, 2) # knots = GaussHermiteKnots()
-scatter(
-    sparse.points[:, 1], sparse.points[:, 2], ms = 6,
-    label = "Smolyak", title = "Sparse Smolyak GaussHermiteKnots", aspect_ratio = 1
+fig, ax, plt = sampleplot(
+    sparse.points; markersize = 12,
+    figure = (; size = (500, 500)),
+    axis = (; xlabel = L"z_1", ylabel = L"z_2", aspect = DataAspect()),
 )
-#md savefig("quadrature_smolyak.svg"); nothing # hide
+#md save("quadrature_smolyak.svg", fig); nothing # hide
 # ![Sparse Smolyak sample](quadrature_smolyak.svg)
 
 sparse_legendre = SparseSmolyakWeights(3, 2, GaussLegendreKnots())
-scatter(
-    sparse_legendre.points[:, 1], sparse_legendre.points[:, 2], ms = 6,
-    label = "Smolyak", title = "Sparse Smolyak GaussLegendreKnots", aspect_ratio = 1
+fig, ax, plt = sampleplot(
+    sparse_legendre.points; markersize = 12,
+    figure = (; size = (500, 500)),
+    axis = (; xlabel = L"z_1", ylabel = L"z_2", aspect = DataAspect()),
 )
-#md savefig("quadrature_smolyak_legendre.svg"); nothing # hide
+#md save("quadrature_smolyak_legendre.svg", fig); nothing # hide
 # ![Sparse Smolyak sample](quadrature_smolyak_legendre.svg)
 
 sparse_cc = SparseSmolyakWeights(3, 2, ClenshawCurtisKnots())
-scatter(
-    sparse_cc.points[:, 1], sparse_cc.points[:, 2], ms = 6,
-    label = "Smolyak", title = "Sparse Smolyak ClenshawCurtisKnots", aspect_ratio = 1
+fig, ax, plt = sampleplot(
+    sparse_cc.points; markersize = 12,
+    figure = (; size = (500, 500)),
+    axis = (; xlabel = L"z_1", ylabel = L"z_2", aspect = DataAspect()),
 )
-#md savefig("quadrature_smolyak_cc.svg"); nothing # hide
+#md save("quadrature_smolyak_cc.svg", fig); nothing # hide
 # ![Sparse Smolyak sample](quadrature_smolyak_cc.svg)
