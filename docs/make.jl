@@ -71,6 +71,7 @@ makedocs(
             "Adaptive Transport Maps" => "Manuals/adaptive_transport_map.md",
         ],
         "Examples" => [
+            "CDF Estimation (1D)" => "Examples/cdf_estimation.md",
             "Banana: Map from Density" => "Examples/banana_mapfromdensity.md",
             "Banana: Map from Samples" => "Examples/banana_mapfromsamples.md",
             "Banana: Adaptive Transport Map from Samples" => "Examples/banana_adaptive.md",
