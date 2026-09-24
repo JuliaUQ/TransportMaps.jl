@@ -49,7 +49,9 @@
 using TransportMaps
 using Optim
 using Distributions
-using Plots
+using CairoMakie
+using LaTeXStrings
+set_theme!(transportmap_theme())
 
 # Then, define the target density and quadrature scheme. Here, we use the same banana-shaped density as in [Banana: Map from Density](@ref):
 banana_density(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2] - x[1]^2)
@@ -107,32 +109,22 @@ println("Variance diagnostic BFGS:              ", v_bfgs)
 println("Variance diagnostic LBFGS:             ", v_lbfgs)
 
 # We can visualize the convergence of all optimizers:
-plot(
-    [res_gd.trace[i].iteration for i in 1:length(res_gd.trace)], lw = 2,
-    [res_gd.trace[i].g_norm for i in 1:length(res_gd.trace)], label = "GradientDescent"
+fig = Figure(size = (600, 450))
+ax = Axis(
+    fig[1, 1]; xscale = log10, yscale = log10,
+    xlabel = "Iteration", ylabel = "Gradient norm"
 )
-plot!(
-    [res_cg.trace[i].iteration for i in 1:length(res_cg.trace)], lw = 2,
-    [res_cg.trace[i].g_norm for i in 1:length(res_cg.trace)], label = "ConjugateGradient"
-)
-plot!(
-    [res_nm.trace[i].iteration for i in 1:length(res_nm.trace)], lw = 2,
-    [res_nm.trace[i].g_norm for i in 1:length(res_nm.trace)], label = "NelderMead"
-)
-plot!(
-    [res_bfgs.trace[i].iteration for i in 1:length(res_bfgs.trace)], lw = 2,
-    [res_bfgs.trace[i].g_norm for i in 1:length(res_bfgs.trace)], label = "BFGS"
-)
-plot!(
-    [res_lbfgs.trace[i].iteration for i in 1:length(res_lbfgs.trace)], lw = 2,
-    [res_lbfgs.trace[i].g_norm for i in 1:length(res_lbfgs.trace)], label = "LBFGS"
-)
-plot!(
-    xaxis = :log, yaxis = :log, xlabel = "Iteration", ylabel = "Gradient norm",
-    title = "Convergence of different optimizers", xlims = (1, 200),
-    legend = :bottomleft
-)
-#md savefig("optimization-conv.svg"); nothing # hide
+for (result, label) in (
+        (res_gd, "GradientDescent"), (res_cg, "ConjugateGradient"),
+        (res_nm, "NelderMead"), (res_bfgs, "BFGS"), (res_lbfgs, "LBFGS"),
+    )
+    ## Logarithmic axes require positive, finite coordinates.
+    trace = filter(t -> t.iteration > 0 && isfinite(t.g_norm) && t.g_norm > 0, result.trace)
+    lines!(ax, [t.iteration for t in trace], [t.g_norm for t in trace]; linewidth = 2, label)
+end
+xlims!(ax, 1, 200)
+axislegend(ax; position = :lb)
+#md save("optimization-conv.svg", fig); nothing # hide
 # ![Optimization Convergence](optimization-conv.svg)
 
 # It becomes clear, that LBFGS and BFGS are the most efficient optimizers in this case, while Nelder-Mead struggles to keep up.

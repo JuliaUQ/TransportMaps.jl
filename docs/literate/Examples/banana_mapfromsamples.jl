@@ -16,7 +16,9 @@ In the map-from-samples setting, the map also enables density estimation.
 using TransportMaps
 using Distributions
 using Optim
-using Plots
+using CairoMakie
+using LaTeXStrings
+set_theme!(transportmap_theme())
 using Statistics
 
 #md using Random # hide
@@ -122,101 +124,22 @@ validation samples in ``\boldsymbol{X}`` over the fitted [`pullback`](@ref) dens
 x₁ = range(-4, 4, length = 120)
 x₂ = range(-3.5, 7, length = 120)
 
-grid_points = hcat(
-    repeat(collect(x₁), inner = 120),
-    repeat(collect(x₂), outer = 120),
-)
-
-normal_pullback = reshape(
-    pullback(normal_composed_map, grid_points),
-    120,
-    120,
-)
-
-uniform_pullback = reshape(
-    pullback(uniform_composed_map, grid_points),
-    120,
-    120,
-)
-#md nothing # hide
-
-function reference_target_plot( # hide
-        reference_samples, # hide
-        target_pdf; # hide
-        reference_title, # hide
-        reference_limits, # hide
-        target_title, # hide
-    ) # hide
-    reference_plot = scatter( # hide
-        reference_samples[:, 1], # hide
-        reference_samples[:, 2]; # hide
-        markersize = 3, # hide
-        markerstrokewidth = 0, # hide
-        alpha = 0.6, # hide
-        label = "evaluate(C, x)", # hide
-        xlabel = "z₁", # hide
-        ylabel = "z₂", # hide
-        xlims = reference_limits, # hide
-        ylims = reference_limits, # hide
-        aspect_ratio = 1, # hide
-        title = reference_title, # hide
-    ) # hide
-
-    target_plot = contour( # hide
-        x₁, # hide
-        x₂, # hide
-        target_pdf; # hide
-        levels = 8, # hide
-        linewidth = 2, # hide
-        color = :viridis, # hide
-        colorbar = false, # hide
-        label = "Target density", # hide
-        xlabel = "x₁", # hide
-        ylabel = "x₂", # hide
-        aspect_ratio = 1, # hide
-        title = target_title, # hide
-    ) # hide
-    scatter!( # hide
-        target_plot, # hide
-        target_samples[:, 1], # hide
-        target_samples[:, 2]; # hide
-        markersize = 3, # hide
-        markerstrokewidth = 0, # hide
-        alpha = 0.8, # hide
-        label = "Validation samples", # hide
-    ) # hide
-
-    return plot( # hide
-        reference_plot, # hide
-        target_plot; # hide
-        layout = (1, 2), # hide
-        size = (950, 430), # hide
-        margin = 4 * Plots.mm, # hide
-        left_margin = 7 * Plots.mm, # hide
-        bottom_margin = 6 * Plots.mm, # hide
-    ) # hide
-end # hide
-#md nothing # hide
-
-# We visualize the results for both fitted maps:
 normal_comparison = reference_target_plot(
-    normal_validation_samples,
-    normal_pullback;
-    reference_title = "Standard-normal reference",
-    reference_limits = (-4, 4),
-    target_title = "Banana samples",
+    normal_composed_map, validation_samples;
+    xgrid = x₁, ygrid = x₂,
+    reference_axis = (; limits = ((-4, 4), (-4, 4))),
+    figure = (; size = (600, 400)),
 )
-#md savefig(normal_comparison, "banana-samples-normal-reference.svg"); nothing # hide
+#md save("banana-samples-normal-reference.svg", normal_comparison); nothing # hide
 # ![Sample-based banana map to a standard-normal reference](banana-samples-normal-reference.svg)
 
 uniform_comparison = reference_target_plot(
-    uniform_validation_samples,
-    uniform_pullback;
-    reference_title = "Uniform reference",
-    reference_limits = (0, 1),
-    target_title = "Banana samples",
+    uniform_composed_map, validation_samples;
+    xgrid = x₁, ygrid = x₂,
+    reference_axis = (; limits = ((0, 1), (0, 1))),
+    figure = (; size = (600, 400)),
 )
-#md savefig(uniform_comparison, "banana-samples-uniform-reference.svg"); nothing # hide
+#md save("banana-samples-uniform-reference.svg", uniform_comparison); nothing # hide
 # ![Sample-based banana map to a uniform reference](banana-samples-uniform-reference.svg)
 
 # The reference-space panels make the effect of changing the reference density

@@ -5,10 +5,9 @@ using Literate
 using TransportMaps
 
 # Setup bibliography
-bib = CitationBibliography(joinpath(@__DIR__, "bibliography.bib"))
-
-# Configure Plots to not display interactively
-ENV["GKSwstype"] = "100"  # Set GR to non-interactive mode
+# Vitepress cannot render the CitationSiteNode wrappers used for backlinks yet.
+# https://github.com/LuxDL/DocumenterVitepress.jl/issues/391
+bib = CitationBibliography(joinpath(@__DIR__, "bibliography.bib"); show_backlinks = false)
 
 # Process Literate.jl files
 const LITERATE_DIR = joinpath(@__DIR__, "literate")
@@ -29,6 +28,19 @@ if isdir(LITERATE_DIR)
             )
         )
 
+        # Remove orphaned Literate output left behind when switching branches or
+        # deleting examples. Documenter otherwise executes these stale pages too.
+        for name in readdir(dest)
+            endswith(name, ".md") || continue
+            source_name = first(splitext(name)) * ".jl"
+            source_name in files && continue
+            path = joinpath(dest, name)
+            generated_source = "EditURL = \"../../literate/$subdir/$source_name\""
+            if occursin(generated_source, read(path, String))
+                rm(path)
+            end
+        end
+
         for fname in files
             src = joinpath(srcdir, fname)
             Literate.markdown(src, dest; documenter = true, credit = true)
@@ -41,6 +53,7 @@ makedocs(
     authors = "Lukas Fritsch and Jan Grashorn",
     format = DocumenterVitepress.MarkdownVitepress(
         repo = "https://github.com/JuliaUQ/TransportMaps.jl",
+        devbranch = "main",
     ),
     modules = [TransportMaps],
     plugins = [bib],
@@ -53,10 +66,12 @@ makedocs(
             "Map Parameterization" => "Manuals/map_parameterization.md",
             "Quadrature Methods" => "Manuals/quadrature_methods.md",
             "Optimization" => "Manuals/optimization.md",
+            "Plotting" => "Manuals/plotting.md",
             "Conditional Densities and Samples" => "Manuals/conditional_densities.md",
             "Adaptive Transport Maps" => "Manuals/adaptive_transport_map.md",
         ],
         "Examples" => [
+            "CDF Estimation (1D)" => "Examples/cdf_estimation.md",
             "Banana: Map from Density" => "Examples/banana_mapfromdensity.md",
             "Banana: Map from Samples" => "Examples/banana_mapfromsamples.md",
             "Banana: Adaptive Transport Map from Samples" => "Examples/banana_adaptive.md",
@@ -70,6 +85,7 @@ makedocs(
             "Quadrature" => "api/quadrature.md",
             "Maps" => "api/maps.md",
             "Optimization" => "api/optimization.md",
+            "Plotting" => "api/plotting.md",
         ],
         "References" => "references.md",
     ],
