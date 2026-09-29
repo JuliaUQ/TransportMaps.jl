@@ -156,6 +156,7 @@ export grad_logpdf
 
 # Include files
 include("util/mapdensity.jl")
+include("plotting/plotting.jl")
 
 include("mapcomponents/univariatebases/hermitebasis.jl")
 include("mapcomponents/univariatebases/legendrebasis.jl")

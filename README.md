@@ -57,6 +57,20 @@ mapped_samples = evaluate(M, samples_z)
 variance_diag = variance_diagnostic(M, target, samples_z)
 ```
 
+### Visualization
+
+When using a  [Makie](https://docs.makie.org/stable/) package such as [CairoMakie](https://docs.makie.org/dev/explanations/backends/cairomakie), the [TransportMapsMakieExt](./ext/TransportMapsMakieExt.jl) is automatically loaded.
+Pre-defined plotting functions are available to visualize the results:
+
+```julia
+using CairoMakie
+set_theme!(transportmap_theme())
+
+fig = reference_target_plot(M, samples_z)
+```
+
+![Banana Reference and Target](docs/src/assets/banana_reference.svg)
+
 ## Features
 
 - **Triangular polynomial transport maps** with various polynomial bases

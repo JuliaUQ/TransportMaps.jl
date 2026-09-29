@@ -34,7 +34,9 @@
 
 # We load the packaged and define the banana density function and create a target density object:
 using TransportMaps
-using Plots
+using CairoMakie
+using LaTeXStrings
+set_theme!(transportmap_theme())
 using Distributions
 
 banana_density(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2] - x[1]^2)
@@ -66,13 +68,11 @@ densities = conditional_density(M, x₂_values, x₁)
 #md nothing #hide
 
 # Plot the conditional density:
-plot(
-    x₂_values, densities,
-    xlabel = "x₂", ylabel = "π(x₂ | x₁=$x₁)",
-    title = "Conditional Density π(x₂ | x₁=$x₁)",
-    linewidth = 2, label = "Conditional Density"
+fig, ax, plt = lines(
+    x₂_values, densities; linewidth = 2,
+    axis = (; xlabel = L"x_2", ylabel = L"\pi(x_2 \mid x_1 = %$x₁)"),
 )
-#md savefig("conditional-density.svg"); nothing # hide
+#md save("conditional-density.svg", fig); nothing # hide
 # ![Conditional Density](conditional-density.svg)
 
 # ## Conditional Sampling
@@ -91,15 +91,13 @@ cond_samples = conditional_sample(M, x₁, z₂_values)
 #md nothing #hide
 
 # Create a histogram of the conditional samples and overlay the analytical density:
-histogram(
-    cond_samples, bins = 50, normalize = :pdf, alpha = 0.7,
-    label = "Conditional Samples", xlabel = "x₂", ylabel = "Density"
+fig, ax, plt = hist(
+    cond_samples; bins = 50, normalization = :pdf, color = (:steelblue, 0.7),
+    label = "Conditional Samples", axis = (; xlabel = L"x_2", ylabel = "Density"),
 )
-plot!(
-    x₂_values, densities, linewidth = 2,
-    label = "Conditional Density"
-)
-#md savefig("conditional-sampling.svg"); nothing # hide
+lines!(ax, x₂_values, densities; linewidth = 2, color = :orange, label = "Conditional Density")
+axislegend(ax)
+#md save("conditional-sampling.svg", fig); nothing # hide
 # ![Conditional Sampling](conditional-sampling.svg)
 
 # ## Comparison with True Conditional Density
@@ -123,16 +121,13 @@ true_densities = [true_banana_conditional_density(x₂, x₁) for x₂ in x₂_v
 #md nothing #hide
 
 # Plot comparison:
-plot(
-    x₂_values, densities, linewidth = 2, label = "TM Conditional",
-    xlabel = "x₂", ylabel = "π(x₂ | x₁=$x₁)"
+fig, ax, plt = lines(
+    x₂_values, densities; linewidth = 2, label = "TM Conditional",
+    axis = (; xlabel = L"x_2", ylabel = L"\pi(x_2 \mid x_1 = %$x₁)"),
 )
-plot!(
-    x₂_values, true_densities, linewidth = 2, linestyle = :dash,
-    label = "True Conditional"
-)
-title!("Transport Map vs True Conditional Density")
-#md savefig("conditional-comparison.svg"); nothing # hide
+lines!(ax, x₂_values, true_densities; linewidth = 2, linestyle = :dash, label = "True Conditional")
+axislegend(ax)
+#md save("conditional-comparison.svg", fig); nothing # hide
 # ![Conditional Comparison](conditional-comparison.svg)
 
 # ## Multiple Conditioning Scenarios
@@ -142,27 +137,22 @@ title!("Transport Map vs True Conditional Density")
 
 x₁_values = [-0.6, 0.0, 1.0, 2.0]
 
-p = plot(
-    xlabel = "x₂", ylabel = "π(x₂ | x₁)",
-    title = "Conditional Densities for Different x₁ Values"
+fig = Figure(size = (600, 600))
+ax = Axis(
+    fig[1, 1]; xlabel = L"x_2", ylabel = L"\pi(x_2 \mid x_1)"
 )
-
+colors = [:steelblue, :orange, :seagreen, :purple]
 for (i, x₁_val) in enumerate(x₁_values)
     densities_cond = conditional_density(M, x₂_values, x₁_val)
     true_densities_cond = [true_banana_conditional_density(x₂, x₁_val) for x₂ in x₂_values]
-
-    plot!(
-        p, x₂_values, densities_cond, linewidth = 2,
-        label = "TM: x₁=$x₁_val", color = i
-    )
-    plot!(
-        p, x₂_values, true_densities_cond, linewidth = 2, linestyle = :dash,
-        label = "True: x₁=$x₁_val", color = i
+    lines!(ax, x₂_values, densities_cond; linewidth = 2, label = L"TM: $x_1 = %$x₁_val$", color = colors[i])
+    lines!(
+        ax, x₂_values, true_densities_cond; linewidth = 2, linestyle = :dash,
+        label = L"True: $x_1 = %$x₁_val$", color = colors[i]
     )
 end
-
-plot!(p)
-#md savefig("multiple-conditioning.svg"); nothing # hide
+Legend(fig[2, 1], ax; orientation = :horizontal, nbanks = 4)
+#md save("multiple-conditioning.svg", fig); nothing # hide
 # ![Multiple Conditioning](multiple-conditioning.svg)
 
 # !!! note "Note"

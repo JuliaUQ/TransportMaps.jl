@@ -1,7 +1,9 @@
 using TransportMaps
 using Distributions
 using Optim
-using Plots
+using CairoMakie
+using LaTeXStrings
+set_theme!(transportmap_theme())
 using Statistics
 
 function generate_banana_samples(number_samples)
@@ -61,94 +63,18 @@ println(
 x₁ = range(-4, 4, length = 120)
 x₂ = range(-3.5, 7, length = 120)
 
-grid_points = hcat(
-    repeat(collect(x₁), inner = 120),
-    repeat(collect(x₂), outer = 120),
-)
-
-normal_pullback = reshape(
-    pullback(normal_composed_map, grid_points),
-    120,
-    120,
-)
-
-uniform_pullback = reshape(
-    pullback(uniform_composed_map, grid_points),
-    120,
-    120,
-)
-
-function reference_target_plot(
-        reference_samples,
-        target_pdf;
-        reference_title,
-        reference_limits,
-        target_title,
-    )
-    reference_plot = scatter(
-        reference_samples[:, 1],
-        reference_samples[:, 2];
-        markersize = 3,
-        markerstrokewidth = 0,
-        alpha = 0.6,
-        label = "evaluate(C, x)",
-        xlabel = "z₁",
-        ylabel = "z₂",
-        xlims = reference_limits,
-        ylims = reference_limits,
-        aspect_ratio = 1,
-        title = reference_title,
-    )
-
-    target_plot = contour(
-        x₁,
-        x₂,
-        target_pdf;
-        levels = 8,
-        linewidth = 2,
-        color = :viridis,
-        colorbar = false,
-        label = "Target density",
-        xlabel = "x₁",
-        ylabel = "x₂",
-        aspect_ratio = 1,
-        title = target_title,
-    )
-    scatter!(
-        target_plot,
-        target_samples[:, 1],
-        target_samples[:, 2];
-        markersize = 3,
-        markerstrokewidth = 0,
-        alpha = 0.8,
-        label = "Validation samples",
-    )
-
-    return plot(
-        reference_plot,
-        target_plot;
-        layout = (1, 2),
-        size = (950, 430),
-        margin = 4 * Plots.mm,
-        left_margin = 7 * Plots.mm,
-        bottom_margin = 6 * Plots.mm,
-    )
-end
-
 normal_comparison = reference_target_plot(
-    normal_validation_samples,
-    normal_pullback;
-    reference_title = "Standard-normal reference",
-    reference_limits = (-4, 4),
-    target_title = "Banana samples",
+    normal_composed_map, validation_samples;
+    xgrid = x₁, ygrid = x₂,
+    reference_axis = (; limits = ((-4, 4), (-4, 4))),
+    figure = (; size = (600, 400)),
 )
 
 uniform_comparison = reference_target_plot(
-    uniform_validation_samples,
-    uniform_pullback;
-    reference_title = "Uniform reference",
-    reference_limits = (0, 1),
-    target_title = "Banana samples",
+    uniform_composed_map, validation_samples;
+    xgrid = x₁, ygrid = x₂,
+    reference_axis = (; limits = ((0, 1), (0, 1))),
+    figure = (; size = (600, 400)),
 )
 
 # This file was generated using Literate.jl, https://github.com/fredrikekre/Literate.jl

@@ -17,7 +17,9 @@ associated bases:
 
 using TransportMaps
 using Distributions
-using Plots
+using CairoMakie
+using LaTeXStrings
+set_theme!(transportmap_theme())
 
 #md using Random # hide
 #md Random.seed!(123) # hide
@@ -113,89 +115,63 @@ println("Uniform-reference variance diag: ", var_diag_uniform)
 # and their transported target samples over the true banana-density contours on
 # the right.
 
-# First, we valuate the true target pdf:
+# Choose the target-space grid for the density contours:
 x₁ = range(-4, 4, length = 120)
 x₂ = range(-3, 7, length = 120)
-target_pdf = [pdf(target, [x1, x2]) for x2 in x₂, x1 in x₁]
-
-function reference_target_plot( # hide
-        reference_samples, # hide
-        target_samples; # hide
-        reference_title, # hide
-        reference_limits, # hide
-        target_title, # hide
-    ) # hide
-    reference_plot = scatter( # hide
-        reference_samples[:, 1], # hide
-        reference_samples[:, 2]; # hide
-        markersize = 2, # hide
-        markerstrokewidth = 0, # hide
-        alpha = 0.35, # hide
-        label = "Reference samples", # hide
-        xlabel = "z₁", # hide
-        ylabel = "z₂", # hide
-        xlims = reference_limits, # hide
-        ylims = reference_limits, # hide
-        aspect_ratio = 1, # hide
-        title = reference_title, # hide
-    ) # hide
-
-    target_plot = contour( # hide
-        x₁, # hide
-        x₂, # hide
-        target_pdf; # hide
-        levels = 8, # hide
-        linewidth = 2, # hide
-        color = :viridis, # hide
-        colorbar = false, # hide
-        label = "Target density", # hide
-        xlabel = "x₁", # hide
-        ylabel = "x₂", # hide
-        aspect_ratio = 1, # hide
-        title = target_title, # hide
-    ) # hide
-    scatter!( # hide
-        target_plot, # hide
-        target_samples[:, 1], # hide
-        target_samples[:, 2]; # hide
-        markersize = 2, # hide
-        markerstrokewidth = 0, # hide
-        alpha = 0.45, # hide
-        label = "evaluate(M, z)", # hide
-    ) # hide
-
-    return plot( # hide
-        reference_plot, # hide
-        target_plot; # hide
-        layout = (1, 2), # hide
-        size = (950, 430), # hide
-        margin = 4 * Plots.mm, # hide
-        left_margin = 7 * Plots.mm, # hide
-        bottom_margin = 6 * Plots.mm, # hide
-    ) # hide
-end # hide
-
-# And then, we compare the samples with the pdf contour:
 normal_comparison = reference_target_plot(
-    normal_ref_samples,
-    normal_target_samples;
-    reference_title = "Standard-normal reference",
-    reference_limits = (-4, 4),
-    target_title = "Target from normal reference",
+    normal_map, normal_ref_samples;
+    density = target,
+    xgrid = x₁, ygrid = x₂,
+    reference_axis = (; limits = ((-4, 4), (-4, 4))),
 )
-#md savefig(normal_comparison, "banana-density-normal-reference.svg"); nothing # hide
+#md save("banana-density-normal-reference.svg", normal_comparison); nothing # hide
 # ![Banana transport from a standard-normal reference](banana-density-normal-reference.svg)
 
 uniform_comparison = reference_target_plot(
-    uniform_ref_samples,
-    uniform_target_samples;
-    reference_title = "Uniform reference",
-    reference_limits = (0, 1),
-    target_title = "Target from uniform reference",
+    uniform_map, uniform_ref_samples;
+    density = target,
+    xgrid = x₁, ygrid = x₂,
+    reference_axis = (; limits = ((0, 1), (0, 1))),
 )
-#md savefig(uniform_comparison, "banana-density-uniform-reference.svg"); nothing # hide
+#md save("banana-density-uniform-reference.svg", uniform_comparison); nothing # hide
 # ![Banana transport from a uniform reference](banana-density-uniform-reference.svg)
 
 # Both maps recover the curved target geometry. The standard-normal reference is
 # especially economical for this target, while the uniform-reference map shows
 # that density-based construction is not restricted to a Gaussian reference.
+
+
+# ## Visualizing the map
+#
+# A regular grid makes the nonlinear transformation visible: straight reference
+# lines become curved target-space lines under the fitted map.
+
+grid = range(-2, 2; length = 100)
+mapping_fig = Figure(size = (600, 400))
+reference_ax = Axis(mapping_fig[1, 1]; title = "Reference", xlabel = L"z_1", ylabel = L"z_2")
+target_ax = Axis(mapping_fig[1, 2]; title = "Mapped grid", xlabel = L"x_1", ylabel = L"x_2")
+identity_map = LinearMap(zeros(2), ones(2))
+mappingplot!(reference_ax, identity_map, (grid, grid); gridlines = 9)
+mappingplot!(target_ax, normal_map, (grid, grid); gridlines = 9)
+#md save("banana-density-mapping.svg", mapping_fig); nothing # hide
+# ![Regular reference grid and its image under the banana map](banana-density-mapping.svg)
+
+# ## Contributions of individual terms
+#
+# Coefficients describe the polynomial parameterization before rectification.
+# To measure their effect on the final component, we can also set each coefficient
+# to zero in turn and compute the RMS output change over the same reference samples.
+# These removal scores are sample-dependent, non-additive diagnostics, without refitting.
+
+term_fig = Figure(size = (600, 350))
+termplot(
+    term_fig[1, 1], normal_map[2];
+    axis = (; title = "Coefficients", xlabel = L"a_\alpha")
+)
+termplot(
+    term_fig[1, 2], normal_map[2];
+    measure = :removal_rms, samples = normal_ref_samples[1:300, :],
+    axis = (; title = "Removal effect", xlabel = "RMS change")
+)
+#md save("banana-density-term-contributions.svg", term_fig); nothing # hide
+# ![Signed coefficients and RMS output changes when removing each term of the second banana-map component](banana-density-term-contributions.svg)

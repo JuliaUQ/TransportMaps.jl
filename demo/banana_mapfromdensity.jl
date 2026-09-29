@@ -1,6 +1,8 @@
 using TransportMaps
 using Distributions
-using Plots
+using CairoMakie
+using LaTeXStrings
+set_theme!(transportmap_theme())
 
 target_density(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2] - x[1]^2)
 target = MapTargetDensity(target_density)
@@ -38,79 +40,37 @@ println("Uniform-reference variance diag: ", var_diag_uniform)
 
 x₁ = range(-4, 4, length = 120)
 x₂ = range(-3, 7, length = 120)
-target_pdf = [pdf(target, [x1, x2]) for x2 in x₂, x1 in x₁]
-
-function reference_target_plot(
-        reference_samples,
-        target_samples;
-        reference_title,
-        reference_limits,
-        target_title,
-    )
-    reference_plot = scatter(
-        reference_samples[:, 1],
-        reference_samples[:, 2];
-        markersize = 2,
-        markerstrokewidth = 0,
-        alpha = 0.35,
-        label = "Reference samples",
-        xlabel = "z₁",
-        ylabel = "z₂",
-        xlims = reference_limits,
-        ylims = reference_limits,
-        aspect_ratio = 1,
-        title = reference_title,
-    )
-
-    target_plot = contour(
-        x₁,
-        x₂,
-        target_pdf;
-        levels = 8,
-        linewidth = 2,
-        color = :viridis,
-        colorbar = false,
-        label = "Target density",
-        xlabel = "x₁",
-        ylabel = "x₂",
-        aspect_ratio = 1,
-        title = target_title,
-    )
-    scatter!(
-        target_plot,
-        target_samples[:, 1],
-        target_samples[:, 2];
-        markersize = 2,
-        markerstrokewidth = 0,
-        alpha = 0.45,
-        label = "evaluate(M, z)",
-    )
-
-    return plot(
-        reference_plot,
-        target_plot;
-        layout = (1, 2),
-        size = (950, 430),
-        margin = 4 * Plots.mm,
-        left_margin = 7 * Plots.mm,
-        bottom_margin = 6 * Plots.mm,
-    )
-end
-
 normal_comparison = reference_target_plot(
-    normal_ref_samples,
-    normal_target_samples;
-    reference_title = "Standard-normal reference",
-    reference_limits = (-4, 4),
-    target_title = "Target from normal reference",
+    normal_map, normal_ref_samples;
+    density = target,
+    xgrid = x₁, ygrid = x₂,
+    reference_axis = (; limits = ((-4, 4), (-4, 4))),
 )
 
 uniform_comparison = reference_target_plot(
-    uniform_ref_samples,
-    uniform_target_samples;
-    reference_title = "Uniform reference",
-    reference_limits = (0, 1),
-    target_title = "Target from uniform reference",
+    uniform_map, uniform_ref_samples;
+    density = target,
+    xgrid = x₁, ygrid = x₂,
+    reference_axis = (; limits = ((0, 1), (0, 1))),
+)
+
+grid = range(-2, 2; length = 100)
+mapping_fig = Figure(size = (600, 400))
+reference_ax = Axis(mapping_fig[1, 1]; title = "Reference", xlabel = L"z_1", ylabel = L"z_2")
+target_ax = Axis(mapping_fig[1, 2]; title = "Mapped grid", xlabel = L"x_1", ylabel = L"x_2")
+identity_map = LinearMap(zeros(2), ones(2))
+mappingplot!(reference_ax, identity_map, (grid, grid); gridlines = 9)
+mappingplot!(target_ax, normal_map, (grid, grid); gridlines = 9)
+
+term_fig = Figure(size = (600, 350))
+termplot(
+    term_fig[1, 1], normal_map[2];
+    axis = (; title = "Coefficients", xlabel = L"a_\alpha")
+)
+termplot(
+    term_fig[1, 2], normal_map[2];
+    measure = :removal_rms, samples = normal_ref_samples[1:300, :],
+    axis = (; title = "Removal effect", xlabel = "RMS change")
 )
 
 # This file was generated using Literate.jl, https://github.com/fredrikekre/Literate.jl

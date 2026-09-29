@@ -50,28 +50,34 @@
 # We first visualize the standard probabilistic Hermite basis.
 
 using Distributions # hide
-using Plots # hide
+using CairoMakie # hide
+using LaTeXStrings # hide
 using TransportMaps # hide
+set_theme!(transportmap_theme()) # hide
 
 # Construct the basis with [`HermiteBasis`](@ref).
 basis = HermiteBasis()
 z = -3:0.01:3
 
-p1 = plot(xlabel = "z", ylabel = "Basis function", title = "Standard Hermite Basis")
+fig = Figure(size = (600, 480))
+p1 = Axis(fig[1, 1]; xlabel = L"z", ylabel = "Basis function")
 for degree in 0:4
-    plot!(p1, z, map(x -> basisfunction(basis, degree, x), z), label = "degree $degree")
+    lines!(p1, z, map(x -> basisfunction(basis, degree, x), z), label = L"\mathrm{degree} = %$degree")
 end
-#md savefig("hermite_basis_standard.svg"); nothing # hide
+Legend(fig[2, 1], p1; orientation = :horizontal, nbanks = 2)
+#md save("hermite_basis_standard.svg", fig); nothing # hide
 # ![Standard Hermite Basis](hermite_basis_standard.svg)
 
 # If we zoom out, we can see that the tails grow quickly for large $|z|$:
 z = -7:0.1:7
 
-p2 = plot(xlabel = "z", ylabel = "Basis function", title = "Standard Hermite Basis")
+fig = Figure(size = (600, 480))
+p2 = Axis(fig[1, 1]; xlabel = L"z", ylabel = "Basis function")
 for degree in 0:4
-    plot!(p2, z, map(x -> basisfunction(basis, degree, x), z), label = "degree $degree")
+    lines!(p2, z, map(x -> basisfunction(basis, degree, x), z), label = L"\mathrm{degree} = %$degree")
 end
-#md savefig("hermite_basis_standard_zoom.svg"); nothing # hide
+Legend(fig[2, 1], p2; orientation = :horizontal, nbanks = 2)
+#md save("hermite_basis_standard_zoom.svg", fig); nothing # hide
 # ![Standard Hermite Basis](hermite_basis_standard_zoom.svg)
 
 # ### Linearized Hermite Basis
@@ -95,11 +101,13 @@ end
 basis = LinearizedHermiteBasis(Normal(), 4, 1)
 println("Linearization bounds: ", basis.linearizationbounds)
 
-p3 = plot(xlabel = "z", ylabel = "Basis function", title = "Linearized Hermite Basis")
+fig = Figure(size = (600, 480))
+p3 = Axis(fig[1, 1]; xlabel = L"z", ylabel = "Basis function")
 for degree in 0:4
-    plot!(p3, z, map(x -> basisfunction(basis, degree, x), z), label = "degree $degree")
+    lines!(p3, z, map(x -> basisfunction(basis, degree, x), z), label = L"\mathrm{degree} = %$degree")
 end
-#md savefig("hermite_basis_linearized.svg"); nothing # hide
+Legend(fig[2, 1], p3; orientation = :horizontal, nbanks = 2)
+#md save("hermite_basis_linearized.svg", fig); nothing # hide
 # ![Linearized Hermite Basis](hermite_basis_linearized.svg)
 
 # ### Edge-Controlled (Weighted) Hermite Basis: Gaussian Weight
@@ -112,11 +120,13 @@ end
 # ```
 basis = GaussianWeightedHermiteBasis()
 
-p4 = plot(xlabel = "z", ylabel = "Basis function", title = "Gaussian-Weighted Hermite Basis")
+fig = Figure(size = (600, 480))
+p4 = Axis(fig[1, 1]; xlabel = L"z", ylabel = "Basis function")
 for degree in 0:4
-    plot!(p4, z, map(x -> basisfunction(basis, degree, x), z), label = "degree $degree")
+    lines!(p4, z, map(x -> basisfunction(basis, degree, x), z), label = L"\mathrm{degree} = %$degree")
 end
-#md savefig("hermite_basis_gaussian.svg"); nothing # hide
+Legend(fig[2, 1], p4; orientation = :horizontal, nbanks = 2)
+#md save("hermite_basis_gaussian.svg", fig); nothing # hide
 # ![Gaussian Weighted Hermite Basis](hermite_basis_gaussian.svg)
 
 # !!! note "Note"
@@ -133,11 +143,13 @@ end
 # ```
 basis = CubicSplineHermiteBasis(Normal())
 
-p5 = plot(xlabel = "z", ylabel = "Basis function", title = "Cubic Spline Weighted Hermite Basis")
+fig = Figure(size = (600, 480))
+p5 = Axis(fig[1, 1]; xlabel = L"z", ylabel = "Basis function")
 for degree in 0:4
-    plot!(p5, z, map(x -> basisfunction(basis, degree, x), z), label = "degree $degree")
+    lines!(p5, z, map(x -> basisfunction(basis, degree, x), z), label = L"\mathrm{degree} = %$degree")
 end
-#md savefig("hermite_basis_cubic.svg"); nothing # hide
+Legend(fig[2, 1], p5; orientation = :horizontal, nbanks = 2)
+#md save("hermite_basis_cubic.svg", fig); nothing # hide
 # ![Cubic Spline Weighted Hermite Basis](hermite_basis_cubic.svg)
 
 # ## Uniform[-1, 1] Reference
@@ -156,11 +168,13 @@ end
 basis = LegendreBasis()
 
 z = -1:0.01:1
-p = plot(xlabel = "z", ylabel = "Basis function", title = "Legendre Basis on [-1, 1]")
+fig = Figure(size = (600, 480))
+p = Axis(fig[1, 1]; xlabel = L"z", ylabel = "Basis function")
 for degree in 0:4
-    plot!(p, z, map(x -> basisfunction(basis, degree, x), z), label = "degree $degree")
+    lines!(p, z, map(x -> basisfunction(basis, degree, x), z), label = L"\mathrm{degree} = %$degree")
 end
-#md savefig("legendre.svg"); nothing # hide
+Legend(fig[2, 1], p; orientation = :horizontal, nbanks = 2)
+#md save("legendre.svg", fig); nothing # hide
 # ![Legendre Basis](legendre.svg)
 
 # ## Uniform[0, 1] Reference
@@ -176,9 +190,11 @@ end
 basis = ShiftedLegendreBasis()
 
 z = 0:0.01:1
-p = plot(xlabel = "z", ylabel = "Basis function", title = "Shifted Legendre Basis on [0, 1]")
+fig = Figure(size = (600, 480))
+p = Axis(fig[1, 1]; xlabel = L"z", ylabel = "Basis function")
 for degree in 0:4
-    plot!(p, z, map(x -> basisfunction(basis, degree, x), z), label = "degree $degree")
+    lines!(p, z, map(x -> basisfunction(basis, degree, x), z), label = L"\mathrm{degree} = %$degree")
 end
-#md savefig("shifted_legendre.svg"); nothing # hide
+Legend(fig[2, 1], p; orientation = :horizontal, nbanks = 2)
+#md save("shifted_legendre.svg", fig); nothing # hide
 # ![Shifted Legendre Basis](shifted_legendre.svg)

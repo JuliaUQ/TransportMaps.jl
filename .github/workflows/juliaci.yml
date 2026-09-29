@@ -16,11 +16,11 @@ jobs:
     uses: julia-testitems/testitem-workflow/.github/workflows/juliaci.yml@v2
     with:
       include-linux-x86: false
+      include-windows-x64: false
       include-windows-x86: false
+      include-macos-x64: false
+      include-macos-aarch64: false
       draft-pr-include-lts-versions: false
-      draft-pr-include-windows-x64: false
-      draft-pr-include-macos-x64: false
-      draft-pr-include-macos-aarch64: false
     permissions: write-all
     secrets:
       codecov_token: ${{ secrets.CODECOV_TOKEN }}
