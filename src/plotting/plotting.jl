@@ -221,10 +221,12 @@ function referenceplot end
 export plotmatrix
 
 """
-    plotmatrix(X; dims=axes(X, 2), style=:compact, dimlabels=nothing,
-               reference=nothing, bins=25, color=(:steelblue, 0.4),
-               markersize=3, figure=(;), axis=(;))
-    plotmatrix(M, samples; input_space=:target, space=:reference, kwargs...)
+    plotmatrix(
+        X; dims = axes(X, 2), style = :compact, dimlabels = nothing,
+        reference = nothing, bins = 25, color = (:steelblue, 0.4),
+        markersize = 3, figure = (;), axis = (;)
+    )
+    plotmatrix(M, samples; input_space = :target, space = :reference, kwargs...)
 
 Return a scatter-plot matrix for one `N × d` sample matrix (rows are samples).
 Diagonal panels show marginal PDF-normalized histograms. `style=:compact` draws

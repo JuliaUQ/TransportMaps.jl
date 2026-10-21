@@ -11,6 +11,9 @@ Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 TransportMaps = "6fd49bf0-03ac-4dd1-b9b3-42e511274d6e"
 
+[sources]
+TransportMaps = {path = ".."}
+
 [compat]
 CairoMakie = "0.15.13"
 DocumenterCitations = "1.5"
