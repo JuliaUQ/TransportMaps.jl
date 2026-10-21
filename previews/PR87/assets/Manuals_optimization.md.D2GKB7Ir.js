@@ -40,27 +40,27 @@ import{_ as l,o as t,c as e,ao as n,j as s,a as i}from"./chunks/framework.BoXC0x
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">res_gd </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> optimize!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(M_gd, target, quadrature; optimizer </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> GradientDescent</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(), options </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> opts_trace)</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(res_gd)</span></span></code></pre></div><div class="language- vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang"></span><pre class="shiki shiki-themes github-light github-dark vp-code" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">Iter     Function value   Gradient norm</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">     0     5.597315e-01     4.804530e-01</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 9.489059448242188e-5</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 6.389617919921875e-5</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">    20     1.065656e-02     3.621462e-02</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.2948269844055176</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.2492358684539795</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">    40     4.298655e-03     1.505604e-02</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.30425500869750977</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.25865793228149414</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">    60     2.904816e-03     1.004745e-02</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.3146960735321045</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.26892685890197754</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">    80     2.396653e-03     7.492065e-03</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.3223869800567627</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.2764568328857422</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">   100     2.031895e-03     4.955682e-03</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.3337979316711426</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.2878580093383789</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">   120     1.884100e-03     3.462448e-03</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.3434770107269287</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.2973940372467041</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">   140     1.809983e-03     2.396343e-03</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.353424072265625</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.307420015335083</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">   160     1.759373e-03     1.237869e-03</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.36472606658935547</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.31879401206970215</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">   180     1.750251e-03     8.809322e-04</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.3742690086364746</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.32843804359436035</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">   200     1.745570e-03     6.241790e-04</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.3841738700866699</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.33835482597351074</span></span>
 <span class="line"><span style="--shiki-light:#dbab09;--shiki-light-font-weight:bold;--shiki-dark:#ffea7f;--shiki-dark-font-weight:bold;">┌ </span><span style="--shiki-light:#dbab09;--shiki-light-font-weight:bold;--shiki-dark:#ffea7f;--shiki-dark-font-weight:bold;">Warning: </span><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">Optimization has not converged.</span></span>
 <span class="line"><span style="--shiki-light:#dbab09;--shiki-light-font-weight:bold;--shiki-dark:#ffea7f;--shiki-dark-font-weight:bold;">└ </span><span style="--shiki-light:#959da5;--shiki-dark:#959da5;">@ TransportMaps ~/work/TransportMaps.jl/TransportMaps.jl/src/optimization/mapfromdensity.jl:300</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * Status: failure (reached maximum number of iterations)</span></span>
@@ -87,13 +87,13 @@ import{_ as l,o as t,c as e,ao as n,j as s,a as i}from"./chunks/framework.BoXC0x
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">res_cg </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> optimize!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(M_cg, target, quadrature; optimizer </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> ConjugateGradient</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(), options </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> opts_trace)</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(res_cg)</span></span></code></pre></div><div class="language- vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang"></span><pre class="shiki shiki-themes github-light github-dark vp-code" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">Iter     Function value   Gradient norm</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">     0     5.597315e-01     4.804530e-01</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 6.318092346191406e-5</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 5.698204040527344e-5</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">    20     1.740864e-03     7.845560e-05</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.5493490695953369</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.47926998138427734</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">    40     1.740839e-03     3.210422e-07</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.5644280910491943</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.49418091773986816</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">    60     1.740839e-03     1.801184e-08</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.5803830623626709</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.5101940631866455</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * Status: success</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * Candidate solution</span></span>
@@ -119,27 +119,27 @@ import{_ as l,o as t,c as e,ao as n,j as s,a as i}from"./chunks/framework.BoXC0x
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(res_nm)</span></span></code></pre></div><div class="language- vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang"></span><pre class="shiki shiki-themes github-light github-dark vp-code" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">Iter     Function value    √(Σ(yᵢ-ȳ)²)/n</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">------   --------------    --------------</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">     0     5.480327e-01     6.615819e-03</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 8.296966552734375e-5</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 7.200241088867188e-5</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">    20     4.874808e-01     1.182567e-02</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.02509284019470215</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.022691011428833008</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">    40     3.794998e-01     1.768618e-02</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.03225994110107422</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.029767990112304688</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">    60     3.078276e-01     4.179719e-03</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.03856992721557617</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.03603506088256836</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">    80     2.795185e-01     5.441360e-03</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.04465794563293457</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.04211306571960449</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">   100     2.557636e-01     3.315425e-03</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.05018782615661621</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.047576189041137695</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">   120     2.324164e-01     3.700208e-03</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.05509781837463379</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.05244016647338867</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">   140     2.142993e-01     3.555031e-03</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.06122398376464844</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.05852007865905762</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">   160     2.025254e-01     2.725353e-03</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.06716680526733398</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.0644080638885498</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">   180     1.898756e-01     2.904953e-03</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.07308793067932129</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.07030105590820312</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">   200     1.744013e-01     2.578709e-03</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.07859086990356445</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.07581305503845215</span></span>
 <span class="line"><span style="--shiki-light:#dbab09;--shiki-light-font-weight:bold;--shiki-dark:#ffea7f;--shiki-dark-font-weight:bold;">┌ </span><span style="--shiki-light:#dbab09;--shiki-light-font-weight:bold;--shiki-dark:#ffea7f;--shiki-dark-font-weight:bold;">Warning: </span><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">Optimization has not converged.</span></span>
 <span class="line"><span style="--shiki-light:#dbab09;--shiki-light-font-weight:bold;--shiki-dark:#ffea7f;--shiki-dark-font-weight:bold;">└ </span><span style="--shiki-light:#959da5;--shiki-dark:#959da5;">@ TransportMaps ~/work/TransportMaps.jl/TransportMaps.jl/src/optimization/mapfromdensity.jl:300</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * Status: failure (reached maximum number of iterations)</span></span>
@@ -160,7 +160,7 @@ import{_ as l,o as t,c as e,ao as n,j as s,a as i}from"./chunks/framework.BoXC0x
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">res_bfgs </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> optimize!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(M_bfgs, target, quadrature; optimizer </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> BFGS</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(), options </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> opts_trace)</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(res_bfgs)</span></span></code></pre></div><div class="language- vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang"></span><pre class="shiki shiki-themes github-light github-dark vp-code" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">Iter     Function value   Gradient norm</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">     0     5.597315e-01     4.804530e-01</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 6.413459777832031e-5</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 0.04950094223022461</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * Status: success</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * Candidate solution</span></span>
@@ -185,7 +185,7 @@ import{_ as l,o as t,c as e,ao as n,j as s,a as i}from"./chunks/framework.BoXC0x
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">res_lbfgs </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> optimize!</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(M_lbfgs, target, quadrature; optimizer </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;"> LBFGS</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(), options </span><span style="--shiki-light:#D73A49;--shiki-dark:#F97583;">=</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;"> opts_trace)</span></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-dark:#79B8FF;">println</span><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">(res_lbfgs)</span></span></code></pre></div><div class="language- vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang"></span><pre class="shiki shiki-themes github-light github-dark vp-code" tabindex="0"><code><span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">Iter     Function value   Gradient norm</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;">     0     5.597315e-01     4.804530e-01</span></span>
-<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 6.29425048828125e-5</span></span>
+<span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * time: 6.008148193359375e-5</span></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * Status: success</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#24292e;--shiki-dark:#e1e4e8;"> * Candidate solution</span></span>
