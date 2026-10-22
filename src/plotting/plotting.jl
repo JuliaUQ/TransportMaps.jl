@@ -3,13 +3,26 @@ export convergenceplot, convergenceplot!, objectiveplot, objectiveplot!
 export transportmap_theme, reference_target_plot
 
 """
-    transportmap_theme(; fontsize = 18, titlesize = 22, size = (600, 400))
+    transportmap_theme(;
+        fontsize = 18, titlesize = 22, size = (600, 400),
+        backgroundcolor = nothing, foregroundcolor = nothing
+    )
 
 Return the TransportMaps Makie theme: ggplot2 styling, LaTeX fonts, and larger,
 regular-weight axis titles. The default figure size is 600 × 400.
+Set `backgroundcolor` for the figure, axes, 3D panels, and legends; use
+`:transparent` for a transparent background. Set `foregroundcolor` for text,
+ticks, spines, and reference curves, with fainter grid lines in the same color.
+Leaving either color as `nothing` preserves the corresponding ggplot2 defaults.
+Data colors are controlled separately by each plot's `color` keyword.
 Load a Makie backend to enable this function, then apply it explicitly with
 `set_theme!(transportmap_theme())` or `with_theme(transportmap_theme()) do ... end`.
 Constructing the theme does not change Makie's current theme.
+
+For white text on a transparent background:
+```julia
+set_theme!(transportmap_theme(backgroundcolor = :transparent, foregroundcolor = :white))
+```
 """
 function transportmap_theme end
 

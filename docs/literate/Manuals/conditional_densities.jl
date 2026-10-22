@@ -36,7 +36,8 @@
 using TransportMaps
 using CairoMakie
 using LaTeXStrings
-set_theme!(transportmap_theme())
+set_theme!(transportmap_theme()) # hide
+#md using Main.DocPlots: save_docplot # hide
 using Distributions
 
 banana_density(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2] - x[1]^2)
@@ -68,11 +69,13 @@ densities = conditional_density(M, x₂_values, x₁)
 #md nothing #hide
 
 # Plot the conditional density:
+#md save_docplot("conditional-density.svg") do # hide
 fig, ax, plt = lines(
     x₂_values, densities; linewidth = 2,
     axis = (; xlabel = L"x_2", ylabel = L"\pi(x_2 \mid x_1 = %$x₁)"),
 )
-#md save("conditional-density.svg", fig); nothing # hide
+#md     fig # hide
+#md end # hide
 # ![Conditional Density](conditional-density.svg)
 
 # ## Conditional Sampling
@@ -91,13 +94,15 @@ cond_samples = conditional_sample(M, x₁, z₂_values)
 #md nothing #hide
 
 # Create a histogram of the conditional samples and overlay the analytical density:
+#md save_docplot("conditional-sampling.svg") do # hide
 fig, ax, plt = hist(
     cond_samples; bins = 50, normalization = :pdf, color = (:steelblue, 0.7),
     label = "Conditional Samples", axis = (; xlabel = L"x_2", ylabel = "Density"),
 )
 lines!(ax, x₂_values, densities; linewidth = 2, color = :orange, label = "Conditional Density")
 axislegend(ax)
-#md save("conditional-sampling.svg", fig); nothing # hide
+#md     fig # hide
+#md end # hide
 # ![Conditional Sampling](conditional-sampling.svg)
 
 # ## Comparison with True Conditional Density
@@ -121,13 +126,15 @@ true_densities = [true_banana_conditional_density(x₂, x₁) for x₂ in x₂_v
 #md nothing #hide
 
 # Plot comparison:
+#md save_docplot("conditional-comparison.svg") do # hide
 fig, ax, plt = lines(
     x₂_values, densities; linewidth = 2, label = "TM Conditional",
     axis = (; xlabel = L"x_2", ylabel = L"\pi(x_2 \mid x_1 = %$x₁)"),
 )
 lines!(ax, x₂_values, true_densities; linewidth = 2, linestyle = :dash, label = "True Conditional")
 axislegend(ax)
-#md save("conditional-comparison.svg", fig); nothing # hide
+#md     fig # hide
+#md end # hide
 # ![Conditional Comparison](conditional-comparison.svg)
 
 # ## Multiple Conditioning Scenarios
@@ -137,6 +144,7 @@ axislegend(ax)
 
 x₁_values = [-0.6, 0.0, 1.0, 2.0]
 
+#md save_docplot("multiple-conditioning.svg") do # hide
 fig = Figure(size = (600, 600))
 ax = Axis(
     fig[1, 1]; xlabel = L"x_2", ylabel = L"\pi(x_2 \mid x_1)"
@@ -152,7 +160,8 @@ for (i, x₁_val) in enumerate(x₁_values)
     )
 end
 Legend(fig[2, 1], ax; orientation = :horizontal, nbanks = 4)
-#md save("multiple-conditioning.svg", fig); nothing # hide
+#md     fig # hide
+#md end # hide
 # ![Multiple Conditioning](multiple-conditioning.svg)
 
 # !!! note "Note"

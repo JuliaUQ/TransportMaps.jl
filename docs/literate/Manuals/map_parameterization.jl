@@ -64,7 +64,8 @@
 using TransportMaps
 using CairoMakie
 using LaTeXStrings
-set_theme!(transportmap_theme())
+set_theme!(transportmap_theme()) # hide
+#md using Main.DocPlots: save_docplot # hide
 using Distributions
 
 # Then we define the three types of (sparse) maps. We consider a two-dimensional map with polynomial degree $p=3$,
@@ -102,6 +103,7 @@ ind_d = getmultiindexsets(M_d.components[2])
 
 # Finally, we plot the multi-index sets for each map type. This allows us to reproduce the
 # comparison of multi-index sets as shown in Figure 1 in [marzouk2016](@cite):
+#md save_docplot("multi_indices.svg") do # hide
 fig = Figure(size = (600, 600))
 ax = Axis(
     fig[1, 1]; limits = (-0.5, 3.5, -0.5, 3.5), aspect = DataAspect(),
@@ -111,13 +113,14 @@ scatter!(ax, ind_to[:, 1], ind_to[:, 2]; markersize = 32, label = "Total Order")
 scatter!(ax, ind_nm[:, 1], ind_nm[:, 2]; markersize = 20, label = "No Mixed")
 scatter!(ax, ind_d[:, 1], ind_d[:, 2]; markersize = 10, label = "Diagonal")
 axislegend(ax; position = :rt)
-#md save("multi_indices.svg", fig); nothing # hide
+#md     fig # hide
+#md end # hide
 # ![Multi Index Sets](multi_indices.svg)
 
 # ### Visualize the Hyperbolic truncation
 
 # To show the effects of the truncation by ``q``-norm [blatman2011](@cite), we visualize the multi-index sets for a hyperbolic truncation with ``k=2`` dimensions, degree ``p=5`` and different ``q``.
-# ![q-norm Animation](../assets/qnorm_animation.gif)
+# ![q-norm Animation](../assets/qnorm_animation.png)
 
 # ## Example: Comparing Map Parameterizations
 #
@@ -134,11 +137,13 @@ x₁ = range(-3, 3, length = 1000)
 x₂ = range(-10, 20, length = 1000)
 
 true_density = [exp(cubic_density([x1, x2])) for x1 in x₁, x2 in x₂]
+#md save_docplot("cubic_contour.svg") do # hide
 fig, ax, plt = contour(
     x₁, x₂, true_density; colormap = :viridis, levels = 10,
     axis = (; xlabel = L"x_1", ylabel = L"x_2"),
 )
-#md save("cubic_contour.svg", fig); nothing # hide
+#md     fig # hide
+#md end # hide
 # ![Cubic Density](cubic_contour.svg)
 
 # We create the `MapTargetDensity` and quadrature weights for optimization:
@@ -160,11 +165,13 @@ mapped_samples = evaluate(M_to, samples_z)
 var_diag = variance_diagnostic(M_to, target, samples_z)
 println("Variance Diagnostic: ", var_diag)
 
+#md save_docplot("total_order.svg") do # hide
 fig, ax, plt = sampleplot(
     mapped_samples; markersize = 6, color = :steelblue,
     axis = (; xlabel = L"x_1", ylabel = L"x_2"),
 )
-#md save("total_order.svg", fig); nothing # hide
+#md     fig # hide
+#md end # hide
 # ![Total Order](total_order.svg)
 
 # ### No Mixed Terms Map
@@ -175,11 +182,13 @@ mapped_samples_no_mixed = evaluate(M_nm, samples_z)
 var_diag_no_mixed = variance_diagnostic(M_nm, target, samples_z)
 println("Variance Diagnostic: ", var_diag_no_mixed)
 
+#md save_docplot("no_mixed.svg") do # hide
 fig, ax, plt = sampleplot(
     mapped_samples_no_mixed; markersize = 6, color = :orange,
     axis = (; xlabel = L"x_1", ylabel = L"x_2"),
 )
-#md save("no_mixed.svg", fig); nothing # hide
+#md     fig # hide
+#md end # hide
 # ![No Mixed](no_mixed.svg)
 
 # ### Diagonal Map
@@ -190,11 +199,13 @@ mapped_samples_diagonal = evaluate(M_d, samples_z)
 var_diag_diagonal = variance_diagnostic(M_d, target, samples_z)
 println("Variance Diagnostic: ", var_diag_diagonal)
 
+#md save_docplot("diagonal.svg") do # hide
 fig, ax, plt = sampleplot(
     mapped_samples_diagonal; markersize = 6, color = :seagreen,
     axis = (; xlabel = L"x_1", ylabel = L"x_2"),
 )
-#md save("diagonal.svg", fig); nothing # hide
+#md     fig # hide
+#md end # hide
 # ![Diagonal](diagonal.svg)
 
 # We observe that the total order and no-mixed-terms maps achieve similar variance diagnostics,

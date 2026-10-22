@@ -16,7 +16,7 @@ D = [0.18, 0.32, 0.42, 0.49, 0.54]
 
 realizations_fig = Figure(size = (600, 650))
 realizations_ax = Axis(realizations_fig[1, 1]; xlabel = L"Time $t$", ylabel = L"Biochemical Oxygen Demand $D$")
-scatter!(realizations_ax, t, D; label = "Data", color = :black)
+scatter!(realizations_ax, t, D; label = "Data", color = theme(:textcolor))
 # Plot model output for some parameter values.
 t_values = range(0, 5, length = 100)
 for θ₁ in [-0.5, 0, 0.5]

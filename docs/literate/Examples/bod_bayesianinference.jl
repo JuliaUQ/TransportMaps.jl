@@ -12,7 +12,8 @@
 using TransportMaps
 using CairoMakie
 using LaTeXStrings
-set_theme!(transportmap_theme())
+set_theme!(transportmap_theme()) # hide
+#md using Main.DocPlots: save_docplot # hide
 using Distributions
 
 # ### The Forward Model
@@ -63,9 +64,10 @@ D = [0.18, 0.32, 0.42, 0.49, 0.54]
 
 # Let's visualize the data along with model predictions for different parameter values:
 
+#md save_docplot("realizations-bod.svg") do # hide
 realizations_fig = Figure(size = (600, 650))
 realizations_ax = Axis(realizations_fig[1, 1]; xlabel = L"Time $t$", ylabel = L"Biochemical Oxygen Demand $D$")
-scatter!(realizations_ax, t, D; label = "Data", color = :black)
+scatter!(realizations_ax, t, D; label = "Data", color = theme(:textcolor))
 ## Plot model output for some parameter values.
 t_values = range(0, 5, length = 100)
 for θ₁ in [-0.5, 0, 0.5]
@@ -77,7 +79,8 @@ for θ₁ in [-0.5, 0, 0.5]
     end
 end
 Legend(realizations_fig[2, 1], realizations_ax; orientation = :horizontal, nbanks = 5)
-#md save("realizations-bod.svg", realizations_fig); nothing # hide
+#md     realizations_fig # hide
+#md end # hide
 # ![BOD Realizations](realizations-bod.svg)
 
 # ### Bayesian Inference Setup
@@ -136,17 +139,20 @@ println("Variance Diagnostic: ", var_diag)
 
 posterior_values = [pdf(target, [θ₁, θ₂]) for θ₁ in θ₁, θ₂ in θ₂]
 
+#md save_docplot("samples-bod.svg") do # hide
 samples_fig, samples_ax, plt = sampleplot(
     mapped_samples; color = (:steelblue, 0.5),
     axis = (; xlabel = L"\theta_1", ylabel = L"\theta_2"),
 )
 contour!(samples_ax, θ₁, θ₂, posterior_values; colormap = :viridis)
-#md save("samples-bod.svg", samples_fig); nothing # hide
+#md     samples_fig # hide
+#md end # hide
 # ![BOD Samples](samples-bod.svg)
 
 # Finally, we can compute the pullback density to visualize how well our transport map approximates the posterior:
 posterior_pullback = [pullback(M, [θ₁, θ₂]) for θ₁ in θ₁, θ₂ in θ₂]
 
+#md save_docplot("pullback-bod.svg") do # hide
 pullback_fig = Figure(size = (600, 420))
 pullback_ax = Axis(pullback_fig[1, 1]; xlabel = L"\theta_1", ylabel = L"\theta_2")
 levels = 0.2:0.2:0.8
@@ -159,7 +165,8 @@ contour!(
     levels, color = :orange, linestyle = :dash, label = "Pullback"
 )
 axislegend(pullback_ax)
-#md save("pullback-bod.svg", pullback_fig); nothing # hide
+#md     pullback_fig # hide
+#md end # hide
 # ![BOD Pullback Density](pullback-bod.svg)
 
 # We can also visually observe a good agreement between the true posterior and the TM approximation.
@@ -201,6 +208,7 @@ conditional_mapped = conditional_density(M, θ_range, θ₁)
 #md nothing #hide
 
 # Finally, we plot the results:
+#md save_docplot("conditional-bod.svg") do # hide
 conditional_fig, conditional_ax, plt = hist(
     conditional_samples; bins = 50, normalization = :pdf, color = (:steelblue, 0.5),
     label = "Conditional Samples", axis = (; xlabel = L"\theta_2", ylabel = L"\pi(\theta_2 \mid \theta_1 = %$θ₁)"),
@@ -208,5 +216,6 @@ conditional_fig, conditional_ax, plt = hist(
 lines!(conditional_ax, θ_range, conditional_analytical; linewidth = 2, color = :orange, label = "Analytical Conditional PDF")
 lines!(conditional_ax, θ_range, conditional_mapped; linewidth = 2, color = :seagreen, label = "TM Conditional PDF")
 axislegend(conditional_ax)
-#md save("conditional-bod.svg", conditional_fig); nothing # hide
+#md     conditional_fig # hide
+#md end # hide
 # ![BOD Conditional Density](conditional-bod.svg)
