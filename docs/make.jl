@@ -4,6 +4,9 @@ using DocumenterVitepress
 using Literate
 using TransportMaps
 
+include("plotting.jl")
+using .DocPlots: themed_images
+
 # Setup bibliography
 # Vitepress cannot render the CitationSiteNode wrappers used for backlinks yet.
 # https://github.com/LuxDL/DocumenterVitepress.jl/issues/391
@@ -43,7 +46,7 @@ if isdir(LITERATE_DIR)
 
         for fname in files
             src = joinpath(srcdir, fname)
-            Literate.markdown(src, dest; documenter = true, credit = true)
+            Literate.markdown(src, dest; documenter = true, credit = true, preprocess = themed_images)
         end
     end
 end
@@ -61,6 +64,7 @@ makedocs(
     pages = [
         "Home" => "index.md",
         "Manuals" => [
+            "Mathematical Introduction" => "Manuals/mathematical_introduction.md",
             "Getting Started" => "Manuals/getting_started.md",
             "Basis Functions" => "Manuals/basis_functions.md",
             "Map Parameterization" => "Manuals/map_parameterization.md",

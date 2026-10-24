@@ -37,7 +37,8 @@ using Distributions
 using Random
 using CairoMakie
 using LaTeXStrings
-set_theme!(transportmap_theme())
+set_theme!(transportmap_theme()) # hide
+#md using Main.DocPlots: save_docplot # hide
 using LinearAlgebra
 
 # Let's create a simple 2D transport map:
@@ -105,12 +106,14 @@ target_samples = evaluate(M, reference_samples)
 x₁ = range(-4, 4, length = 120)
 x₂ = range(-4, 4, length = 120)
 
+#md save_docplot("samples.svg") do # hide
 comparison = reference_target_plot(
     M, reference_samples;
     density = target_density,
     xgrid = x₁, ygrid = x₂,
 )
-#md save("samples.svg", comparison); nothing # hide
+#md     comparison # hide
+#md end # hide
 # ![Transport Map Samples](samples.svg)
 
 # ### Evaluating Map Quality

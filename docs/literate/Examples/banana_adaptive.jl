@@ -20,7 +20,8 @@ using Distributions
 using LinearAlgebra
 using CairoMakie
 using LaTeXStrings
-set_theme!(transportmap_theme())
+set_theme!(transportmap_theme()) # hide
+#md using Main.DocPlots: save_docplot # hide
 
 # ### Generating Target Samples
 
@@ -88,6 +89,7 @@ M, results, selected_terms, selected_folds = optimize_adaptive_transportmap(
 # To visualized which terms were selected, we can plot the multi-index sets of the learned ATM:
 ind_atm = getmultiindexsets(M.polynomialmap[2])
 
+#md save_docplot("atm-indices.svg") do # hide
 indices_fig = Figure(size = (600, 400))
 indices_ax = Axis(
     indices_fig[1, 1]; aspect = DataAspect(),
@@ -96,7 +98,8 @@ indices_ax = Axis(
     limits = (-0.5, maximum(ind_atm[:, 1]) + 0.5, -0.5, maximum(ind_atm[:, 2]) + 0.5)
 )
 scatter!(indices_ax, ind_atm[:, 1], ind_atm[:, 2]; markersize = 24)
-#md save("atm-indices.svg", indices_fig); nothing # hide
+#md     indices_fig # hide
+#md end # hide
 # ![Learned Multi-Index](atm-indices.svg)
 # We see that the ATM algorithm selected terms in an L-shape pattern, indicating that
 # lower-order interactions were prioritized.
@@ -114,6 +117,7 @@ mapped_banana_samples = inverse(M, norm_samples)
 # Let's create a scatter plot comparing the original samples with
 # the mapped samples to see how well our transport map learned the distribution:
 
+#md save_docplot("atm-comparison-target.svg") do # hide
 comparison_fig = Figure(size = (600, 480))
 comparison_ax = Axis(
     comparison_fig[1, 1];
@@ -122,7 +126,8 @@ comparison_ax = Axis(
 original_plot = sampleplot!(comparison_ax, new_samples; color = (:steelblue, 0.7))
 mapped_plot = sampleplot!(comparison_ax, mapped_banana_samples; color = (:orange, 0.7))
 Legend(comparison_fig[1, 2], [original_plot, mapped_plot], ["Original Samples", "Mapped Samples"])
-#md save("atm-comparison-target.svg", comparison_fig); nothing # hide
+#md     comparison_fig # hide
+#md end # hide
 # ![Sample Comparison](atm-comparison-target.svg)
 
 # ### Density Comparison
@@ -135,6 +140,7 @@ x₂ = range(-2.5, 5.0, length = 100)
 true_density = [banana_density([x1, x2]) for x1 in x₁, x2 in x₂]
 learned_density = [pullback(M, [x1, x2]) for x1 in x₁, x2 in x₂]
 
+#md save_docplot("atm-density-comparison.svg") do # hide
 density_fig = Figure(size = (600, 400))
 true_ax = Axis(density_fig[1, 1]; title = "True density", xlabel = L"x_1", ylabel = L"x_2")
 learned_ax = Axis(density_fig[1, 2]; title = "Learned density", xlabel = L"x_1", ylabel = L"x_2")
@@ -143,7 +149,8 @@ levels = range(0, max(maximum(true_density), maximum(learned_density)); length =
 contour!(true_ax, x₁, x₂, true_density; colormap = :viridis, levels)
 contour!(learned_ax, x₁, x₂, learned_density; colormap = :viridis, levels)
 linkaxes!(true_ax, learned_ax)
-#md save("atm-density-comparison.svg", density_fig); nothing # hide
+#md     density_fig # hide
+#md end # hide
 # ![Density Comparison](atm-density-comparison.svg)
 
 # ### Plot iterations
@@ -159,6 +166,7 @@ res_best = results[map_index][best_fold]
 max_1 = maximum(res_best.terms[end][:, 1])
 max_2 = maximum(res_best.terms[end][:, 2])
 
+#md save_docplot("iterations.svg") do # hide
 iterations_fig = Figure(size = (600, 850))
 for (i, term) in enumerate(res_best.terms)
     ax = Axis(
@@ -168,7 +176,8 @@ for (i, term) in enumerate(res_best.terms)
     )
     scatter!(ax, term[:, 1], term[:, 2]; markersize = 20)
 end
-#md save("iterations.svg", iterations_fig); nothing # hide
+#md     iterations_fig # hide
+#md end # hide
 # ![Iterations](iterations.svg)
 
 # We can see that in the last iteration, the interaction term $(1, 1)$ was added.
@@ -177,12 +186,14 @@ end
 # over the iterations:
 
 # Compare optimization objectives
+#md save_docplot("objectives.svg") do # hide
 objectives_fig, objectives_ax, plt = convergenceplot(
     res_best; show_test = true,
     figure = (; size = (600, 400)),
 )
 axislegend(objectives_ax)
-#md save("objectives.svg", objectives_fig); nothing # hide
+#md     objectives_fig # hide
+#md end # hide
 # ![Objectives](objectives.svg)
 
 # Here, we see that the test objective increased in the last iteration,

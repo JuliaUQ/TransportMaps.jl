@@ -32,7 +32,8 @@ using Distributions
 using LinearAlgebra
 using CairoMakie
 using LaTeXStrings
-set_theme!(transportmap_theme())
+set_theme!(transportmap_theme()) # hide
+#md using Main.DocPlots: save_docplot # hide
 
 #md using Random # hide
 #md Random.seed!(123) # hide
@@ -77,6 +78,7 @@ println(hist)
 # The gradient plot shows the maximum absolute gradient value among all candidate terms
 # at each iteration. This indicates how much improvement we expect from adding the best term.
 
+#md save_docplot("cubic-density-convergence.svg") do # hide
 convergence_fig = Figure(size = (600, 650))
 objective_ax = Axis(
     convergence_fig[1, 1]; xlabel = "Iteration", yscale = log10,
@@ -92,7 +94,8 @@ gradient_ax = Axis(
 )
 scatterlines!(gradient_ax, 2:length(hist.gradients), grad_norms)
 linkxaxes!(objective_ax, gradient_ax)
-#md save("cubic-density-convergence.svg", convergence_fig); nothing # hide
+#md     convergence_fig # hide
+#md end # hide
 # ![Cubic density: Convergence](cubic-density-convergence.svg)
 
 # We observe that:
@@ -112,12 +115,14 @@ x2 = -2:0.01:2
 
 pdf_val = [pdf(target, [x₁, x₂]) for x₁ in x1, x₂ in x2]
 
+#md save_docplot("cubic-density.svg") do # hide
 density_fig, density_ax, plt = sampleplot(
     mapped_samples; color = (:steelblue, 0.5),
     axis = (; xlabel = L"x_1", ylabel = L"x_2"),
 )
 contour!(density_ax, x1, x2, pdf_val; colormap = :viridis)
-#md save("cubic-density.svg", density_fig); nothing # hide
+#md     density_fig # hide
+#md end # hide
 # ![Cubic density: TM samples and density contour](cubic-density.svg)
 
 # ### Selected Multi-Index Sets
@@ -125,6 +130,7 @@ contour!(density_ax, x1, x2, pdf_val; colormap = :viridis)
 # The adaptive algorithm automatically determines the sparsity pattern based on the
 # gradient information, potentially discovering non-trivial interaction structures.
 
+#md save_docplot("cubic-density-terms.svg") do # hide
 terms_fig = Figure(size = (600, 600))
 for k in 1:2
     indices = getmultiindexsets(T[k])
@@ -137,7 +143,8 @@ for k in 1:2
     )
     scatter!(ax, indices[:, 1], ys; markersize = 20)
 end
-#md save("cubic-density-terms.svg", terms_fig); nothing # hide
+#md     terms_fig # hide
+#md end # hide
 # ![Cubic density: Terms in the multi-index sets of the two map components](cubic-density-terms.svg)
 
 # The selected terms reveal the structure the algorithm discovered:

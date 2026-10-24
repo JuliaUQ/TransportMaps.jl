@@ -51,7 +51,8 @@ using Optim
 using Distributions
 using CairoMakie
 using LaTeXStrings
-set_theme!(transportmap_theme())
+set_theme!(transportmap_theme()) # hide
+#md using Main.DocPlots: save_docplot # hide
 
 # Then, define the target density and quadrature scheme. Here, we use the same banana-shaped density as in [Banana: Map from Density](@ref):
 banana_density(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2] - x[1]^2)
@@ -109,6 +110,7 @@ println("Variance diagnostic BFGS:              ", v_bfgs)
 println("Variance diagnostic LBFGS:             ", v_lbfgs)
 
 # We can visualize the convergence of all optimizers:
+#md save_docplot("optimization-conv.svg") do # hide
 fig = Figure(size = (600, 450))
 ax = Axis(
     fig[1, 1]; xscale = log10, yscale = log10,
@@ -124,7 +126,8 @@ for (result, label) in (
 end
 xlims!(ax, 1, 200)
 axislegend(ax; position = :lb)
-#md save("optimization-conv.svg", fig); nothing # hide
+#md     fig # hide
+#md end # hide
 # ![Optimization Convergence](optimization-conv.svg)
 
 # It becomes clear, that LBFGS and BFGS are the most efficient optimizers in this case, while Nelder-Mead struggles to keep up.

@@ -14,11 +14,11 @@ function _inverse_bound(fun::Function)
         delta = 0.5 * (upper - lower)
         if fa > 0
             lower -= delta
+            fa = fun(lower)
         elseif fb < 0
             upper += delta
+            fb = fun(upper)
         end
-        fa = fun(lower)
-        fb = fun(upper)
     end
 
     return lower, upper
@@ -37,6 +37,11 @@ function hybridrootfinder(
     )
     x = (lower + upper) / 2
     fx, dfx = f(x), ∂f(x)
+    # A midpoint may already satisfy the tolerance (including a zero derivative
+    # at an exact root). Avoid another residual/derivative pair in that case.
+    abs(fx) < ftol && return x, fx, dfx
+    newton_step = fx / dfx
+    abs(newton_step) < xtol && return x, fx, dfx
 
     for _ in 1:maxiter
         # Decide between bisection and Newton step
@@ -45,12 +50,14 @@ function hybridrootfinder(
         if use_bisect
             x = lower + 0.5 * (upper - lower)
         else
-            x -= fx / dfx
+            x -= newton_step
         end
 
         fx, dfx = f(x), ∂f(x)
+        abs(fx) < ftol && return x, fx, dfx
+        newton_step = fx / dfx
 
-        if abs(fx) < ftol || abs(fx / dfx) < xtol
+        if abs(newton_step) < xtol
             return x, fx, dfx
         end
 

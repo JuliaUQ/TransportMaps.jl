@@ -164,24 +164,60 @@ function evaluate(map_component::PolynomialMapComponent, z::AbstractVector{<:Rea
     @assert map_component.index <= length(z) "index must not exceed the dimension of z"
     @assert length(z) == length(map_component.basisfunctions[1].multiindexset) "Dimension mismatch: z and multiindexset must have same length"
 
-    # First part: f(z₁, ..., z_{k-1}, 0, a)
-    z₀ = copy(z)
-    z₀[map_component.index] = 0.0
-    f₀ = f(map_component.basisfunctions, map_component.coefficients, z₀)
-
-    # Integrand for the integral over z̄
-    integrand(z̄) = begin
-        z_temp = copy(z) |> float
-        z_temp[map_component.index] = z̄
-        ∂f = partial_derivative_z(map_component.basisfunctions, map_component.coefficients, z_temp, map_component.index)
-        return map_component.rectifier(∂f)
-    end
-
-    # Second part: ∫g∂f: Numerical integration using Gauss-Legendre quadrature
-    ∫g∂f = gaussquadrature(integrand, 100, 0.0, z[map_component.index])
-
-    return f₀ + ∫g∂f
+    return _evaluate_component(
+        map_component.basisfunctions, map_component.coefficients,
+        map_component.rectifier, z, map_component.index,
+    )
 end
+
+# All component evaluations use the same 100-point rule. The arrays are read-only
+# during evaluation and can be shared by concurrent calls.
+const _COMPONENT_QUADRATURE = gausslegendre(100)
+
+# Coordinates other than k stay fixed throughout an integral or inverse solve.
+# Factor their tensor-product contribution out of every quadrature evaluation.
+function _conditioning_factors(bases, z, k)
+    factors = ones(promote_type(Float64, eltype(z)), length(bases))
+    @inbounds for j in eachindex(bases)
+        basis = bases[j]
+        @assert length(basis.multiindexset) == length(basis.univariatebases) == max(k, length(z)) "Dimension mismatch: basis and coordinates must agree"
+        for d in eachindex(basis.multiindexset)
+            d == k && continue
+            factors[j] *= basisfunction(basis.univariatebases[d], basis.multiindexset[d], z[d])
+        end
+    end
+    return factors
+end
+
+# Passing the rectifier through a function boundary specializes the quadrature
+# loop even though PolynomialMapComponent stores it in an abstractly typed field.
+function _evaluate_component(bases, coefficients, rectifier, z, k)
+    conditioned = _conditioning_factors(bases, z, k)
+    conditioned .*= coefficients
+    f₀ = _conditioned_value(bases, conditioned, k, zero(eltype(conditioned)))
+    return f₀ + _component_integral(bases, conditioned, rectifier, k, z[k])
+end
+
+function _conditioned_value(bases, coefficients, k, z_k)
+    return sum(c * basisfunction(b.univariatebases[k], b.multiindexset[k], z_k) for (b, c) in zip(bases, coefficients))
+end
+
+function _conditioned_derivative(bases, coefficients, k, z_k)
+    return sum(c * basisfunction_derivative(b.univariatebases[k], b.multiindexset[k], z_k) for (b, c) in zip(bases, coefficients))
+end
+
+function _component_integral(bases, coefficients, rectifier, k, z_k)
+    points, weights = _COMPONENT_QUADRATURE
+    scale = 0.5 * z_k
+    integral = zero(eltype(coefficients))
+    @inbounds for q in eachindex(points)
+        x_k = muladd(points[q], scale, scale)
+        ∂f = _conditioned_derivative(bases, coefficients, k, x_k)
+        integral += weights[q] * rectifier(∂f)
+    end
+    return scale * integral
+end
+
 
 """
     evaluate(map_component::PolynomialMapComponent, Z::AbstractMatrix{<:Real})
@@ -202,7 +238,7 @@ function evaluate(map_component::PolynomialMapComponent, Z::AbstractMatrix{<:Rea
 
     # Use multithreading to evaluate each point
     Threads.@threads for i in 1:n_points
-        z_point = Z[i, :]
+        z_point = @view Z[i, :]
         @assert map_component.index <= length(z_point) "index must not exceed the dimension of z_point"
         results[i] = evaluate(map_component, z_point)
     end
@@ -218,13 +254,6 @@ Compute the diagonal map derivative
 """
 function partial_derivative_zk(map_component::PolynomialMapComponent, z::AbstractVector{<:Real})
     @assert length(z) == length(map_component.basisfunctions[1].multiindexset) "Dimension mismatch: z and multiindexset must have same length"
-
-    # Define the integrand for the partial derivative
-    integrand(zₖ) = begin
-        z_temp = copy(z)
-        z_temp[map_component.index] = zₖ
-        return evaluate(map_component, z_temp)
-    end
 
     # ∂Mᵏ/∂zₖ = g(∂ₖ f(x₁, ..., x_{k-1}, zₖ)) = g(∂f/∂zₖ)
     ∂fᵏ = partial_derivative_z(map_component.basisfunctions, map_component.coefficients, z, map_component.index)
@@ -250,7 +279,7 @@ function partial_derivative_zk(map_component::PolynomialMapComponent, Z::Abstrac
 
     # Use multithreading to compute partial derivative for each point
     Threads.@threads for i in 1:n_points
-        z_point = Z[i, :]
+        z_point = @view Z[i, :]
         results[i] = partial_derivative_zk(map_component, z_point)
     end
 
@@ -298,42 +327,36 @@ Compute the coefficient gradient ``\\nabla_c M^k(z)``.
 function gradient_coefficients(map_component::PolynomialMapComponent, z::AbstractVector{<:Real})
     @assert length(z) == length(map_component.basisfunctions[1].multiindexset) "Dimension mismatch: z and basis functions must have same length"
 
-    # First part: gradient of f₀ = f(x₁, ..., x_{k-1}, 0) w.r.t. coefficients
-    z₀ = copy(z)
-    z₀[map_component.index] = 0.0
-    ∇f₀ = gradient_coefficients(map_component.basisfunctions, z₀)
-
-    # Second part: gradient of the integral ∫₀^{z_k} g(∂f/∂x_k) dx_k w.r.t. coefficients
-    # For each coefficient cⱼ, we need: ∫₀^{z_k} g'(∂f/∂x_k) * ∂²f/∂x_k∂cⱼ dx_k
-    # Since ∂²f/∂x_k∂cⱼ = ∂ψⱼ/∂x_k (basis function derivative), we can compute this
-
-    n_coeffs = length(map_component.coefficients)
-    ∇integral = zeros(Float64, n_coeffs)
-
-    for j in 1:n_coeffs
-        # Integrand for coefficient j: g'(∂f/∂x_k) * ∂ψⱼ/∂x_k
-        integrand_j(x̄) = begin
-            z_temp = copy(z)
-            z_temp[map_component.index] = x̄
-
-            # Compute ∂f/∂x_k at this point
-            ∂f = partial_derivative_z(map_component.basisfunctions, map_component.coefficients, z_temp, map_component.index)
-
-            # Compute derivative of rectifier g'(∂f/∂x_k)
-            g_prime = derivative(map_component.rectifier, ∂f)
-
-            # Compute ∂ψⱼ/∂x_k (derivative of j-th basis function w.r.t. x_k)
-            ∂ψⱼ = partial_derivative_z(map_component.basisfunctions[j], z_temp, map_component.index)
-
-            return g_prime * ∂ψⱼ
-        end
-
-        # Integrate from 0 to z[k]
-        ∇integral[j] = gaussquadrature(integrand_j, 100, 0.0, z[map_component.index])
-    end
-
-    return ∇f₀ + ∇integral
+    return _component_coefficient_gradient(
+        map_component.basisfunctions, map_component.coefficients,
+        map_component.rectifier, z, map_component.index,
+    )
 end
+
+function _component_coefficient_gradient(bases, coefficients, rectifier, z, k)
+    factors = _conditioning_factors(bases, z, k)
+    gradient = similar(factors)
+    derivative_basis = similar(factors)
+    @inbounds for j in eachindex(bases)
+        basis = bases[j]
+        gradient[j] = factors[j] * basisfunction(basis.univariatebases[k], basis.multiindexset[k], zero(eltype(factors)))
+    end
+    points, weights = _COMPONENT_QUADRATURE
+    scale = 0.5 * z[k]
+
+    @inbounds for q in eachindex(points)
+        x_k = muladd(points[q], scale, scale)
+        for j in eachindex(bases)
+            basis = bases[j]
+            derivative_basis[j] = factors[j] * basisfunction_derivative(basis.univariatebases[k], basis.multiindexset[k], x_k)
+        end
+        ∂f = dot(derivative_basis, coefficients)
+        weight = scale * weights[q] * derivative(rectifier, ∂f)
+        gradient .+= weight .* derivative_basis
+    end
+    return gradient
+end
+
 
 """
     degree(map_component::PolynomialMapComponent)
@@ -358,9 +381,18 @@ function inverse(
     )
     @assert length(zₖ₋₁) == map_component.index - 1 "Length of zₖ₋₁ must be equal to index - 1"
 
-    # Define the residual
-    fun(zₖ) = evaluate(map_component, [zₖ₋₁..., zₖ]) - xₖ
-    ∂fun(zₖ) = partial_derivative_zk(map_component, [zₖ₋₁..., zₖ])
+    return _inverse_component(
+        map_component.basisfunctions, map_component.coefficients,
+        map_component.rectifier, zₖ₋₁, xₖ, map_component.index,
+    )
+end
+
+function _inverse_component(bases, coefficients, rectifier, z_previous, x_k, k)
+    conditioned = _conditioning_factors(bases, z_previous, k)
+    conditioned .*= coefficients
+    f₀ = _conditioned_value(bases, conditioned, k, zero(eltype(conditioned)))
+    fun(z_k) = f₀ + _component_integral(bases, conditioned, rectifier, k, z_k) - x_k
+    ∂fun(z_k) = rectifier(_conditioned_derivative(bases, conditioned, k, z_k))
 
     # Define bounds for the root-finding
     lower, upper = _inverse_bound(fun)

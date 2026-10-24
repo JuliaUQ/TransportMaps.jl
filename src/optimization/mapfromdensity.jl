@@ -8,7 +8,7 @@ function kldivergence(
     @assert δ >= 0.0 "δ must be non-negative."
 
     # Evaluate the map and both densities in the KL change-of-variables formula.
-    M_points = evaluate(M, quadrature.points) + δ * quadrature.points
+    M_points = evaluate(M, quadrature.points) .+ δ .* quadrature.points
     log_reference = logpdf(M.reference, quadrature.points)
     # Evaluate target logpdf
     log_π = logpdf(target, M_points)
@@ -30,7 +30,7 @@ function kldivergence_gradient(
     n_coeffs = numbercoefficients(M)
     n_dims = numberdimensions(M)
     # Evaluate map at all quadrature points
-    M_points = evaluate(M, quadrature.points) + δ * quadrature.points
+    M_points = evaluate(M, quadrature.points) .+ δ .* quadrature.points
 
     # Evaluate gradient of target logpdf at all mapped points
     grad_logpdfs = grad_logpdf(target, M_points)
@@ -42,7 +42,7 @@ function kldivergence_gradient(
     weighted_grads = grad_logpdfs .* quadrature.weights  # (n_quad, n_dims)
     gradient_total = zeros(Float64, n_coeffs)
     for k in 1:n_dims
-        gradient_total .-= vec(weighted_grads[:, k]' * ∂M_∂c_all[:, k, :])
+        @views mul!(gradient_total, transpose(∂M_∂c_all[:, k, :]), weighted_grads[:, k], -1.0, 1.0)
     end
 
     # Second term: jacobian log-det gradient contributions
@@ -62,7 +62,7 @@ function kldivergence(
     @assert δ >= 0.0 "δ must be non-negative."
 
     # Evaluate the map and both densities in the KL change-of-variables formula.
-    M_points = evaluate(M, precomp) + δ * precomp.quad_points
+    M_points = evaluate(M, precomp) .+ δ .* precomp.quad_points
     log_reference = logpdf(M.reference, precomp.quad_points)
     # Evaluate target logpdf
     log_π = logpdf(target, M_points)
@@ -81,28 +81,103 @@ function kldivergence_gradient(
     )
     @assert δ >= 0.0 "δ must be non-negative."
 
-    n_coeffs = numbercoefficients(M)
-    n_dims = numberdimensions(M)
-    # Evaluate map at all quadrature points
-    M_points = evaluate(M, precomp) + δ * precomp.quad_points
+    gradient = Vector{Float64}(undef, numbercoefficients(M))
+    return _kldivergence_gradient!(gradient, M, target, precomp; δ)
+end
 
-    # Evaluate gradient of target logpdf at all mapped points
-    grad_logpdfs = grad_logpdf(target, M_points)
-
-    # Compute gradient of map w.r.t. coefficients at all quadrature points
-    ∂M_∂c_all = gradient_coefficients(M, precomp)
-
-    # First term: -∇_x log π(M(z)) · ∂M/∂c, weighted by quadrature
-    weighted_grads = grad_logpdfs .* precomp.quad_weights  # (n_quad, n_dims)
-    gradient_total = zeros(Float64, n_coeffs)
-    for k in 1:n_dims
-        gradient_total .-= vec(weighted_grads[:, k]' * ∂M_∂c_all[:, k, :])
+function _kldivergence_gradient!(gradient, M, target, precomp; δ = 1.0e-9)
+    M_points = evaluate(M, precomp)
+    M_points .+= δ .* precomp.quad_points
+    scores = grad_logpdf(target, M_points)
+    offset = 0
+    for k in 1:precomp.dimension
+        component = M[k]
+        n = length(component.coefficients)
+        _density_component_gradient!(
+            view(gradient, (offset + 1):(offset + n)), precomp.component_data[k],
+            component.coefficients, component.rectifier,
+            view(scores, :, k), precomp.quad_weights,
+        )
+        offset += n
     end
+    return gradient
+end
 
-    # Second term: jacobian log-det gradient contributions
-    J_contribs = jacobian_logdet_gradient(M, precomp)  # (n_quad, n_coeffs)
-    gradient_total .-= vec(precomp.quad_weights' * J_contribs)
-    return gradient_total
+# Contract each component's dense coefficient block directly with target scores
+# and quadrature weights. Other components' coefficient blocks are identically
+# zero, so there is no need to build a (samples × dimensions × all coefficients)
+# tensor or a separate log-Jacobian gradient matrix.
+function _density_component_gradient!(gradient, precomp, c, rectifier, scores, weights)
+    fill!(gradient, 0.0)
+    map_gradient = similar(gradient)
+    @inbounds for i in 1:precomp.n_samples
+        _map_coefficient_gradient!(map_gradient, precomp, c, rectifier, i)
+        gradient .-= (weights[i] * scores[i]) .* map_gradient
+
+        derivative_basis = view(precomp.∂Ψ_z, i, :)
+        ∂f = dot(derivative_basis, c)
+        factor = weights[i] * derivative(rectifier, ∂f) / rectifier(∂f)
+        gradient .-= factor .* derivative_basis
+    end
+    return gradient
+end
+
+function _density_workspace(M, precomp)
+    return (
+        components = _BasisWorkspace.(precomp.component_data),
+        points = Matrix{Float64}(undef, precomp.n_quad, precomp.dimension),
+        determinants = Vector{Float64}(undef, precomp.n_quad),
+        log_reference = logpdf(M.reference, precomp.quad_points),
+    )
+end
+
+function _density_value_gradient!(F, G, M, target, precomp, work; δ = 1.0e-9)
+    fill!(work.determinants, 1.0)
+    for k in 1:precomp.dimension
+        component = M[k]
+        component_work = work.components[k]
+        _evaluate_basis!(component_work, precomp.component_data[k], component.coefficients, component.rectifier)
+        @views work.points[:, k] .= component_work.values .+ δ .* precomp.quad_points[:, k]
+        F === nothing || _multiply_diagonal!(work.determinants, component_work.diagonal, component.rectifier)
+    end
+    if G !== nothing
+        scores = grad_logpdf(target, work.points)
+        offset = 0
+        for k in 1:precomp.dimension
+            component = M[k]
+            n = length(component.coefficients)
+            _density_workspace_gradient!(
+                view(G, (offset + 1):(offset + n)), work.components[k],
+                precomp.component_data[k], component.rectifier, view(scores, :, k), precomp.quad_weights
+            )
+            offset += n
+        end
+    end
+    if F !== nothing
+        target_values = logpdf(target, work.points)
+        return sum(
+            i -> precomp.quad_weights[i] * (
+                work.log_reference[i] - target_values[i] -
+                    log(abs(work.determinants[i]))
+            ), eachindex(precomp.quad_weights); init = 0.0
+        )
+    end
+    return nothing
+end
+
+function _multiply_diagonal!(determinants, diagonal, rectifier)
+    determinants .*= rectifier.(diagonal)
+    return determinants
+end
+
+function _density_workspace_gradient!(gradient, work, precomp, rectifier, scores, weights)
+    work.sample_factors .= .-weights .* scores
+    _contract_basis_gradient!(gradient, work, precomp, rectifier)
+    @inbounds for i in 1:precomp.n_samples
+        work.sample_factors[i] = -weights[i] * derivative(rectifier, work.diagonal[i]) / rectifier(work.diagonal[i])
+    end
+    mul!(gradient, transpose(precomp.∂Ψ_z), work.sample_factors, 1.0, 1.0)
+    return gradient
 end
 
 """
@@ -204,21 +279,22 @@ function optimize!(
 
     pen = _nonlinear_penalty_mask(M; interactions_only = interactions_only)
 
-    function objective_function(a)
+    work = _density_workspace(M, precomp)
+    function value_gradient!(F, G, a)
         setcoefficients!(M, a)
-        loss = kldivergence(M, target, precomp; δ)
-        return loss + _regularization_penalty(a, pen, λ1, λ2, l1_eps)
-    end
-
-    function gradient_function!(g, a)
-        setcoefficients!(M, a)
-        g .= kldivergence_gradient(M, target, precomp; δ)
-        _add_regularization_gradient!(g, a, pen, λ1, λ2, l1_eps)
+        loss = _density_value_gradient!(F, G, M, target, precomp, work; δ)
+        if G !== nothing
+            _add_regularization_gradient!(G, a, pen, λ1, λ2, l1_eps)
+        end
+        if F !== nothing
+            return loss + _regularization_penalty(a, pen, λ1, λ2, l1_eps)
+        end
         return nothing
     end
 
     initial_coefficients = getcoefficients(M)
-    result = optimize(objective_function, gradient_function!, initial_coefficients, optimizer, options)
+    objective = OnceDifferentiable(Optim.NLSolversBase.only_fg!(value_gradient!), initial_coefficients)
+    result = optimize(objective, initial_coefficients, optimizer, options)
 
     if !Optim.converged(result)
         @warn "Optimization has not converged."
@@ -298,17 +374,22 @@ function _nonlinear_penalty_mask(M::PolynomialMap; interactions_only::Bool = fal
 end
 
 function _regularization_penalty(a, pen, λ1, λ2, l1_eps)
-    a_pen = a[pen]
-    l1_penalty = λ1 == 0 ? zero(eltype(a)) : λ1 * sum(
-            (sqrt(abs2(c) + l1_eps^2) for c in a_pen); init = zero(eltype(a)),
-        )
-    l2_penalty = λ2 == 0 ? zero(eltype(a)) : (λ2 / 2) * sum(abs2, a_pen; init = zero(eltype(a)))
-    return l1_penalty + l2_penalty
+    penalty = zero(eltype(a))
+    (iszero(λ1) && iszero(λ2)) && return penalty
+    for i in eachindex(a, pen)
+        pen[i] || continue
+        λ1 == 0 || (penalty += λ1 * sqrt(abs2(a[i]) + l1_eps^2))
+        λ2 == 0 || (penalty += (λ2 / 2) * abs2(a[i]))
+    end
+    return penalty
 end
 
 function _add_regularization_gradient!(g, a, pen, λ1, λ2, l1_eps)
     if λ1 != 0 || λ2 != 0
-        g[pen] .+= λ1 .* a[pen] ./ sqrt.(a[pen] .^ 2 .+ l1_eps^2) .+ λ2 .* a[pen]
+        for i in eachindex(g, a, pen)
+            pen[i] || continue
+            g[i] += λ1 * a[i] / sqrt(abs2(a[i]) + l1_eps^2) + λ2 * a[i]
+        end
     end
     return nothing
 end
