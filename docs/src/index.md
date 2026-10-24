@@ -61,6 +61,12 @@ authors:
 CurrentModule = TransportMaps
 ```
 
+## Authors
+
+```@raw html
+<Authors />
+```
+
 ## Install TransportMaps.jl
 
 ```julia
@@ -68,28 +74,15 @@ using Pkg
 Pkg.add("TransportMaps")
 ```
 
-## Try a transport map
-
-Fit a two-dimensional banana density, then transform standard-normal samples into target samples:
-
-```julia
-using TransportMaps, Distributions
-
-target = MapTargetDensity(
-    x -> logpdf(Normal(), x[1]) + logpdf(Normal(), x[2] - x[1]^2)
-)
-M = PolynomialMap(2, 2)
-optimize!(M, target, SparseSmolyakWeights(3, M))
-
-reference_samples = randn(1_000, 2)
-target_samples = evaluate(M, reference_samples)
-```
-
 Follow the [Getting Started guide](@ref "Getting Started with TransportMaps.jl") for a complete walkthrough,
 or explore [CDF estimation](Examples/cdf_estimation.md) and
 [Bayesian inference with BOD data](Examples/bod_bayesianinference.md).
 
 ## Mathematical background
+
+Start with the [Mathematical Introduction](Manuals/mathematical_introduction.md) for
+the change-of-variables formula, triangular maps, and the density- and sample-based
+fitting objectives.
 
 Transport maps are smooth, invertible transformations between probability distributions.
 Triangular maps build on the Rosenblatt transformation [rosenblatt1952](@cite) and the
@@ -111,9 +104,3 @@ including automatic differentiation through `DifferentiationInterface.jl` and mu
 - [TransportBasedInference.jl](https://github.com/mleprovost/TransportBasedInference.jl): Julia implementation of adaptive transport maps (ATM) and Kalman filters
 - [SequentialMeasureTransport.jl](https://github.com/benjione/SequentialMeasureTransport.jl): Julia implementation of transport maps from sum-of-squares densities [zanger2024](@cite)
 - [Triangular-Transport-Toolbox](https://github.com/MaxRamgraber/Triangular-Transport-Toolbox): Python code for the triangular transport tutorial paper [ramgraber2025](@cite)
-
-## Authors
-
-```@raw html
-<Authors />
-```

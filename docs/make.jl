@@ -64,6 +64,7 @@ makedocs(
     pages = [
         "Home" => "index.md",
         "Manuals" => [
+            "Mathematical Introduction" => "Manuals/mathematical_introduction.md",
             "Getting Started" => "Manuals/getting_started.md",
             "Basis Functions" => "Manuals/basis_functions.md",
             "Map Parameterization" => "Manuals/map_parameterization.md",
