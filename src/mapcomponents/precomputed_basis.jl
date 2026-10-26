@@ -60,7 +60,7 @@ struct PrecomputedBasis
 end
 
 """
-    PrecomputedBasis(component::PolynomialMapComponent, samples::Matrix{Float64}; n_quad::Int = 64)
+    PrecomputedBasis(component::PolynomialMapComponent, samples::AbstractMatrix{Float64}; n_quad::Int = 64)
 
 Precompute basis function evaluations and their partial derivatives at quadrature nodes
 for all samples. This enables exact computation of the map component and its gradient
@@ -68,13 +68,13 @@ using precomputed values.
 
 # Arguments
 - `component::PolynomialMapComponent`: The map component whose basis functions to evaluate
-- `samples::Matrix{Float64}`: Sample points, with one sample per row
+- `samples::AbstractMatrix{Float64}`: Sample points, with one sample per row
 - `n_quad::Int=64`: Number of Gauss-Legendre quadrature points (default: 64)
 
 # Returns
 - `PrecomputedBasis`: Structure containing precomputed evaluations at quadrature nodes
 """
-function PrecomputedBasis(component::PolynomialMapComponent, samples::Matrix{Float64}; n_quad::Int = 64)
+function PrecomputedBasis(component::PolynomialMapComponent, samples::AbstractMatrix{Float64}; n_quad::Int = 64)
     n_samples = size(samples, 1)
     n_basis = length(component.basisfunctions)
     k = component.index  # The component index
@@ -89,55 +89,111 @@ function PrecomputedBasis(component::PolynomialMapComponent, samples::Matrix{Flo
     ∂Ψ_quad = Array{Float64, 3}(undef, n_samples, n_quad, n_basis)
     quad_scales = Vector{Float64}(undef, n_samples)
 
-    # Precompute for each sample
-    Threads.@threads for i in 1:n_samples
-        # Create thread-local buffer to avoid repeated allocations
-        z_buffer = Vector{Float64}(undef, k)
-
-        z = samples[i, :]
-        z_k = z[k]
-
-        # Scale factor for this sample: integral from 0 to z_k
-        # Gauss-Legendre is on [-1,1], we map to [0, z_k]
-        scale = 0.5 * z_k
-        shift = 0.5 * z_k
-        quad_scales[i] = scale
-
-        # Evaluate at z with z_k = 0 for f₀ term
-        # Reuse z_buffer to avoid allocation
-        @inbounds for idx in 1:(k - 1)
-            z_buffer[idx] = z[idx]
+    @assert size(samples, 2) == k "Samples must match the component dimension"
+    # Each task owns a factor buffer. Within a coefficient/quad block, sample
+    # rows are contiguous in Julia's column-major storage.
+    n_chunks = min(n_samples, Threads.nthreads())
+    if n_chunks > 1
+        Threads.@threads for chunk in 1:n_chunks
+            rows = (fld((chunk - 1) * n_samples, n_chunks) + 1):fld(chunk * n_samples, n_chunks)
+            _precompute_basis_rows!(
+                Ψ₀, ∂Ψ_z, Ψ_quad, ∂Ψ_quad, quad_scales,
+                component.basisfunctions, samples, quad_points_std, k, rows
+            )
         end
-        z_buffer[k] = 0.0
-
-        @inbounds for j in 1:n_basis
-            Ψ₀[i, j] = evaluate(component.basisfunctions[j], z_buffer)
-        end
-
-        # Evaluate ∂ψⱼ/∂zₖ at the actual sample point z
-        @inbounds for j in 1:n_basis
-            ∂Ψ_z[i, j] = partial_derivative_z(component.basisfunctions[j], z, k)
-        end
-
-        # Evaluate at quadrature points
-        for q in 1:n_quad
-            # Map quadrature point from [-1, 1] to [0, z_k]
-            x_k = quad_points_std[q] * scale + shift
-
-            # Reuse z_buffer to avoid allocation
-            @inbounds for idx in 1:(k - 1)
-                z_buffer[idx] = z[idx]
-            end
-            z_buffer[k] = x_k
-
-            @inbounds for j in 1:n_basis
-                Ψ_quad[i, q, j] = evaluate(component.basisfunctions[j], z_buffer)
-                ∂Ψ_quad[i, q, j] = partial_derivative_z(component.basisfunctions[j], z_buffer, k)
-            end
-        end
+    else
+        _precompute_basis_rows!(
+            Ψ₀, ∂Ψ_z, Ψ_quad, ∂Ψ_quad, quad_scales,
+            component.basisfunctions, samples, quad_points_std, k, 1:n_samples
+        )
     end
 
     return PrecomputedBasis(Ψ₀, ∂Ψ_z, Ψ_quad, ∂Ψ_quad, quad_weights, quad_scales)
+end
+
+# Only the last coordinate changes at quadrature nodes. Compute the product of
+# all other univariate factors once per sample and coefficient, rather than
+# once for every value and derivative at every node.
+function _precompute_basis_rows!(Ψ₀, ∂Ψ_z, Ψ_quad, ∂Ψ_quad, scales, bases, samples, points, k, rows)
+    factors = Vector{Float64}(undef, length(rows))
+    @inbounds for i in rows
+        scales[i] = 0.5 * samples[i, k]
+    end
+    for j in eachindex(bases)
+        basis = bases[j]
+        @assert length(basis.multiindexset) == length(basis.univariatebases) == k "Basis dimension must match component index"
+        diagonal_basis = basis.univariatebases[k]
+        degree = basis.multiindexset[k]
+        value_at_zero = basisfunction(diagonal_basis, degree, 0.0)
+        @inbounds for (local_i, i) in enumerate(rows)
+            factor = 1.0
+            for d in 1:(k - 1)
+                factor *= basisfunction(basis.univariatebases[d], basis.multiindexset[d], samples[i, d])
+            end
+            factors[local_i] = factor
+            Ψ₀[i, j] = factor * value_at_zero
+            ∂Ψ_z[i, j] = factor * basisfunction_derivative(diagonal_basis, degree, samples[i, k])
+        end
+        @inbounds for q in eachindex(points)
+            for (local_i, i) in enumerate(rows)
+                x_k = points[q] * scales[i] + scales[i]
+                factor = factors[local_i]
+                Ψ_quad[i, q, j] = factor * basisfunction(diagonal_basis, degree, x_k)
+                ∂Ψ_quad[i, q, j] = factor * basisfunction_derivative(diagonal_basis, degree, x_k)
+            end
+        end
+    end
+    return nothing
+end
+
+# Private workspaces are owned by an optimization call, not by the public basis
+# object, so independent fits can share precomputation without sharing buffers.
+struct _BasisWorkspace
+    values::Vector{Float64}
+    diagonal::Vector{Float64}  # unrectified derivatives
+    quadrature::Matrix{Float64}
+    quadrature_factors::Matrix{Float64}
+    sample_factors::Vector{Float64}
+end
+
+function _BasisWorkspace(precomp::PrecomputedBasis)
+    n, q = precomp.n_samples, precomp.n_quad
+    return _BasisWorkspace(
+        Vector{Float64}(undef, n), Vector{Float64}(undef, n),
+        Matrix{Float64}(undef, n, q), Matrix{Float64}(undef, n, q), Vector{Float64}(undef, n)
+    )
+end
+
+_quadrature_matrix(precomp::PrecomputedBasis) =
+    reshape(precomp.∂Ψ_quad, precomp.n_samples * precomp.n_quad, precomp.n_basis)
+
+function _evaluate_basis!(work::_BasisWorkspace, precomp, coefficients, rectifier)
+    mul!(vec(work.quadrature), _quadrature_matrix(precomp), coefficients)
+    mul!(work.values, precomp.Ψ₀, coefficients)
+    mul!(work.diagonal, precomp.∂Ψ_z, coefficients)
+    fill!(work.sample_factors, 0.0)
+    @inbounds for q in 1:precomp.n_quad
+        for i in 1:precomp.n_samples
+            work.sample_factors[i] += precomp.quad_weights[q] * rectifier(work.quadrature[i, q])
+        end
+    end
+    work.values .+= precomp.quad_scales .* work.sample_factors
+    return work
+end
+
+# Contract all coefficient derivatives with the point-wise objective scores
+# using contiguous matrix-vector products; no sample-by-coefficient gradients
+# need to be materialized. The caller adds its log-Jacobian contribution afterwards.
+function _contract_basis_gradient!(gradient, work, precomp, rectifier)
+    mul!(gradient, transpose(precomp.Ψ₀), work.sample_factors)
+    @inbounds for q in 1:precomp.n_quad
+        for i in 1:precomp.n_samples
+            work.quadrature_factors[i, q] = precomp.quad_weights[q] * precomp.quad_scales[i] *
+                derivative(rectifier, work.quadrature[i, q]) * work.sample_factors[i]
+        end
+    end
+    mul!(gradient, transpose(_quadrature_matrix(precomp)), vec(work.quadrature_factors), 1.0, 1.0)
+    return gradient
 end
 
 """
@@ -188,7 +244,7 @@ function evaluate_integral(precomp::PrecomputedBasis, coefficients::Vector{Float
     # Vectorized computation over quadrature points for each sample
     @inbounds for i in 1:n_samples
         # Compute ∂f for all quadrature points at once: (n_quad,)
-        ∂f_quad = vec(precomp.∂Ψ_quad[i, :, :] * coefficients)
+        ∂f_quad = view(precomp.∂Ψ_quad, i, :, :) * coefficients
 
         # Apply rectifier and compute weighted sum
         integral_val = dot(precomp.quad_weights, rectifier.(∂f_quad))
@@ -206,7 +262,7 @@ end
 Evaluate the full map component in place, writing the result into `values`.
 """
 function evaluate_M!(
-        values::Vector{Float64},
+        values::AbstractVector{Float64},
         precomp::PrecomputedBasis,
         coefficients::Vector{Float64},
         rectifier::AbstractRectifierFunction,
@@ -215,9 +271,9 @@ function evaluate_M!(
     @assert length(coefficients) == precomp.n_basis "Coefficients length must match number of basis functions"
 
     mul!(values, precomp.Ψ₀, coefficients)
-    @inbounds for i in 1:precomp.n_samples
+    Threads.@threads for i in 1:precomp.n_samples
         integral = 0.0
-        for q in 1:precomp.n_quad
+        @inbounds for q in 1:precomp.n_quad
             derivative_basis = view(precomp.∂Ψ_quad, i, q, :)
             ∂f = dot(derivative_basis, coefficients)
             integral += precomp.quad_weights[q] * rectifier(∂f)
@@ -263,11 +319,14 @@ Evaluate ``\\partial M^k/\\partial z_k = g(\\partial f/\\partial z_k)`` for all 
 function evaluate_∂M(precomp::PrecomputedBasis, coefficients::Vector{Float64}, rectifier::AbstractRectifierFunction)
     @assert length(coefficients) == precomp.n_basis "Coefficients length must match number of basis functions"
 
-    # Compute ∂f/∂zₖ at each sample point z using precomputed derivatives
-    ∂f_vals = precomp.∂Ψ_z * coefficients
+    values = Vector{Float64}(undef, precomp.n_samples)
+    return _precomputed_diagonal!(values, precomp, coefficients, rectifier)
+end
 
-    # Apply rectifier
-    return rectifier.(∂f_vals)
+function _precomputed_diagonal!(values, precomp, coefficients, rectifier)
+    mul!(values, precomp.∂Ψ_z, coefficients)
+    values .= rectifier.(values)
+    return values
 end
 
 # Display methods
@@ -360,7 +419,7 @@ function PrecomputedMapBasis(
     for k in 1:dimension
         component = M[k]
         # Extract relevant columns (z₁, ..., zₖ) from quadrature points
-        samples_k = quad_points[:, 1:k]
+        samples_k = @view quad_points[:, 1:k]
         component_data[k] = PrecomputedBasis(component, samples_k, n_quad = n_quad)
     end
 
@@ -397,38 +456,33 @@ function evaluate(M::PolynomialMap, precomp::PrecomputedMapBasis)
     n_quad = precomp.n_quad
     result = Matrix{Float64}(undef, n_quad, dimension)
 
-    # Preallocate temporary arrays for batch computation
-    f₀_all = Matrix{Float64}(undef, n_quad, dimension)
-    integral_all = Matrix{Float64}(undef, n_quad, dimension)
-
-    @inbounds for k in 1:dimension
+    for k in 1:dimension
         component = M[k]
-        comp_precomp = precomp.component_data[k]
-        c = component.coefficients
-
-        # Vectorized f₀ computation: matrix-vector multiplication
-        # f₀_all[:, k] = comp_precomp.Ψ₀ * c
-        mul!(view(f₀_all, :, k), comp_precomp.Ψ₀, c)
-
-        # Integral term computation
-        Threads.@threads for i in 1:n_quad
-            scale = comp_precomp.quad_scales[i]
-            integral_val = 0.0
-
-            # Vectorized computation over quadrature points
-            for q in 1:comp_precomp.n_quad
-                ∂f = dot(view(comp_precomp.∂Ψ_quad, i, q, :), c)
-                integral_val += comp_precomp.quad_weights[q] * component.rectifier(∂f)
-            end
-
-            integral_all[i, k] = integral_val * scale
-        end
-
-        # Combine f₀ and integral terms
-        result[:, k] .= f₀_all[:, k] .+ integral_all[:, k]
+        evaluate_M!(view(result, :, k), precomp.component_data[k], component.coefficients, component.rectifier)
     end
 
     return result
+end
+
+# Compute each quadrature dot product once for all coefficients. The rectifier
+# is a separate argument so calls inside these hot loops are specialized.
+function _map_coefficient_gradient!(gradient, precomp::PrecomputedBasis, c, rectifier, i)
+    copyto!(gradient, view(precomp.Ψ₀, i, :))
+    scale = precomp.quad_scales[i]
+    @inbounds for q in 1:precomp.n_quad
+        derivative_basis = view(precomp.∂Ψ_quad, i, q, :)
+        ∂f = dot(derivative_basis, c)
+        weight = precomp.quad_weights[q] * derivative(rectifier, ∂f) * scale
+        gradient .+= weight .* derivative_basis
+    end
+    return gradient
+end
+
+function _precomputed_coefficient_gradient!(gradient, precomp, c, rectifier)
+    Threads.@threads for i in 1:precomp.n_samples
+        _map_coefficient_gradient!(view(gradient, i, :), precomp, c, rectifier, i)
+    end
+    return gradient
 end
 
 function gradient_coefficients(M::PolynomialMap, precomp::PrecomputedMapBasis)
@@ -442,32 +496,11 @@ function gradient_coefficients(M::PolynomialMap, precomp::PrecomputedMapBasis)
     @inbounds for k in 1:dimension
         component = M[k]
         comp_precomp = precomp.component_data[k]
-        c = component.coefficients
-        n_comp_coeffs = length(c)
-
-        # For each coefficient of this component
-        for j in 1:n_comp_coeffs
-            Threads.@threads for i in 1:n_quad
-                # ∂M^k/∂c_j = ∂f₀/∂c_j + ∂(integral)/∂c_j
-
-                # f₀ term contribution
-                grad_val = comp_precomp.Ψ₀[i, j]
-
-                # Integral term contribution
-                # ∂(integral)/∂c_j = ∫₀^{z_k} g'(∂f/∂x_k) * ∂²f/(∂x_k ∂c_j) dx_k
-                #                  = ∫₀^{z_k} g'(∂f/∂x_k) * ∂ψ_j/∂x_k dx_k
-                scale = comp_precomp.quad_scales[i]
-                for q in 1:comp_precomp.n_quad
-                    # Vectorized computation of ∂f/∂x_k at this quadrature point
-                    ∂f = dot(view(comp_precomp.∂Ψ_quad, i, q, :), c)
-
-                    g_prime = derivative(component.rectifier, ∂f)
-                    grad_val += comp_precomp.quad_weights[q] * g_prime * comp_precomp.∂Ψ_quad[i, q, j] * scale
-                end
-
-                grad_matrix[i, k, coeff_offset + j - 1] = grad_val
-            end
-        end
+        n_comp_coeffs = length(component.coefficients)
+        _precomputed_coefficient_gradient!(
+            view(grad_matrix, :, k, coeff_offset:(coeff_offset + n_comp_coeffs - 1)),
+            comp_precomp, component.coefficients, component.rectifier,
+        )
 
         coeff_offset += n_comp_coeffs
     end
@@ -476,25 +509,14 @@ function gradient_coefficients(M::PolynomialMap, precomp::PrecomputedMapBasis)
 end
 
 function jacobian(M::PolynomialMap, precomp::PrecomputedMapBasis)
-    dimension = precomp.dimension
-    n_quad = precomp.n_quad
-    diag = Matrix{Float64}(undef, n_quad, dimension)
-
-    @inbounds for k in 1:dimension
+    determinants = ones(Float64, precomp.n_quad)
+    diagonal = similar(determinants)
+    for k in 1:precomp.dimension
         component = M[k]
-        comp_precomp = precomp.component_data[k]
-        c = component.coefficients
-
-        Threads.@threads for i in 1:n_quad
-            # ∂M^k/∂z_k = g(∂f/∂z_k)
-            # Vectorized computation of ∂f/∂z_k at the quadrature point
-            ∂f = dot(view(comp_precomp.∂Ψ_z, i, :), c)
-
-            diag[i, k] = component.rectifier(∂f)
-        end
+        _precomputed_diagonal!(diagonal, precomp.component_data[k], component.coefficients, component.rectifier)
+        determinants .*= diagonal
     end
-
-    return prod.(eachrow(diag))
+    return determinants
 end
 
 function jacobian_logdet_gradient(M::PolynomialMap, precomp::PrecomputedMapBasis)
@@ -508,23 +530,24 @@ function jacobian_logdet_gradient(M::PolynomialMap, precomp::PrecomputedMapBasis
     @inbounds for k in 1:dimension
         component = M[k]
         comp_precomp = precomp.component_data[k]
-        c = component.coefficients
-        n_comp_coeffs = length(c)
-
-        Threads.@threads for i in 1:n_quad
-            # Vectorized computation of ∂M^k/∂z_k (diagonal element)
-            ∂f = dot(view(comp_precomp.∂Ψ_z, i, :), c)
-
-            diagonal_deriv = component.rectifier(∂f)
-            g_prime = derivative(component.rectifier, ∂f)
-
-            # ∂(log|∂M^k/∂z_k|)/∂c_j = (1/∂M^k/∂z_k) * g'(∂f/∂z_k) * ∂ψ_j/∂z_k
-            # Vectorized assignment of gradient components
-            gradient[i, coeff_offset:(coeff_offset + n_comp_coeffs - 1)] .= (g_prime / diagonal_deriv) .* view(comp_precomp.∂Ψ_z, i, :)
-        end
+        n_comp_coeffs = length(component.coefficients)
+        _precomputed_logdet_gradient!(
+            view(gradient, :, coeff_offset:(coeff_offset + n_comp_coeffs - 1)),
+            comp_precomp, component.coefficients, component.rectifier,
+        )
 
         coeff_offset += n_comp_coeffs
     end
 
+    return gradient
+end
+
+function _precomputed_logdet_gradient!(gradient, precomp, c, rectifier)
+    Threads.@threads for i in 1:precomp.n_samples
+        derivative_basis = view(precomp.∂Ψ_z, i, :)
+        ∂f = dot(derivative_basis, c)
+        factor = derivative(rectifier, ∂f) / rectifier(∂f)
+        @views gradient[i, :] .= factor .* derivative_basis
+    end
     return gradient
 end
