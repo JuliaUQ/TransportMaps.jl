@@ -68,6 +68,7 @@ makedocs(
             "Getting Started" => "Manuals/getting_started.md",
             "Basis Functions" => "Manuals/basis_functions.md",
             "Map Parameterization" => "Manuals/map_parameterization.md",
+            "Composing Maps" => "Manuals/composed_maps.md",
             "Quadrature Methods" => "Manuals/quadrature_methods.md",
             "Optimization" => "Manuals/optimization.md",
             "Plotting" => "Manuals/plotting.md",
