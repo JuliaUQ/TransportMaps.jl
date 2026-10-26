@@ -18,7 +18,8 @@ using Distributions
 using Optim
 using CairoMakie
 using LaTeXStrings
-set_theme!(transportmap_theme())
+set_theme!(transportmap_theme()) # hide
+#md using Main.DocPlots: save_docplot # hide
 using Statistics
 
 #md using Random # hide
@@ -124,22 +125,26 @@ validation samples in ``\boldsymbol{X}`` over the fitted [`pullback`](@ref) dens
 x₁ = range(-4, 4, length = 120)
 x₂ = range(-3.5, 7, length = 120)
 
+#md save_docplot("banana-samples-normal-reference.svg") do # hide
 normal_comparison = reference_target_plot(
     normal_composed_map, validation_samples;
     xgrid = x₁, ygrid = x₂,
     reference_axis = (; limits = ((-4, 4), (-4, 4))),
     figure = (; size = (600, 400)),
 )
-#md save("banana-samples-normal-reference.svg", normal_comparison); nothing # hide
+#md     normal_comparison # hide
+#md end # hide
 # ![Sample-based banana map to a standard-normal reference](banana-samples-normal-reference.svg)
 
+#md save_docplot("banana-samples-uniform-reference.svg") do # hide
 uniform_comparison = reference_target_plot(
     uniform_composed_map, validation_samples;
     xgrid = x₁, ygrid = x₂,
     reference_axis = (; limits = ((0, 1), (0, 1))),
     figure = (; size = (600, 400)),
 )
-#md save("banana-samples-uniform-reference.svg", uniform_comparison); nothing # hide
+#md     uniform_comparison # hide
+#md end # hide
 # ![Sample-based banana map to a uniform reference](banana-samples-uniform-reference.svg)
 
 # The reference-space panels make the effect of changing the reference density

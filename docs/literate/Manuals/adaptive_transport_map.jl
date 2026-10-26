@@ -75,33 +75,22 @@
 #
 # When working with sample data, the simplest approach uses a fixed train-test split to monitor overfitting:
 # ```julia
-# M, histories = optimize_adaptive_transportmap(
-#     samples,             # Matrix of samples (n_samples × d)
-#     maxterms,            # Vector of maximum terms per component
-#     lm,                  # Linear map for standardization (default: LinearMap(samples))
-#     rectifier,           # Rectifier function (default: Softplus())
-#     basis;               # Polynomial basis (default: LinearizedHermiteBasis())
-#     optimizer = LBFGS(),
-#     options = Optim.Options(),
-#     test_fraction = 0.2  # Fraction of data for validation
-# )
+# M, histories = optimize_adaptive_transportmap(samples, maxterms; test_fraction = 0.2)
 # ```
 #
 # For automatic model selection, use k-fold cross-validation. This implementation is based
 # on the original algorithm proposed in [baptista2023](@cite):
 # ```julia
-# M, fold_histories, selected_terms, selected_folds = optimize_adaptive_transportmap(
-#     samples,             # Matrix of samples (n_samples × d)
-#     maxterms,            # Vector of maximum terms per component
-#     k_folds,             # Number of folds for cross-validation
-#     lm,                  # Linear map for standardization (default: LinearMap(samples))
-#     rectifier,           # Rectifier function (default: Softplus())
-#     basis;               # Polynomial basis (default: LinearizedHermiteBasis())
-#     optimizer = LBFGS(),
-#     options = Optim.Options()
-# )
+# M, fold_histories, selected_terms, selected_folds =
+#     optimize_adaptive_transportmap(samples, maxterms, k_folds)
 # ```
 
+# Here `samples` has one sample per row, and `maxterms` is a vector of term limits
+# per component. The defaults use `LinearMap(samples)`, `Softplus()`, and
+# `LinearizedHermiteBasis()`. Pass these as additional positional arguments to
+# customize them; `optimizer` and `options` are keyword arguments. See
+# [`optimize_adaptive_transportmap`](@ref) for the full interface.
+#
 # The k-fold version returns:
 # - `M`: The final composed transport map trained on all data with the selected number of terms
 # - `fold_histories`: Optimization histories for each component and fold
@@ -117,19 +106,15 @@
 # without requiring samples. This approach uses quadrature methods for integration and adaptively
 # enriches the multi-index set across all components simultaneously:
 # ```julia
-# M, history = optimize_adaptive_transportmap(
-#     target,              # AbstractMapDensity: Target density to approximate
-#     quadrature,          # AbstractQuadratureWeights: Quadrature points and weights
-#     maxterms;            # Maximum total number of terms to add across all components
-#     rectifier = Softplus(),
-#     basis = LinearizedHermiteBasis(),
-#     reference_density = Normal(),
-#     optimizer = LBFGS(),
-#     options = Optim.Options(),
-#     validation = nothing  # Optional: validation quadrature for model selection
-# )
+# M, history = optimize_adaptive_transportmap(target, quadrature, maxterms;
+#     validation = validation_quadrature)
 # ```
 
+# `target` wraps a callable log-density; `maxterms` is a single global term budget.
+# Omit `validation` when no separate rule is available. The keyword defaults are
+# `rectifier=Softplus()`, `basis=LinearizedHermiteBasis()`, and
+# `reference_density=Normal()`; `optimizer` and `options` configure the solver.
+#
 # Key differences from the sample-based approach:
 # - Uses a single global budget of terms (`maxterms`) shared across all components
 # - Selects which component to enrich at each iteration based on gradient information

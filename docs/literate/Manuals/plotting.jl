@@ -15,12 +15,33 @@
 # styling with LaTeX fonts.
 
 #
+# ## Background, foreground, and data colors
+#
+# The figures on this site automatically follow the documentation's light or dark
+# mode. Light mode uses the original ggplot2 style with gray axis panels and dark
+# text; dark mode uses a transparent background and white text and axes.
+# Theme and export setup is hidden here.
+
+using TransportMaps, CairoMakie, LaTeXStrings, Distributions
+set_theme!(transportmap_theme()) # hide
+#md using Main.DocPlots: save_docplot # hide
+
+# `backgroundcolor` applies to the figure, axes, 3D panels, and legend backgrounds.
+# `foregroundcolor` controls text, tick marks, axis spines, and reference curves;
+# grid lines use the same color with reduced opacity. SVG and PNG exports preserve
+# transparency.
+#
+# Set either color to any Makie color, such as `:black`, `:white`, or `"#202530"`.
+# Omit both keywords to retain the original ggplot2 colors used in the demo scripts.
+#
+# Set data colors with each plot's `color` keyword, independently of the foreground.
+# A tuple such as `color=(:steelblue, 0.5)` adds opacity. For a custom reference line
+# that should follow the foreground, use `lines!(ax, x, y; color=theme(:textcolor))`.
+# Themes affect figures created afterwards; recreate existing figures to apply them.
+#
 # ## Samples and transformations
 
 # We set up a simple example using the example from [Banana: Map from Density](@ref):
-using TransportMaps, CairoMakie, LaTeXStrings, Distributions
-set_theme!(transportmap_theme())
-
 target = MapTargetDensity(x -> logpdf(Normal(), x[1]) + logpdf(Normal(), x[2] - x[1]^2)) #hide
 M = PolynomialMap(2, 2) #hide
 optimize!(M, target, SparseSmolyakWeights(3, M)) #hide
@@ -29,21 +50,25 @@ X = randn(1_500, 2) #hide
 
 # [`sampleplot`](@ref) scatters an `N × d` sample matrix, with one sample per row.
 # Select two coordinates with `dims`.
+#md save_docplot("plotting-sampleplot.svg") do # hide
 fig = sampleplot(
     X; dims = (1, 2), color = (:steelblue, 1.0),
     axis = (; xlabel = L"z_1", ylabel = L"z_2"),
     figure = (; size = (400, 400))
 )
-#md save("plotting-sampleplot.svg", fig); nothing # hide
+#md     fig # hide
+#md end # hide
 # ![Samples](plotting-sampleplot.svg)
 
 # [`transportplot`](@ref) applies a map before plotting the samples:
+#md save_docplot("plotting-transform.svg") do # hide
 fig = transportplot(
     M, X; dims = (1, 2), direction = :forward, color = (:purple, 1.0),
     axis = (; xlabel = L"x_1", ylabel = L"x_2"),
     figure = (; size = (400, 400))
 )
-#md save("plotting-transform.svg", fig); nothing # hide
+#md     fig # hide
+#md end # hide
 # ![Samples after the transform](plotting-transform.svg)
 
 # `direction=:forward` calls `evaluate`; `:inverse` calls `inverse`.
@@ -114,45 +139,52 @@ fig = transportplot(
 # [`referenceplot`](@ref) compares marginals and quantiles with the reference
 # and shows Pearson correlations between coordinates, in any dimension.
 #
-# We fit a four-dimensional target with nonlinear dependencies and diagnose
-# held-out samples. No target density is needed.
+# Here `fitted_map` is a sample-fitted four-dimensional map with nonlinear
+# dependencies, trained on 600 synthetic samples. `validation_samples` contains
+# 1,000 independent target samples. No target density is needed for these plots.
 
-function diagnostic_target_samples(n)
-    U = randn(n, 4)
-    return hcat(
-        U[:, 1], U[:, 2] .+ 0.4 .* U[:, 1] .^ 2,
-        U[:, 3] .+ 0.6 .* U[:, 2], U[:, 4] .+ 0.5 .* U[:, 1] .* U[:, 3]
-    )
-end
+function diagnostic_target_samples(n) # hide
+    U = randn(n, 4) # hide
+    return hcat( # hide
+        U[:, 1], U[:, 2] .+ 0.4 .* U[:, 1] .^ 2, # hide
+        U[:, 3] .+ 0.6 .* U[:, 2], U[:, 4] .+ 0.5 .* U[:, 1] .* U[:, 3] # hide
+    ) # hide
+end # hide
 
-training_samples = diagnostic_target_samples(600)
-validation_samples = diagnostic_target_samples(1000)
-linear_map = LinearMap(training_samples)
-polynomial_map = PolynomialMap(4, 2, Normal(), Softplus(), HermiteBasis())
-optimize!(polynomial_map, training_samples, linear_map)
-fitted_map = ComposedMap(linear_map, polynomial_map)
+training_samples = diagnostic_target_samples(600) # hide
+validation_samples = diagnostic_target_samples(1000) # hide
+linear_map = LinearMap(training_samples) # hide
+polynomial_map = PolynomialMap(4, 2, Normal(), Softplus(), HermiteBasis()) # hide
+optimize!(polynomial_map, training_samples, linear_map) # hide
+fitted_map = ComposedMap(linear_map, polynomial_map) # hide
 #md nothing # hide
 
 # Pass target samples directly: the helper chooses `evaluate` or `inverse`
 # and uses the map's configured reference distribution.
 
+#md save_docplot("plotting-reference-marginals.svg") do # hide
 marginal_fig = referenceplot(fitted_map, validation_samples; kind = :marginals)
-#md save("plotting-reference-marginals.svg", marginal_fig); nothing # hide
+#md     marginal_fig # hide
+#md end # hide
 # ![Four mapped validation marginals overlaid with the standard-normal reference PDF](plotting-reference-marginals.svg)
 #
 # In Q–Q plots, agreement follows the dashed diagonal; deviations reveal central
 # or tail differences. Pass already-mapped samples to avoid repeated transformation:
 
 Z = evaluate(fitted_map, validation_samples)
+#md save_docplot("plotting-reference-qq.svg") do # hide
 qq_fig = referenceplot(Z; reference = Normal(), kind = :qq)
-#md save("plotting-reference-qq.svg", qq_fig); nothing # hide
+#md     qq_fig # hide
+#md end # hide
 # ![Reference versus empirical quantiles for four mapped validation coordinates](plotting-reference-qq.svg)
 #
 # Correlations use a fixed ``[-1,1]`` color scale; gray indicates undefined
 # correlations for constant coordinates.
 
+#md save_docplot("plotting-reference-correlation.svg") do # hide
 correlation_fig = referenceplot(Z; reference = Normal(), kind = :correlation)
-#md save("plotting-reference-correlation.svg", correlation_fig); nothing # hide
+#md     correlation_fig # hide
+#md end # hide
 # ![Pearson correlations between four mapped validation coordinates](plotting-reference-correlation.svg)
 #
 # For larger maps, select and reorder coordinates and control the panel layout:
@@ -172,19 +204,23 @@ correlation_fig = referenceplot(Z; reference = Normal(), kind = :correlation)
 #
 # Reusing the four-dimensional validation samples above:
 
+#md save_docplot("plotting-pairwise-target.svg") do # hide
 pairwise_target_fig = plotmatrix(validation_samples; style = :corr)
-#md save("plotting-pairwise-target.svg", pairwise_target_fig); nothing # hide
+#md     pairwise_target_fig # hide
+#md end # hide
 # ![Four-dimensional target samples with marginal histograms, pairwise scatter plots, and Pearson correlations](plotting-pairwise-target.svg)
 #
 # Pass a fitted map to transform samples to reference space and overlay its
 # reference PDF on the diagonal:
 
+#md save_docplot("plotting-pairwise-reference.svg") do # hide
 pairwise_reference_fig = plotmatrix(fitted_map, validation_samples; style = :corr)
-#md save("plotting-pairwise-reference.svg", pairwise_reference_fig); nothing # hide
+#md     pairwise_reference_fig # hide
+#md end # hide
 # ![Mapped reference samples with pairwise scatter plots and marginal reference PDF overlays](plotting-pairwise-reference.svg)
 #
 # Choose `style=:compact` (default) for the lower triangle, `:full` for all pairs,
-# or `:corr` for correlations above the diagonal. Reference PDFs are black;
+# or `:corr` for correlations above the diagonal. Reference PDFs use the foreground color;
 # constant-coordinate correlations are labelled `undefined`.
 #
 # Select coordinates with `dims`; `dimlabels` optionally replaces their labels:

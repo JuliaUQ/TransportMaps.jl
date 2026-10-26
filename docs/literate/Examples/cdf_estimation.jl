@@ -5,7 +5,8 @@
 # compare the maps and their PDF, CDF, and quantile estimates.
 
 using TransportMaps, Distributions, CairoMakie, LaTeXStrings
-set_theme!(transportmap_theme())
+set_theme!(transportmap_theme()) # hide
+#md using Main.DocPlots: save_docplot # hide
 
 # ## Logistic density
 #
@@ -14,12 +15,14 @@ set_theme!(transportmap_theme())
 
 distribution = Logistic(0, 1)
 x = range(-5, 5; length = 300)
+#md save_docplot("logistic-density.svg") do # hide
 density_fig, density_ax, plt = lines(
     x, pdf.(distribution, x);
     axis = (; xlabel = L"x", ylabel = L"p(x)"),
     figure = (; size = (600, 300)),
 )
-#md save("logistic-density.svg", density_fig); nothing # hide
+#md     density_fig # hide
+#md end # hide
 # ![Standard logistic density](logistic-density.svg)
 
 # ## Fit both references
@@ -47,6 +50,7 @@ normal_result = optimize!(normal_map, target, GaussHermiteWeights(8, normal_map)
 X = reshape(collect(x), :, 1)
 uniform_pdf = pullback(uniform_map, X)
 normal_pdf = pullback(normal_map, X)
+#md save_docplot("logistic-pullback.svg") do # hide
 pullback_fig, pullback_ax, plt = lines(
     x, uniform_pdf; color = :steelblue, label = "Uniform reference",
     axis = (; xlabel = L"x", ylabel = L"p(x)"),
@@ -55,10 +59,11 @@ pullback_fig, pullback_ax, plt = lines(
 lines!(pullback_ax, x, normal_pdf; color = :darkorange, label = "Normal reference")
 lines!(
     pullback_ax, x, pdf.(distribution, x);
-    color = :black, linestyle = :dash, label = "Exact"
+    color = theme(:textcolor), linestyle = :dash, label = "Exact"
 )
 Legend(pullback_fig[2, 1], pullback_ax; orientation = :horizontal, framevisible = false)
-#md save("logistic-pullback.svg", pullback_fig); nothing # hide
+#md     pullback_fig # hide
+#md end # hide
 # ![Uniform- and normal-reference pullback PDFs compared with the exact logistic density](logistic-pullback.svg)
 
 # With these reference-matched bases, the normal-reference PDF is smoother and
@@ -71,6 +76,7 @@ Legend(pullback_fig[2, 1], pullback_ax; orientation = :horizontal, framevisible 
 # ``T(z)=F^{-1}(G(z))``. For the uniform reference, these reduce to the logistic
 # CDF and quantile. The normal-reference maps have different output/input scales.
 
+#md save_docplot("logistic-maps.svg") do # hide
 mapping_fig = Figure(size = (600, 600))
 for (row, M, reference, name, color, grid) in (
         (1, uniform_map, uniform_reference, "Uniform", :steelblue, range(0.02, 0.98; length = 300)),
@@ -81,15 +87,16 @@ for (row, M, reference, name, color, grid) in (
     mappingplot!(inverse_ax, M, x; direction = :inverse, color, label = "Fitted map")
     lines!(
         inverse_ax, x, quantile.(reference, cdf.(distribution, x));
-        color = :black, linestyle = :dash, label = "Exact"
+        color = theme(:textcolor), linestyle = :dash, label = "Exact"
     )
     mappingplot!(forward_ax, M, grid; color)
     lines!(
         forward_ax, grid, quantile.(distribution, cdf.(reference, grid));
-        color = :black, linestyle = :dash
+        color = theme(:textcolor), linestyle = :dash
     )
 end
-#md save("logistic-maps.svg", mapping_fig); nothing # hide
+#md     mapping_fig # hide
+#md end # hide
 # ![Fitted maps between logistic and uniform or normal distributions; dashed curves show the exact maps](logistic-maps.svg)
 
 # ## CDF and quantile on common scales
@@ -100,6 +107,7 @@ end
 # We omit ``u=0,1``, where the logistic quantile diverges.
 
 u = range(0.02, 0.98; length = 300)
+#md save_docplot("logistic-cdf.svg") do # hide
 cdf_fig = Figure(size = (600, 350))
 cdf_ax = Axis(cdf_fig[1, 1]; title = "CDF", xlabel = L"x", ylabel = L"F(x)")
 quantile_ax = Axis(cdf_fig[1, 2]; title = "Quantile", xlabel = L"u", ylabel = L"F^{-1}(u)")
@@ -113,8 +121,9 @@ for (M, reference, name, color) in (
     lines!(cdf_ax, x, estimated_cdf; color, label = name)
     lines!(quantile_ax, u, estimated_quantile; color)
 end
-lines!(cdf_ax, x, cdf.(distribution, x); color = :black, linestyle = :dash, label = "Exact")
-lines!(quantile_ax, u, quantile.(distribution, u); color = :black, linestyle = :dash)
+lines!(cdf_ax, x, cdf.(distribution, x); color = theme(:textcolor), linestyle = :dash, label = "Exact")
+lines!(quantile_ax, u, quantile.(distribution, u); color = theme(:textcolor), linestyle = :dash)
 Legend(cdf_fig[2, 1:2], cdf_ax; orientation = :horizontal, framevisible = false)
-#md save("logistic-cdf.svg", cdf_fig); nothing # hide
+#md     cdf_fig # hide
+#md end # hide
 # ![Logistic CDF and quantile estimates using uniform and normal references](logistic-cdf.svg)

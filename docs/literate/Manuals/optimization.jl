@@ -10,31 +10,36 @@
 #
 # Formally, we define the following optimization problem to determine the coefficients $\boldsymbol{a}$ of the parameterized map $T$:
 # ```math
-# \min_{\boldsymbol{a}} \sum_{i=1}^{N} w_{q,i}\Big[-\log\pi\bigl(T(\boldsymbol{a},\boldsymbol{z}_{q,i})\bigr)-\log |\det\nabla T(\boldsymbol{a},\boldsymbol{z}_{q,i}) |\Big]
+# \min_{\boldsymbol{a}} \sum_{i=1}^{N} w_{q,i}\Big[-\log\widetilde{\pi}\bigl(T(\boldsymbol{a},\boldsymbol{z}_{q,i})\bigr)-\log |\det\nabla T(\boldsymbol{a},\boldsymbol{z}_{q,i}) |\Big]
 # + \lambda_1 \sum_{j \in P}\sqrt{a_j^2 + \varepsilon^2}
 # + \frac{\lambda_2}{2}\sum_{j \in P}a_j^2.
 # ```
-# Here, ``P`` contains all nonlinear coefficients by default, so constant and linear
+# Here, ``\widetilde{\pi}`` is the unnormalized target density, as in the
+# [Introduction](introduction.md). ``P`` contains all nonlinear coefficients by default, so constant and linear
 # terms remain unpenalized. With `interactions_only=true`, ``P`` instead contains only
 # terms involving at least two coordinates. The L1 term uses the differentiable
 # approximation ``\sqrt{a_j^2 + \varepsilon^2}``, controlled by `l1_eps`.
 
 # As noted by [marzouk2016](@cite), this optimization problem is generally non-convex.
-# Specifically, it is only convex when the target density $\pi(\boldsymbol{x})$ is log-concave.
-# Especially in Bayesian inference, where the target density represents the posterior density, the function is not log-concave, resulting in a non-convex optimization problem.
+# Log-concavity of the target yields convexity in suitable spaces of maps, but does
+# not by itself guarantee convexity in the coefficients of a nonlinearly rectified
+# polynomial map. Bayesian posteriors may be log-concave or non-log-concave. See
+# [baptista2023](@cite) for the role of the map representation in optimization.
 
-# In this package, map optimization is performed with the help of [`Optim.jl`](https://julianlsolvers.github.io/Optim.jl/stable/), and support a wide range of optimizers and options (such as convergence criteria and printing preferences).
+# Map optimization uses [`Optim.jl`](https://julianlsolvers.github.io/Optim.jl/stable/),
+# which supports a range of optimizers and options, including convergence criteria and trace output.
 # Specifically, we can pass our `optimize!` function the desired `optimizer` and `options`. For a full overview of available options, see the [Optim.jl configuration documentation](https://julianlsolvers.github.io/Optim.jl/stable/user/config/).
 
 # To perform the optimization of the map coefficients, we call:
 # ```julia
-# optimize!(M::PolynomialMap, target_density::Function, quadrature::AbstractQuadratureWeights;
+# optimize!(M::PolynomialMap, target::AbstractMapDensity, quadrature::AbstractQuadratureWeights;
 #   optimizer::Optim.AbstractOptimizer = LBFGS(), options::Optim.Options = Optim.Options(),
 #   λ1::Real = 0, λ2::Real = 0, l1_eps::Real = 1e-8,
 #   interactions_only::Bool = false)
 # ```
 
-# We have to provide the polynomial map `M`, the target density function, and a quadrature scheme.
+# Provide the polynomial map `M`, a `MapTargetDensity` wrapping the target log-density,
+# and a quadrature scheme for the reference distribution.
 # Optionally, we can specify the optimizer, its options, and L1 or L2 regularization.
 # For example, `λ1=1e-3` shrinks every nonlinear term, while combining it with
 # `interactions_only=true` shrinks only mixed-coordinate terms. These keywords are
@@ -49,82 +54,77 @@
 using TransportMaps
 using Optim
 using Distributions
-using CairoMakie
-using LaTeXStrings
-set_theme!(transportmap_theme())
+using CairoMakie # hide
+using LaTeXStrings # hide
+set_theme!(transportmap_theme()) # hide
+#md using Main.DocPlots: save_docplot # hide
 
 # Then, define the target density and quadrature scheme. Here, we use the same banana-shaped density as in [Banana: Map from Density](@ref):
-banana_density(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2] - x[1]^2)
-target = MapTargetDensity(banana_density)
-quadrature = GaussHermiteWeights(3, 2)
+logtarget(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2] - x[1]^2)
+target = MapTargetDensity(logtarget)
+M_gd = PolynomialMap(2, 2)
+quadrature = GaussHermiteWeights(3, M_gd)
 #md nothing #hide
 
-# Set optimization options to print the trace every 20 iterations:
-opts_trace = Optim.Options(iterations = 200, show_trace = true, show_every = 20, store_trace = true)
+# Store the trace for the convergence comparison below:
+opts_trace = Optim.Options(iterations = 200, store_trace = true)
+#md nothing # hide
 
 # We will try the following optimizers from `Optim.jl`, ordered from simplest to most sophisticated:
 
 # ### Gradient Descent
 # The most basic optimization algorithm, Gradient Descent iteratively moves in the direction of the negative gradient. It is simple and robust, but can be slow to converge, especially for ill-conditioned problems.
-M_gd = PolynomialMap(2, 2)
 res_gd = optimize!(M_gd, target, quadrature; optimizer = GradientDescent(), options = opts_trace)
-println(res_gd)
+#md nothing # hide
 
 # ### Conjugate Gradient
 # Conjugate Gradient improves upon basic gradient descent by using conjugate directions, which can accelerate convergence for large-scale or quadratic problems. It requires gradient information but not the Hessian.
 M_cg = PolynomialMap(2, 2)
 res_cg = optimize!(M_cg, target, quadrature; optimizer = ConjugateGradient(), options = opts_trace)
-println(res_cg)
+#md nothing # hide
 
 # ### Nelder-Mead
 # Nelder-Mead is a derivative-free optimizer that uses a simplex of points to search for the minimum. It is useful when gradients are unavailable or unreliable, but may be less efficient for high-dimensional or smooth problems.
 M_nm = PolynomialMap(2, 2)
 res_nm = optimize!(M_nm, target, quadrature; optimizer = NelderMead(), options = opts_trace)
-println(res_nm)
+#md nothing # hide
 
 # ### BFGS
 # BFGS is a quasi-Newton method that builds up an approximation to the Hessian matrix using gradient evaluations. It is generally faster and more robust than gradient descent and conjugate gradient for smooth problems.
 M_bfgs = PolynomialMap(2, 2)
 res_bfgs = optimize!(M_bfgs, target, quadrature; optimizer = BFGS(), options = opts_trace)
-println(res_bfgs)
+#md nothing # hide
 
 # ### LBFGS
 # LBFGS is a limited-memory version of BFGS, making it suitable for large-scale problems where storing the full Hessian approximation is impractical. It is the default optimizer in many scientific computing packages due to its efficiency and reliability.
 M_lbfgs = PolynomialMap(2, 2)
 res_lbfgs = optimize!(M_lbfgs, target, quadrature; optimizer = LBFGS(), options = opts_trace)
-println(res_lbfgs)
+#md nothing # hide
 
-# Finally, we can compare the results by means of variance diagnostic:
+# Compare map quality on the same reference samples. The other optimizer results
+# use the same diagnostic:
 samples_z = randn(1000, 2)
-v_gd = variance_diagnostic(M_gd, target, samples_z)
-v_cg = variance_diagnostic(M_cg, target, samples_z)
-v_nm = variance_diagnostic(M_nm, target, samples_z)
-v_bfgs = variance_diagnostic(M_bfgs, target, samples_z)
 v_lbfgs = variance_diagnostic(M_lbfgs, target, samples_z)
 
-println("Variance diagnostic GradientDescent:   ", v_gd)
-println("Variance diagnostic ConjugateGradient: ", v_cg)
-println("Variance diagnostic NelderMead:        ", v_nm)
-println("Variance diagnostic BFGS:              ", v_bfgs)
-println("Variance diagnostic LBFGS:             ", v_lbfgs)
-
 # We can visualize the convergence of all optimizers:
-fig = Figure(size = (600, 450))
-ax = Axis(
-    fig[1, 1]; xscale = log10, yscale = log10,
-    xlabel = "Iteration", ylabel = "Gradient norm"
-)
-for (result, label) in (
-        (res_gd, "GradientDescent"), (res_cg, "ConjugateGradient"),
-        (res_nm, "NelderMead"), (res_bfgs, "BFGS"), (res_lbfgs, "LBFGS"),
-    )
-    ## Logarithmic axes require positive, finite coordinates.
-    trace = filter(t -> t.iteration > 0 && isfinite(t.g_norm) && t.g_norm > 0, result.trace)
-    lines!(ax, [t.iteration for t in trace], [t.g_norm for t in trace]; linewidth = 2, label)
-end
-xlims!(ax, 1, 200)
-axislegend(ax; position = :lb)
-#md save("optimization-conv.svg", fig); nothing # hide
+#md save_docplot("optimization-conv.svg") do # hide
+fig = Figure(size = (600, 450)) # hide
+ax = Axis( # hide
+    fig[1, 1]; xscale = log10, yscale = log10, # hide
+    xlabel = "Iteration", ylabel = "Gradient norm" # hide
+) # hide
+for (result, label) in ( # hide
+        (res_gd, "GradientDescent"), (res_cg, "ConjugateGradient"), # hide
+        (res_nm, "NelderMead"), (res_bfgs, "BFGS"), (res_lbfgs, "LBFGS"), # hide
+    ) # hide
+    ## Logarithmic axes require positive, finite coordinates. # hide
+    trace = filter(t -> t.iteration > 0 && isfinite(t.g_norm) && t.g_norm > 0, result.trace) # hide
+    lines!(ax, [t.iteration for t in trace], [t.g_norm for t in trace]; linewidth = 2, label) # hide
+end # hide
+xlims!(ax, 1, 200) # hide
+axislegend(ax; position = :lb) # hide
+#md     fig # hide
+#md end # hide
 # ![Optimization Convergence](optimization-conv.svg)
 
 # It becomes clear, that LBFGS and BFGS are the most efficient optimizers in this case, while Nelder-Mead struggles to keep up.
@@ -132,15 +132,18 @@ axislegend(ax; position = :lb)
 # ## Map-from-samples
 
 # Another strategy of constructing a transport map is to use samples of the target density, as seen in [Banana: Map from Samples](@ref).
-# The formulation of transport map estimation in this way has the benefit to transform the problem into a convex optimization problem, when reference density is log-concave [marzouk2016](@cite).
-# Since we can choose the reference density, we can leverage this property to simplify the optimization process.
+# A log-concave reference gives a convex objective in the monotone map itself
+# [marzouk2016](@cite). The integrated rectification used here depends nonlinearly
+# on the coefficients, so this does not establish convexity of the finite-dimensional
+# coefficient problem [baptista2023](@cite).
 
 # When the map is constructed from samples, the optimization problem is formulated by
-# minimizing the Kullback-Leibler divergence between the pushforward of the reference density and the empirical distribution of the samples.
+# minimizing ``\mathcal{D}_{\mathrm{KL}}(S_{\#}\pi\,\|\,\rho)`` and approximating the
+# target expectation with a sample average, as derived in the [Introduction](introduction.md).
 # We denote the transport map by $S$, which pushes forward the target distribution to the reference distribution.
 # This leads to the following optimization problem:
 # ```math
-# \min_{\boldsymbol{a}} -\frac{1}{M} \sum_{i=1}^{M} \log \rho\left(S(\boldsymbol{a}, \boldsymbol{x}_i)\right) - \log \left|\det \nabla S(\boldsymbol{a}, \boldsymbol{x}_i)\right|
+# \min_{\boldsymbol{a}} -\frac{1}{M} \sum_{i=1}^{M} \left[\log \rho\left(S(\boldsymbol{a}, \boldsymbol{x}_i)\right) + \log \left|\det \nabla S(\boldsymbol{a}, \boldsymbol{x}_i)\right|\right]
 # ```
 # where $\{\boldsymbol{x}_i\}_{i=1}^M$ are samples from the target distribution, and $\rho(\cdot)$ is the density of the reference distribution.
 

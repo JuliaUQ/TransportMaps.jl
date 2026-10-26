@@ -34,3 +34,6 @@ Manifest.toml
 # Documentation
 docs/node_modules
 docs/package-lock.json
+
+# Performance comparison
+benchmark/

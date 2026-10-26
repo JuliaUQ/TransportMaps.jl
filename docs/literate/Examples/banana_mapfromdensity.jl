@@ -19,7 +19,8 @@ using TransportMaps
 using Distributions
 using CairoMakie
 using LaTeXStrings
-set_theme!(transportmap_theme())
+set_theme!(transportmap_theme()) # hide
+#md using Main.DocPlots: save_docplot # hide
 
 #md using Random # hide
 #md Random.seed!(123) # hide
@@ -39,8 +40,8 @@ set_theme!(transportmap_theme())
 
 # We define its log-density as:
 
-target_density(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2] - x[1]^2)
-target = MapTargetDensity(target_density)
+logtarget(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2] - x[1]^2)
+target = MapTargetDensity(logtarget)
 #md nothing #hide
 
 # ## Standard-normal reference
@@ -118,22 +119,26 @@ println("Uniform-reference variance diag: ", var_diag_uniform)
 # Choose the target-space grid for the density contours:
 x₁ = range(-4, 4, length = 120)
 x₂ = range(-3, 7, length = 120)
+#md save_docplot("banana-density-normal-reference.svg") do # hide
 normal_comparison = reference_target_plot(
     normal_map, normal_ref_samples;
     density = target,
     xgrid = x₁, ygrid = x₂,
     reference_axis = (; limits = ((-4, 4), (-4, 4))),
 )
-#md save("banana-density-normal-reference.svg", normal_comparison); nothing # hide
+#md     normal_comparison # hide
+#md end # hide
 # ![Banana transport from a standard-normal reference](banana-density-normal-reference.svg)
 
+#md save_docplot("banana-density-uniform-reference.svg") do # hide
 uniform_comparison = reference_target_plot(
     uniform_map, uniform_ref_samples;
     density = target,
     xgrid = x₁, ygrid = x₂,
     reference_axis = (; limits = ((0, 1), (0, 1))),
 )
-#md save("banana-density-uniform-reference.svg", uniform_comparison); nothing # hide
+#md     uniform_comparison # hide
+#md end # hide
 # ![Banana transport from a uniform reference](banana-density-uniform-reference.svg)
 
 # Both maps recover the curved target geometry. The standard-normal reference is
@@ -147,13 +152,15 @@ uniform_comparison = reference_target_plot(
 # lines become curved target-space lines under the fitted map.
 
 grid = range(-2, 2; length = 100)
+#md save_docplot("banana-density-mapping.svg") do # hide
 mapping_fig = Figure(size = (600, 400))
 reference_ax = Axis(mapping_fig[1, 1]; title = "Reference", xlabel = L"z_1", ylabel = L"z_2")
 target_ax = Axis(mapping_fig[1, 2]; title = "Mapped grid", xlabel = L"x_1", ylabel = L"x_2")
 identity_map = LinearMap(zeros(2), ones(2))
 mappingplot!(reference_ax, identity_map, (grid, grid); gridlines = 9)
 mappingplot!(target_ax, normal_map, (grid, grid); gridlines = 9)
-#md save("banana-density-mapping.svg", mapping_fig); nothing # hide
+#md     mapping_fig # hide
+#md end # hide
 # ![Regular reference grid and its image under the banana map](banana-density-mapping.svg)
 
 # ## Contributions of individual terms
@@ -163,6 +170,7 @@ mappingplot!(target_ax, normal_map, (grid, grid); gridlines = 9)
 # to zero in turn and compute the RMS output change over the same reference samples.
 # These removal scores are sample-dependent, non-additive diagnostics, without refitting.
 
+#md save_docplot("banana-density-term-contributions.svg") do # hide
 term_fig = Figure(size = (600, 350))
 termplot(
     term_fig[1, 1], normal_map[2];
@@ -173,5 +181,6 @@ termplot(
     measure = :removal_rms, samples = normal_ref_samples[1:300, :],
     axis = (; title = "Removal effect", xlabel = "RMS change")
 )
-#md save("banana-density-term-contributions.svg", term_fig); nothing # hide
+#md     term_fig # hide
+#md end # hide
 # ![Signed coefficients and RMS output changes when removing each term of the second banana-map component](banana-density-term-contributions.svg)

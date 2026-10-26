@@ -9,8 +9,11 @@ import TransportMaps: sampleplot, sampleplot!, transportplot, transportplot!
 import TransportMaps: convergenceplot, convergenceplot!, objectiveplot, objectiveplot!
 import TransportMaps: transportmap_theme, reference_target_plot, referenceplot, plotmatrix
 
-function transportmap_theme(; fontsize = 18, titlesize = 22, size = (600, 400))
-    return merge(
+function transportmap_theme(;
+        fontsize = 18, titlesize = 22, size = (600, 400),
+        backgroundcolor = nothing, foregroundcolor = nothing,
+    )
+    result = merge(
         Theme(;
             fontsize, size,
             Axis = (; titlefont = :regular, titlesize),
@@ -19,6 +22,56 @@ function transportmap_theme(; fontsize = 18, titlesize = 22, size = (600, 400))
         theme_ggplot2(),
         theme_latexfonts(),
     )
+    if !isnothing(backgroundcolor)
+        result = merge(
+            Theme(;
+                backgroundcolor,
+                Axis = (; backgroundcolor),
+                Axis3 = (;
+                    backgroundcolor, xypanelcolor = backgroundcolor,
+                    xzpanelcolor = backgroundcolor, yzpanelcolor = backgroundcolor,
+                ),
+                Legend = (; backgroundcolor, patchcolor = backgroundcolor),
+            ), result
+        )
+    end
+    if !isnothing(foregroundcolor)
+        result = merge(
+            Theme(;
+                textcolor = foregroundcolor, linecolor = foregroundcolor,
+                Axis = (;
+                    xticklabelcolor = foregroundcolor, yticklabelcolor = foregroundcolor,
+                    xtickcolor = foregroundcolor, ytickcolor = foregroundcolor,
+                    xminortickcolor = foregroundcolor, yminortickcolor = foregroundcolor,
+                    leftspinecolor = foregroundcolor, rightspinecolor = foregroundcolor,
+                    bottomspinecolor = foregroundcolor, topspinecolor = foregroundcolor,
+                    xgridcolor = (foregroundcolor, 0.2), ygridcolor = (foregroundcolor, 0.2),
+                    xminorgridcolor = (foregroundcolor, 0.08), yminorgridcolor = (foregroundcolor, 0.08),
+                ),
+                Axis3 = (;
+                    xticklabelcolor = foregroundcolor, yticklabelcolor = foregroundcolor,
+                    zticklabelcolor = foregroundcolor,
+                    xtickcolor = foregroundcolor, ytickcolor = foregroundcolor, ztickcolor = foregroundcolor,
+                    xspinecolor_1 = foregroundcolor, xspinecolor_2 = foregroundcolor,
+                    xspinecolor_3 = foregroundcolor, xspinecolor_4 = foregroundcolor,
+                    yspinecolor_1 = foregroundcolor, yspinecolor_2 = foregroundcolor,
+                    yspinecolor_3 = foregroundcolor, yspinecolor_4 = foregroundcolor,
+                    zspinecolor_1 = foregroundcolor, zspinecolor_2 = foregroundcolor,
+                    zspinecolor_3 = foregroundcolor, zspinecolor_4 = foregroundcolor,
+                    xgridcolor = (foregroundcolor, 0.2), ygridcolor = (foregroundcolor, 0.2),
+                    zgridcolor = (foregroundcolor, 0.2),
+                ),
+                Legend = (; framecolor = foregroundcolor),
+                Colorbar = (;
+                    ticklabelcolor = foregroundcolor, tickcolor = foregroundcolor,
+                    minortickcolor = foregroundcolor,
+                    leftspinecolor = foregroundcolor, rightspinecolor = foregroundcolor,
+                    bottomspinecolor = foregroundcolor, topspinecolor = foregroundcolor,
+                ),
+            ), result
+        )
+    end
+    return result
 end
 
 function comparison_samples(M, samples, input_space)
@@ -184,7 +237,7 @@ function referenceplot(
             density = pdf.(Ref(data.distribution), grid)
             density = [isfinite(v) ? v : NaN for v in density]
             lines!(
-                ax, grid, density; color = :black,
+                ax, grid, density; color = Makie.theme(ax.scene, :textcolor),
                 linewidth = 2, label = "Reference PDF"
             )
         else
@@ -202,7 +255,7 @@ function referenceplot(
             )
             lo = min(first(data.theoretical), first(data.empirical[j]))
             hi = max(last(data.theoretical), last(data.empirical[j]))
-            lines!(ax, [lo, hi], [lo, hi]; color = :black, linestyle = :dash, label = "Ideal agreement")
+            lines!(ax, [lo, hi], [lo, hi]; color = Makie.theme(ax.scene, :textcolor), linestyle = :dash, label = "Ideal agreement")
         end
         if j == 1
             Legend(fig[rows + 1, 1:columns], ax; orientation = :horizontal, framevisible = false)
@@ -289,7 +342,7 @@ function plotmatrix(
                 hi = isfinite(maximum(distribution)) ? maximum(distribution) : max(hi, maximum(values[:, j]))
                 grid = range(lo, hi; length = 200)
                 density = [isfinite(v) ? v : NaN for v in pdf.(Ref(distribution), grid)]
-                lines!(ax, grid, density; color = :black, linewidth = 2)
+                lines!(ax, grid, density; color = Makie.theme(ax.scene, :textcolor), linewidth = 2)
             end
         else
             scatter!(ax, values[:, j], values[:, i]; color, markersize)
@@ -309,7 +362,7 @@ function plotmatrix(
     if !isnothing(distribution)
         Legend(
             fig[d + 1, 1:d],
-            [MarkerElement(; color, marker = :circle, markersize = 8), LineElement(; color = :black)],
+            [MarkerElement(; color, marker = :circle, markersize = 8), LineElement(; color = Makie.theme(fig.scene, :textcolor))],
             ["Samples", "Reference PDF"]; orientation = :horizontal, framevisible = false
         )
     end

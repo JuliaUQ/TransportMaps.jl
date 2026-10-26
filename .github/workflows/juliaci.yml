@@ -24,3 +24,23 @@ jobs:
     permissions: write-all
     secrets:
       codecov_token: ${{ secrets.CODECOV_TOKEN }}
+  docs-preview:
+    name: Documentation preview
+    needs: julia-ci
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: write
+    environment:
+      name: docs-preview-pr-${{ github.event.pull_request.number }}
+      url: https://juliauq.github.io/TransportMaps.jl/previews/PR${{ github.event.pull_request.number }}/
+    steps:
+      - name: Verify preview is available
+        env:
+          PREVIEW_URL: https://juliauq.github.io/TransportMaps.jl/previews/PR${{ github.event.pull_request.number }}/
+        run: |
+          curl --fail --silent --show-error --location \
+            --retry 8 --retry-all-errors --retry-delay 10 \
+            --output /dev/null "$PREVIEW_URL"
