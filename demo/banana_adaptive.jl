@@ -9,21 +9,12 @@ banana_density(x) = pdf(Normal(), x[1]) * pdf(Normal(), x[2] - x[1]^2)
 
 num_samples = 500
 
-function generate_banana_samples(n_samples::Int)
-    samples = Matrix{Float64}(undef, n_samples, 2)
-
-    count = 0
-    while count < n_samples
-        x1 = randn() * 2
-        x2 = randn() * 3 + x1^2
-
-        if rand() < banana_density([x1, x2]) / 0.4
-            count += 1
-            samples[count, :] = [x1, x2]
-        end
-    end
-
-    return samples
+function generate_banana_samples(number_samples)
+    latent_samples = randn(number_samples, 2)
+    return hcat(
+        latent_samples[:, 1],
+        latent_samples[:, 1] .^ 2 .+ latent_samples[:, 2],
+    )
 end
 
 println("Generating samples from banana distribution...")

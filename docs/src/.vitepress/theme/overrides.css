@@ -1,0 +1,12 @@
+/* Match VitePress's theme toggle while keeping the original plot colors. */
+html.dark .doc-plot-light,
+html:not(.dark) .doc-plot-dark {
+    display: none !important;
+}
+
+/* Keep high-density raster animations at the same display size as SVG figures. */
+.vp-doc img.doc-plot-light,
+.vp-doc img.doc-plot-dark {
+    max-width: min(100%, 600px);
+    height: auto;
+}
