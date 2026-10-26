@@ -27,7 +27,7 @@ abstract type AbstractMultivariateBasis end
 abstract type AbstractRectifierFunction end
 abstract type AbstractQuadratureWeights end
 abstract type AbstractMapDensity end
-abstract type AbstractComposedMap end
+abstract type AbstractComposedMap <: AbstractTransportMap end
 abstract type AbstractLinearMap <: AbstractTriangularMap end
 abstract type AbstractQuadratureKnots end
 
@@ -71,6 +71,7 @@ export gradient_coefficients
 export gradient_z
 export gradient_zk
 export jacobian
+export logabsdetjacobian
 export inverse
 export inverse_jacobian
 export partial_derivative_z
