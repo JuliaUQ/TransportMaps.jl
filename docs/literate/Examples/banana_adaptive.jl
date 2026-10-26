@@ -10,7 +10,7 @@
 # where $\phi$ is the standard normal PDF.
 
 #md using Random # hide
-#md Random.seed!(123) # hide
+#md Random.seed!(42) # hide
 #md nothing # hide
 
 # We start with the necessary packages:
@@ -20,9 +20,10 @@ using Distributions
 using LinearAlgebra
 using CairoMakie
 using LaTeXStrings
-set_theme!(transportmap_theme())
+set_theme!(transportmap_theme()) # hide
+#md using Main.DocPlots: save_docplot # hide
 
-# ### Generating Target Samples
+# ## Generating Target Samples
 
 # The generation of samples from the banana distribution is done in the same way as in the
 # example [Banana: Map from Samples](@ref). Here, we use $N = 500$ samples for the ATM learning.
@@ -31,21 +32,12 @@ banana_density(x) = pdf(Normal(), x[1]) * pdf(Normal(), x[2] - x[1]^2)
 
 num_samples = 500
 
-function generate_banana_samples(n_samples::Int)
-    samples = Matrix{Float64}(undef, n_samples, 2)
-
-    count = 0
-    while count < n_samples
-        x1 = randn() * 2
-        x2 = randn() * 3 + x1^2
-
-        if rand() < banana_density([x1, x2]) / 0.4
-            count += 1
-            samples[count, :] = [x1, x2]
-        end
-    end
-
-    return samples
+function generate_banana_samples(number_samples)
+    latent_samples = randn(number_samples, 2)
+    return hcat(
+        latent_samples[:, 1],
+        latent_samples[:, 1] .^ 2 .+ latent_samples[:, 2],
+    )
 end
 #md nothing #hide
 
@@ -53,7 +45,7 @@ println("Generating samples from banana distribution...")
 target_samples = generate_banana_samples(num_samples)
 println("Generated $(size(target_samples, 1)) samples")
 
-# ### Creating the Transport Map
+# ## Creating the Transport Map
 
 # First, create a linear transport map as a starting point. This is also the default behavior
 # of the `optimize_adaptive_transportmap` function, which standardizes the samples
@@ -64,7 +56,7 @@ L = LinearMap(target_samples)
 # Then, we perform adaptive transport map learning with k-fold cross-validation.
 # We use the setup as in [baptista2023](@cite): We select a Hermite basis with linearization,
 # use the modified Softplus rectifier with parameter $\beta = 2$ and $k = 5$ folds.
-# We set the maximum number of terms to 3 and 6 for the two components, respectively.
+# We set the maximum number of terms to ``3`` and ``6`` for the two components, respectively.
 
 # Calling the `optimize_adaptive_transportmap` function performs the adaptive learning of map terms
 # and returns the learned map, optimization results, selected terms, and selected folds.
@@ -88,6 +80,7 @@ M, results, selected_terms, selected_folds = optimize_adaptive_transportmap(
 # To visualized which terms were selected, we can plot the multi-index sets of the learned ATM:
 ind_atm = getmultiindexsets(M.polynomialmap[2])
 
+#md save_docplot("atm-indices.svg") do # hide
 indices_fig = Figure(size = (600, 400))
 indices_ax = Axis(
     indices_fig[1, 1]; aspect = DataAspect(),
@@ -96,12 +89,13 @@ indices_ax = Axis(
     limits = (-0.5, maximum(ind_atm[:, 1]) + 0.5, -0.5, maximum(ind_atm[:, 2]) + 0.5)
 )
 scatter!(indices_ax, ind_atm[:, 1], ind_atm[:, 2]; markersize = 24)
-#md save("atm-indices.svg", indices_fig); nothing # hide
+#md     indices_fig # hide
+#md end # hide
 # ![Learned Multi-Index](atm-indices.svg)
 # We see that the ATM algorithm selected terms in an L-shape pattern, indicating that
 # lower-order interactions were prioritized.
 
-# ### Testing the Map
+# ## Testing the Map
 
 new_samples = generate_banana_samples(1000)
 norm_samples = randn(1000, 2)
@@ -110,10 +104,11 @@ norm_samples = randn(1000, 2)
 mapped_banana_samples = inverse(M, norm_samples)
 #md nothing #hide
 
-# ### Visualizing Results
+# ## Visualizing Results
 # Let's create a scatter plot comparing the original samples with
 # the mapped samples to see how well our transport map learned the distribution:
 
+#md save_docplot("atm-comparison-target.svg") do # hide
 comparison_fig = Figure(size = (600, 480))
 comparison_ax = Axis(
     comparison_fig[1, 1];
@@ -122,10 +117,11 @@ comparison_ax = Axis(
 original_plot = sampleplot!(comparison_ax, new_samples; color = (:steelblue, 0.7))
 mapped_plot = sampleplot!(comparison_ax, mapped_banana_samples; color = (:orange, 0.7))
 Legend(comparison_fig[1, 2], [original_plot, mapped_plot], ["Original Samples", "Mapped Samples"])
-#md save("atm-comparison-target.svg", comparison_fig); nothing # hide
+#md     comparison_fig # hide
+#md end # hide
 # ![Sample Comparison](atm-comparison-target.svg)
 
-# ### Density Comparison
+# ## Density Comparison
 # Similarly, we can compare the true banana density with the learned density
 # obtained via the pullback of the composed map:
 
@@ -135,6 +131,7 @@ x₂ = range(-2.5, 5.0, length = 100)
 true_density = [banana_density([x1, x2]) for x1 in x₁, x2 in x₂]
 learned_density = [pullback(M, [x1, x2]) for x1 in x₁, x2 in x₂]
 
+#md save_docplot("atm-density-comparison.svg") do # hide
 density_fig = Figure(size = (600, 400))
 true_ax = Axis(density_fig[1, 1]; title = "True density", xlabel = L"x_1", ylabel = L"x_2")
 learned_ax = Axis(density_fig[1, 2]; title = "Learned density", xlabel = L"x_1", ylabel = L"x_2")
@@ -143,10 +140,11 @@ levels = range(0, max(maximum(true_density), maximum(learned_density)); length =
 contour!(true_ax, x₁, x₂, true_density; colormap = :viridis, levels)
 contour!(learned_ax, x₁, x₂, learned_density; colormap = :viridis, levels)
 linkaxes!(true_ax, learned_ax)
-#md save("atm-density-comparison.svg", density_fig); nothing # hide
+#md     density_fig # hide
+#md end # hide
 # ![Density Comparison](atm-density-comparison.svg)
 
-# ### Plot iterations
+# ## Plot iterations
 # Additionally, we can visualize the selected terms and optimization objectives
 # over the iterations for the second component of the ATM.
 # First, we retrieve the best fold based on the selected folds during learning:
@@ -159,6 +157,7 @@ res_best = results[map_index][best_fold]
 max_1 = maximum(res_best.terms[end][:, 1])
 max_2 = maximum(res_best.terms[end][:, 2])
 
+#md save_docplot("iterations.svg") do # hide
 iterations_fig = Figure(size = (600, 850))
 for (i, term) in enumerate(res_best.terms)
     ax = Axis(
@@ -168,7 +167,8 @@ for (i, term) in enumerate(res_best.terms)
     )
     scatter!(ax, term[:, 1], term[:, 2]; markersize = 20)
 end
-#md save("iterations.svg", iterations_fig); nothing # hide
+#md     iterations_fig # hide
+#md end # hide
 # ![Iterations](iterations.svg)
 
 # We can see that in the last iteration, the interaction term $(1, 1)$ was added.
@@ -177,12 +177,14 @@ end
 # over the iterations:
 
 # Compare optimization objectives
+#md save_docplot("objectives.svg") do # hide
 objectives_fig, objectives_ax, plt = convergenceplot(
     res_best; show_test = true,
     figure = (; size = (600, 400)),
 )
 axislegend(objectives_ax)
-#md save("objectives.svg", objectives_fig); nothing # hide
+#md     objectives_fig # hide
+#md end # hide
 # ![Objectives](objectives.svg)
 
 # Here, we see that the test objective increased in the last iteration,

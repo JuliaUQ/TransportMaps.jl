@@ -4,8 +4,8 @@ using CairoMakie
 using LaTeXStrings
 set_theme!(transportmap_theme())
 
-target_density(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2] - x[1]^2)
-target = MapTargetDensity(target_density)
+logtarget(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2] - x[1]^2)
+target = MapTargetDensity(logtarget)
 
 normal_map = PolynomialMap(2, 2, Normal(), Softplus())
 normal_quadrature = SparseSmolyakWeights(3, normal_map)

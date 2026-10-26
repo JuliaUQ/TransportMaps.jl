@@ -16,7 +16,7 @@ D = [0.18, 0.32, 0.42, 0.49, 0.54]
 
 realizations_fig = Figure(size = (600, 650))
 realizations_ax = Axis(realizations_fig[1, 1]; xlabel = L"Time $t$", ylabel = L"Biochemical Oxygen Demand $D$")
-scatter!(realizations_ax, t, D; label = "Data", color = :black)
+scatter!(realizations_ax, t, D; label = "Data", color = theme(:textcolor))
 # Plot model output for some parameter values.
 t_values = range(0, 5, length = 100)
 for θ₁ in [-0.5, 0, 0.5]
@@ -41,7 +41,7 @@ target = MapTargetDensity(x -> logposterior(x))
 
 M = PolynomialMap(2, 3, :normal, Softplus(), LinearizedHermiteBasis())
 
-quadrature = GaussHermiteWeights(3, 2)
+quadrature = GaussHermiteWeights(3, M)
 
 res = optimize!(M, target, quadrature)
 println("Optimization result: ", res)
@@ -83,9 +83,9 @@ axislegend(pullback_ax)
 conditional_samples = conditional_sample(M, θ₁, randn(10_000))
 
 θ_range = 0:0.01:2
-int_analytical = gaussquadrature(ξ -> pdf(target, [θ₁, ξ]), 1000, -10.0, 10.0)
-posterior_conditional(θ₂) = pdf(target, [θ₁, θ₂]) / int_analytical
-conditional_analytical = posterior_conditional.(θ_range)
+conditional_normalizer = gaussquadrature(ξ -> pdf(target, [θ₁, ξ]), 1000, -10.0, 10.0)
+reference_conditional(θ₂) = pdf(target, [θ₁, θ₂]) / conditional_normalizer
+conditional_reference = reference_conditional.(θ_range)
 
 conditional_mapped = conditional_density(M, θ_range, θ₁)
 
@@ -93,7 +93,7 @@ conditional_fig, conditional_ax, plt = hist(
     conditional_samples; bins = 50, normalization = :pdf, color = (:steelblue, 0.5),
     label = "Conditional Samples", axis = (; xlabel = L"\theta_2", ylabel = L"\pi(\theta_2 \mid \theta_1 = %$θ₁)"),
 )
-lines!(conditional_ax, θ_range, conditional_analytical; linewidth = 2, color = :orange, label = "Analytical Conditional PDF")
+lines!(conditional_ax, θ_range, conditional_reference; linewidth = 2, color = :orange, label = "Numerical Reference PDF")
 lines!(conditional_ax, θ_range, conditional_mapped; linewidth = 2, color = :seagreen, label = "TM Conditional PDF")
 axislegend(conditional_ax)
 

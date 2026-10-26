@@ -1,5 +1,55 @@
 ```@raw html
 ---
+layout: home
+description: Triangular transport maps for sampling, density estimation, and Bayesian inference in Julia.
+
+hero:
+  name: TransportMaps.jl
+  text: Transform probability distributions.
+  tagline: Build and adapt triangular transport maps for sampling, density estimation, and Bayesian inference in Julia.
+  image:
+    src: /logo.svg
+    alt: TransportMaps.jl logo
+  actions:
+    - theme: alt
+      text: Introduction
+      link: /Manuals/introduction
+    - theme: brand
+      text: Get Started
+      link: /Manuals/getting_started
+    - theme: alt
+      text: API Reference
+      link: /api/maps
+    - theme: alt
+      text: View on GitHub
+      link: https://github.com/JuliaUQ/TransportMaps.jl
+
+features:
+  - title: Learn from samples
+    details: Fit a transport map directly from observations, with optional linear standardization.
+    link: /Examples/banana_mapfromsamples
+    linkText: Fit a map from samples
+  - title: Start from a density
+    details: Construct a map from an unnormalized log-density using quadrature and numerical optimization.
+    link: /Examples/banana_mapfromdensity
+    linkText: Fit a map from a density
+  - title: Adapt the approximation
+    details: Select polynomial terms adaptively and use validation data to choose the map's complexity.
+    link: /Manuals/adaptive_transport_map
+    linkText: Explore adaptive maps
+  - title: Condition on observations
+    details: Evaluate conditional densities and generate samples while keeping observed coordinates fixed.
+    link: /Manuals/conditional_densities
+    linkText: Work with conditional distributions
+  - title: Choose your basis and quadrature
+    details: Combine polynomial bases, monotone rectifiers, and tensor-product or sparse-grid integration rules.
+    link: /Manuals/map_parameterization
+    linkText: Configure a transport map
+  - title: Inspect the results
+    details: Visualize transformations, reference-space diagnostics, pairwise correlations, and optimization histories with Makie.
+    link: /Manuals/plotting
+    linkText: Plot and diagnose a map
+
 authors:
   - name: Lukas Fritsch
     platform: github
@@ -10,132 +60,48 @@ authors:
 ---
 ```
 
-# TransportMaps.jl
-
 ```@meta
 CurrentModule = TransportMaps
 ```
 
-```@raw html
-<p align="center">
-  <img src="./assets/logo.svg" alt="TransportMaps.jl logo" width="220"/>
-</p>
-```
-
-This is an implementation of triangular transport maps in Julia based on the description in [marzouk2016](@cite).
-For a comprehensive introduction to transport maps, see [ramgraber2025](@cite). The theoretical foundations for monotone triangular transport maps are detailed in [marzouk2016](@cite), [baptista2023](@cite). For practical applications in structural health monitoring and Bayesian inference, see [grashorn2024](@cite).
-
 ## Authors
 
 ```@raw html
-
 <Authors />
 ```
 
-## What are Transport Maps?
-
-Transport maps are smooth, invertible functions that can transform one probability distribution into another [marzouk2016](@cite).
-The mathematical foundation builds on the Rosenblatt transformation [rosenblatt1952](@cite) and the Knothe-Rosenblatt rearrangement [knothe1957](@cite).
-They are particularly useful for:
-
-- **Sampling**: Generate samples from complex distributions by transforming samples from simple distributions
-- **Variational inference**: Approximate complex posterior distributions in Bayesian updating problems [grashorn2024](@cite)
-- **Density estimation**: Learn the structure of complex probability distributions
-
-## Key Features
-
-- **Polynomial Maps**: Triangular polynomial transport maps
-- **Adaptive Construction**: Automatic selection of polynomial terms for efficient approximation
-- **Multiple Rectifiers**: Support for different activation functions (Softplus, ShiftedELU, Identity)
-- **Quadrature Integration**: Multiple quadrature schemes for map optimization
-- **Optimization**: Built-in optimization routines for fitting maps to target densities
-- **Multithreaded evaluation** for processing multiple points efficiently
-- **Automatic Differentiation** of target densities with [`DifferentiationInterface.jl`](https://juliadiff.org/DifferentiationInterface.jl/DifferentiationInterface/stable/)
-
-## Installation
+## Install TransportMaps.jl
 
 ```julia
 using Pkg
 Pkg.add("TransportMaps")
 ```
 
-## Quick Start Example
+Read the [Introduction](Manuals/introduction.md) for the mathematical background.
+Follow the [Getting Started guide](@ref "Getting Started with TransportMaps.jl") for a complete walkthrough,
+or explore [CDF estimation](Examples/cdf_estimation.md) and
+[Bayesian inference with BOD data](Examples/bod_bayesianinference.md).
 
-For a comprehensive introduction, see the page [Getting Started with TransportMaps.jl](@ref), which demonstrates:
-- Creating polynomial transport maps
-- Setting up quadrature schemes
-- Optimizing map parameters
-- Generating samples from the learned map
+## Mathematical background
 
-Additional examples are available in the Examples section:
-```@contents
-Pages = ["Examples/banana_mapfromdensity.md", "Examples/banana_mapfromsamples.md", "Examples/banana_adaptive.md", "Examples/cubic_adaptive_fromdensity.md", "Examples/bod_bayesianinference.md"]
-Depth = 1
-```
+Start with the [Introduction](Manuals/introduction.md) for
+the change-of-variables formula, triangular maps, and the density- and sample-based
+fitting objectives.
 
-Further, the following manuals discuss the technical details of the implementation:
-```@contents
-Pages = ["Manuals/basis_functions.md", "Manuals/map_parameterization.md", "Manuals/quadrature_methods.md", "Manuals/optimization.md", "Manuals/conditional_densities.md", "Manuals/adaptive_transport_map.md"]
-Depth = 1
-```
+Transport maps are smooth, invertible transformations between probability distributions.
+Triangular maps build on the Rosenblatt transformation [rosenblatt1952](@cite) and the
+Knothe–Rosenblatt rearrangement [knothe1957](@cite), and support sampling, density estimation,
+and variational inference [marzouk2016](@cite).
 
-## Package Architecture
+This package implements monotone triangular transport maps following [marzouk2016](@cite)
+and [baptista2023](@cite). For an introduction, see [ramgraber2025](@cite);
+for applications in structural health monitoring and Bayesian inference, see [grashorn2024](@cite).
 
-The package is organized around several key components:
+The manuals cover [polynomial bases](Manuals/basis_functions.md),
+[quadrature rules](Manuals/quadrature_methods.md), and [optimization](Manuals/optimization.md),
+including automatic differentiation through `DifferentiationInterface.jl` and multithreaded map evaluation.
 
-### Map Components
-
-- **`PolynomialMapComponent`**: Individual polynomial components of triangular maps
-- with different polynomial bases:
-  - **`HermiteBasis`**: Probabilists' Hermite polynomial basis
-  - **`LinearizedHermiteBasis`**: Linearized Hermite basis for improved conditioning
-  - **`CubicSplineHermiteBasis`**: Cubic spline basis with Hermite support
-  - **`GaussianWeightedHermiteBasis`**: Hermite basis with Gaussian weighting
-
-### Transport Maps
-
-- **`PolynomialMap`**: Main triangular polynomial transport map
-- **`DiagonalMap`**: Convenience constructor for diagonal maps (no cross-terms)
-- **`NoMixedMap`**: Maps without mixed polynomial terms
-- **`LinearMap`**: Linear standardization map (mean/std)
-- **`LaplaceMap`**: Laplace approximation-based map
-- **`ComposedMap`**: Composition of linear and polynomial maps
-
-### Rectifier Functions
-
-- **`IdentityRectifier`**: No transformation (linear)
-- **`Softplus`**: Smooth positive transformation (log-sum-exp)
-- **`ShiftedELU`**: Exponential linear unit variant
-- **`ExpRectifier`**: Pure exponential transformation
-
-### Quadrature Schemes
-
-- **`GaussHermiteWeights`**: Gauss-Hermite quadrature points and weights
-- **`MonteCarloWeights`**: Monte Carlo integration
-- **`LatinHypercubeWeights`**: Latin hypercube sampling
-- **`SparseSmolyakWeights`**: Sparse grid quadrature for higher dimensions
-
-### Map Optimization 
-
-- **`optimize!`**: Optimize map coefficients to minimize KL divergence
-- **`optimize_adaptive_transportmap`**: Adaptive refinement for map from samples
-- **`optimize_adaptive_transportmapcomponent`**: Adaptive refinement for map from density
-
-### Conditional Densities
-
-- **`conditional_density`**: Compute conditional densities π(xₖ | x₁, ..., xₖ₋₁)
-- **`conditional_sample`**: Sample from conditional distributions
-- **`multivariate_conditional_density`**: Multivariate conditional densities
-- **`multivariate_conditional_sample`**: Multivariate conditional sampling
-
-## API Reference
-
-```@contents
-Pages = ["api/bases.md", "api/rectifiers.md", "api/densities.md", "api/quadrature.md", "api/maps.md", "api/optimization.md"]
-Depth = 1
-```
-
-## Related Implementation
+## Related implementations
 
 - [ATM](https://github.com/baptistar/ATM): Matlab code for adaptive transport maps [baptista2023](@cite)
 - [MParT](https://github.com/MeasureTransport/MParT): C++-based library for transport maps [parno2022](@cite)

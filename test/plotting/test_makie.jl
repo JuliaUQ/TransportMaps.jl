@@ -1,3 +1,59 @@
+@testitem "Makie theme colors" begin
+    using CairoMakie, TransportMaps, Test, Distributions
+    import CairoMakie: Makie
+
+    original_textcolor = theme(:textcolor)[]
+    custom_theme = transportmap_theme(backgroundcolor = :transparent, foregroundcolor = :white)
+    @test theme(:textcolor)[] == original_textcolor
+    with_theme(transportmap_theme()) do
+        fig = Figure()
+        @test Axis(fig[1, 1]).backgroundcolor[] == Makie.to_color(:gray92)
+    end
+    with_theme(custom_theme) do
+        fig = Figure()
+        ax = Axis(fig[1, 1]; title = "Title", xlabel = "x", ylabel = "y")
+        @test fig.scene.backgroundcolor[] == RGBAf(0, 0, 0, 0)
+        @test ax.backgroundcolor[] == RGBAf(0, 0, 0, 0)
+        for key in (
+                :titlecolor, :xlabelcolor, :ylabelcolor, :xticklabelcolor,
+                :yticklabelcolor, :xtickcolor, :ytickcolor, :leftspinecolor, :bottomspinecolor,
+            )
+            @test Makie.to_color(getproperty(ax, key)[]) == RGBAf(1, 1, 1, 1)
+        end
+        @test ax.xgridcolor[] == (:white, 0.2)
+        label = Label(fig[0, 1], "Label")
+        @test label.color[] == RGBAf(1, 1, 1, 1)
+        scatter!(ax, [0, 1], [0, 1]; color = :orange, label = "Samples")
+        legend = Legend(fig[2, 1], ax)
+        @test legend.backgroundcolor[] == :transparent
+        @test legend.labelcolor[] == :white
+        colorbar = Colorbar(fig[1, 2]; limits = (0, 1), label = "Density")
+        @test colorbar.ticklabelcolor[] == :white
+        @test colorbar.labelcolor[] == :white
+        ax3 = Axis3(fig[1, 3])
+        @test ax3.xypanelcolor[] == :transparent
+        @test ax3.xticklabelcolor[] == :white
+
+        samples = [-1.0 -0.5; 0.0 0.0; 1.0 0.5]
+        for kind in (:marginals, :qq)
+            diagnostics = referenceplot(samples; kind)
+            panel = only(contents(diagnostics[1, 1]))
+            @test Makie.to_color(panel.scene.plots[2].color[]) == RGBAf(1, 1, 1, 1)
+        end
+        matrix = plotmatrix(samples; reference = Normal())
+        panel = only(contents(matrix[1, 1]))
+        @test Makie.to_color(panel.scene.plots[2].color[]) == RGBAf(1, 1, 1, 1)
+
+        mktempdir() do dir
+            path = joinpath(dir, "transparent.png")
+            save(path, fig)
+            image = Makie.FileIO.load(path)
+            @test Makie.alpha(image[1, 1]) == 0
+        end
+    end
+    @test theme(:textcolor)[] == original_textcolor
+end
+
 @testitem "Makie recipes" begin
     using CairoMakie
     using TransportMaps

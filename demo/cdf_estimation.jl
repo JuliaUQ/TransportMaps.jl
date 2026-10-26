@@ -28,7 +28,7 @@ pullback_fig, pullback_ax, plt = lines(
 lines!(pullback_ax, x, normal_pdf; color = :darkorange, label = "Normal reference")
 lines!(
     pullback_ax, x, pdf.(distribution, x);
-    color = :black, linestyle = :dash, label = "Exact"
+    color = theme(:textcolor), linestyle = :dash, label = "Exact"
 )
 Legend(pullback_fig[2, 1], pullback_ax; orientation = :horizontal, framevisible = false)
 
@@ -42,12 +42,12 @@ for (row, M, reference, name, color, grid) in (
     mappingplot!(inverse_ax, M, x; direction = :inverse, color, label = "Fitted map")
     lines!(
         inverse_ax, x, quantile.(reference, cdf.(distribution, x));
-        color = :black, linestyle = :dash, label = "Exact"
+        color = theme(:textcolor), linestyle = :dash, label = "Exact"
     )
     mappingplot!(forward_ax, M, grid; color)
     lines!(
         forward_ax, grid, quantile.(distribution, cdf.(reference, grid));
-        color = :black, linestyle = :dash
+        color = theme(:textcolor), linestyle = :dash
     )
 end
 
@@ -65,8 +65,8 @@ for (M, reference, name, color) in (
     lines!(cdf_ax, x, estimated_cdf; color, label = name)
     lines!(quantile_ax, u, estimated_quantile; color)
 end
-lines!(cdf_ax, x, cdf.(distribution, x); color = :black, linestyle = :dash, label = "Exact")
-lines!(quantile_ax, u, quantile.(distribution, u); color = :black, linestyle = :dash)
+lines!(cdf_ax, x, cdf.(distribution, x); color = theme(:textcolor), linestyle = :dash, label = "Exact")
+lines!(quantile_ax, u, quantile.(distribution, u); color = theme(:textcolor), linestyle = :dash)
 Legend(cdf_fig[2, 1:2], cdf_ax; orientation = :horizontal, framevisible = false)
 
 # This file was generated using Literate.jl, https://github.com/fredrikekre/Literate.jl
