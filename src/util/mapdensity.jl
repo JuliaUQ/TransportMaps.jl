@@ -11,7 +11,7 @@ differentiation backends via DifferentiationInterface.jl.
 - `grad_logdensity<:Function`: Function computing ``\\nabla_x\\log\\pi(x)``
 - `prepared_gradient`: Optional prepared gradient for performance (can be `nothing`)
 - `isvectorized::Bool`: Whether the log-density (and gradient, if analytical) accepts matrix input
-- `threaded::Bool`: Whether to use multithreading for gradient evaluations on matrices (default: `true`)
+- `threaded::Bool`: Whether to use multithreading for row-wise density and gradient evaluations on matrices (default: `true`)
 
 # Constructors
 - `MapTargetDensity(logdensity, grad_logdensity; isvectorized=false, threaded=true)`: Provide both log-density and analytical gradient.
@@ -117,7 +117,7 @@ struct MapReferenceDensity{F <: Function, G <: Function} <: AbstractMapDensity
     function MapReferenceDensity(
             densitytype::Distributions.UnivariateDistribution = Normal()
         )
-        density = x -> sum(logpdf.(Ref(densitytype), x))
+        density = x -> sum(value -> logpdf(densitytype, value), x; init = zero(eltype(x)))
 
         # Use gradlogpdf if available, otherwise fall back to ForwardDiff
         grad_density = if hasmethod(gradlogpdf, Tuple{typeof(densitytype), Float64})
@@ -145,32 +145,34 @@ Evaluate the log-density at point(s) `x`.
 # Returns
 - Scalar log-density value for vector input, or vector of log-densities for matrix input
 """
-logpdf(density::AbstractMapDensity, x::Vector{<:Real}) = density.logdensity(x)
+logpdf(density::AbstractMapDensity, x::AbstractVector{<:Real}) = density.logdensity(x)
 
 logpdf(density::AbstractMapDensity, x::Real) = logpdf(density, [x])
+logpdf(density::MapReferenceDensity, x::Real) = logpdf(density.densitytype, x)
 
-function logpdf(density::MapTargetDensity, X::Matrix{<:Real})
-
+function logpdf(density::MapTargetDensity, X::AbstractMatrix{<:Real})
     if density.isvectorized
         return density.logdensity(X)
-
     else
-        n = size(X, 1)
-        logdensities = zeros(Float64, n)
-
-        Threads.@threads for i in 1:n
-            logdensities[i] = density.logdensity(view(X, i, :))
-        end
-        return logdensities
+        return _batch_logpdf(density.logdensity, X, density.threaded)
     end
 end
 
-function logpdf(density::MapReferenceDensity, X::Matrix{<:Real})
-    n = size(X, 1)
-    logdensities = zeros(Float64, n)
+function logpdf(density::MapReferenceDensity, X::AbstractMatrix{<:Real})
+    return _batch_logpdf(density.logdensity, X, true)
+end
 
-    Threads.@threads for i in 1:n
-        logdensities[i] = density.logdensity(view(X, i, :))
+function _batch_logpdf(logdensity, X, threaded)
+    n = size(X, 1)
+    logdensities = Vector{Float64}(undef, n)
+    if threaded && Threads.nthreads() > 1
+        Threads.@threads for i in 1:n
+            logdensities[i] = logdensity(view(X, i, :))
+        end
+    else
+        for i in 1:n
+            logdensities[i] = logdensity(view(X, i, :))
+        end
     end
     return logdensities
 end
@@ -187,39 +189,84 @@ Evaluate the gradient of log-density at point(s) `x`.
 # Returns
 - Gradient vector for vector input, or matrix of gradients (one per row) for matrix input
 """
-grad_logpdf(density::AbstractMapDensity, x::Vector{<:Real}) = density.grad_logdensity(x)
+grad_logpdf(density::AbstractMapDensity, x::AbstractVector{<:Real}) = density.grad_logdensity(x)
 
-function grad_logpdf(density::MapTargetDensity, X::Matrix{<:Real})
-
-    if density isa MapTargetDensity && density.isvectorized && isnothing(density.ad_backend)
+function grad_logpdf(density::MapTargetDensity, X::AbstractMatrix{<:Real})
+    if density.isvectorized && isnothing(density.ad_backend)
         return density.grad_logdensity(X)
+    elseif !isnothing(density.prepared_gradient)
+        return _batch_density_gradient(density, X, density.threaded)
     else
-        n, d = size(X)
-        log_gradients = zeros(Float64, n, d)
-
-        if density.threaded
-            Threads.@threads for i in 1:n
-                log_gradients[i, :] = density.grad_logdensity(X[i, :])
-            end
-        else
-            for i in 1:n
-                log_gradients[i, :] = density.grad_logdensity(X[i, :])
-            end
-        end
-
-        return log_gradients
+        return _batch_density_gradient(density.grad_logdensity, X, density.threaded)
     end
 end
 
-function grad_logpdf(density::MapReferenceDensity, X::Matrix{<:Real})
-    n, d = size(X)
-    log_gradients = zeros(Float64, n, d)
+function grad_logpdf(density::MapReferenceDensity, X::AbstractMatrix{<:Real})
+    return _reference_density_gradient(density.densitytype, density.grad_logdensity, X)
+end
 
-    Threads.@threads for i in 1:n
-        log_gradients[i, :] = density.grad_logdensity(X[i, :])
+function _reference_density_gradient(distribution, gradient, X)
+    # These references are products of univariate distributions. Their analytic
+    # scores can be broadcast directly over the matrix without copying rows or
+    # allocating an intermediate gradient vector for every sample.
+    if hasmethod(gradlogpdf, Tuple{typeof(distribution), Float64})
+        output = Matrix{Float64}(undef, size(X))
+        output .= gradlogpdf.(Ref(distribution), X)
+        return output
     end
+    return _batch_density_gradient(gradient, X, true)
+end
 
+function _batch_density_gradient(gradient, X, threaded)
+    n, d = size(X)
+    log_gradients = Matrix{Float64}(undef, n, d)
+    n == 0 && return log_gradients
+
+    if threaded && Threads.nthreads() > 1
+        n_chunks = min(n, Threads.nthreads())
+        Threads.@threads for chunk in 1:n_chunks
+            first_row = fld((chunk - 1) * n, n_chunks) + 1
+            last_row = fld(chunk * n, n_chunks)
+            _density_gradient_rows!(log_gradients, gradient, X, first_row:last_row)
+        end
+    else
+        _density_gradient_rows!(log_gradients, gradient, X, 1:n)
+    end
     return log_gradients
+end
+
+function _density_gradient_rows!(output, gradient, X, rows)
+    # A task owns this buffer, so task migration cannot create a race. Keeping a
+    # Vector also preserves callbacks/prepared AD backends requiring Vector input.
+    point = Vector{eltype(X)}(undef, size(X, 2))
+    for i in rows
+        copyto!(point, view(X, i, :))
+        values = gradient(point)
+        length(values) == length(point) || throw(DimensionMismatch("Density gradient must match the point dimension"))
+        copyto!(view(output, i, :), values)
+    end
+    return output
+end
+
+function _density_gradient_rows!(
+        output, density::MapTargetDensity{F, B, G, P}, X, rows,
+    ) where {F, B, G, P <: DifferentiationInterface.GradientPrep}
+    point = Vector{eltype(X)}(undef, size(X, 2))
+    score = Vector{Float64}(undef, length(point))
+    copyto!(point, view(X, first(rows), :))
+    # DifferentiationInterface preparations contain mutable caches. Give each
+    # parallel task its own preparation; serial calls reuse the existing one.
+    prep = if density.threaded && Threads.nthreads() > 1
+        DifferentiationInterface.prepare_gradient(density.logdensity, density.ad_backend, point)
+    else
+        density.prepared_gradient
+    end
+    for i in rows
+        copyto!(point, view(X, i, :))
+        DifferentiationInterface.gradient!(density.logdensity, score, prep, density.ad_backend, point)
+        copyto!(view(output, i, :), score)
+    end
+    return output
 end
 
 """
@@ -237,11 +284,11 @@ Evaluate the probability density at point(s) `x`.
 # Note
 This computes `exp(logpdf(density, x))`. For numerical stability, prefer using `logpdf` when possible.
 """
-pdf(density::AbstractMapDensity, x::Vector{<:Real}) = exp(logpdf(density, x))
+pdf(density::AbstractMapDensity, x::AbstractVector{<:Real}) = exp(logpdf(density, x))
 
-pdf(density::AbstractMapDensity, x::Real) = pdf(density, [x])
+pdf(density::AbstractMapDensity, x::Real) = exp(logpdf(density, x))
 
-pdf(density::AbstractMapDensity, X::Matrix{<:Real}) = exp.(logpdf(density, X))
+pdf(density::AbstractMapDensity, X::AbstractMatrix{<:Real}) = exp.(logpdf(density, X))
 
 function Base.show(io::IO, target::MapTargetDensity)
     backend_str = target.ad_backend === nothing ? "analytical" : string(target.ad_backend)

@@ -161,7 +161,7 @@ Returns a vector where each component i is Mⁱ(z₁,...,zᵢ).
 function evaluate(M::PolynomialMap, z::AbstractVector{<:Real})
     @assert length(M.components) == length(z) "Number of components must match the dimension of z"
 
-    return [evaluate(component, z[1:i]) for (i, component) in enumerate(M.components)]
+    return [evaluate(component, view(z, 1:i)) for (i, component) in enumerate(M.components)]
 end
 
 """
@@ -182,8 +182,9 @@ function evaluate(M::PolynomialMap, Z::AbstractMatrix{<:Real})
 
     # Use multithreading to evaluate each point
     Threads.@threads for i in 1:n_points
-        z_point = Z[i, :]
-        results[i, :] = evaluate(M, z_point)
+        for (k, component) in enumerate(M.components)
+            results[i, k] = evaluate(component, view(Z, i, 1:k))
+        end
     end
 
     return results
@@ -200,7 +201,7 @@ Return the Jacobian diagonal,
 function gradient_zk(M::PolynomialMap, z::AbstractVector{<:Real})
     @assert length(z) == length(M.components) "Dimension mismatch: z and components must have same length"
     # Compute the derivatives ∂Mᵏ/∂zₖ for each component
-    return [partial_derivative_zk(component, z[1:i]) for (i, component) in enumerate(M.components)]
+    return [partial_derivative_zk(component, view(z, 1:i)) for (i, component) in enumerate(M.components)]
 end
 
 
@@ -223,7 +224,7 @@ function gradient_zk(M::PolynomialMap, Z::AbstractMatrix{<:Real})
 
     # Use multithreading to compute gradient for each point
     Threads.@threads for i in 1:n_points
-        z_point = Z[i, :]
+        z_point = @view Z[i, :]
         results[i, :] = gradient_zk(M, z_point)
     end
 
@@ -284,7 +285,7 @@ function gradient_coefficients(M::PolynomialMap, z::AbstractVector{<:Real})
 
         # For component i, compute gradient with respect to its own coefficients
         # This gives ∂Mⁱ/∂cᵢⱼ for all j in component i
-        component_grad = gradient_coefficients(component, z[1:i])
+        component_grad = gradient_coefficients(component, view(z, 1:i))
 
         # Fill in the gradient matrix
         gradient_matrix[i, coeff_offset:(coeff_offset + n_component_coeffs - 1)] = component_grad
@@ -318,7 +319,7 @@ function gradient_coefficients(M::PolynomialMap, Z::AbstractMatrix{<:Real})
 
     # Use multithreading to compute gradient for each point
     Threads.@threads for i in 1:n_points
-        z_point = Z[i, :]
+        z_point = @view Z[i, :]
         results[i, :, :] = gradient_coefficients(M, z_point)
     end
 
@@ -359,7 +360,7 @@ function jacobian(M::PolynomialMap, Z::AbstractMatrix{<:Real})
 
     # Use multithreading to compute Jacobian for each point
     Threads.@threads for i in 1:n_points
-        z_point = Z[i, :]
+        z_point = @view Z[i, :]
         results[i] = jacobian(M, z_point)
     end
 
@@ -393,15 +394,15 @@ function jacobian_logdet_gradient(M::PolynomialMap, z::AbstractVector{<:Real})
         n_comp_coeffs = length(component.coefficients)
 
         # Compute ∂Mᵢ/∂zᵢ (diagonal element of Jacobian)
-        diagonal_deriv = partial_derivative_zk(component, z[1:i])
+        diagonal_deriv = partial_derivative_zk(component, view(z, 1:i))
 
         # Compute gradient of ∂Mᵢ/∂zᵢ with respect to component's coefficients
         # This requires the gradient of partial_derivative_xk w.r.t. coefficients
-        comp_grad = partial_derivative_zk_gradient_coefficients(component, z[1:i])
+        comp_grad = partial_derivative_zk_gradient_coefficients(component, view(z, 1:i))
 
         # Add contribution: (1/diagonal_deriv) * comp_grad
         coeff_range = coeff_offset:(coeff_offset + n_comp_coeffs - 1)
-        gradient[coeff_range] += comp_grad / diagonal_deriv
+        @views gradient[coeff_range] .+= comp_grad ./ diagonal_deriv
 
         coeff_offset += n_comp_coeffs
     end
@@ -425,7 +426,7 @@ function jacobian_logdet_gradient(M::PolynomialMap, Z::AbstractMatrix{<:Real})
     results = Matrix{Float64}(undef, n_points, n_coeffs)
 
     Threads.@threads for i in 1:n_points
-        z_point = Z[i, :]
+        z_point = @view Z[i, :]
         results[i, :] = jacobian_logdet_gradient(M, z_point)
     end
 
@@ -444,8 +445,8 @@ function inverse(M::PolynomialMap, x::AbstractVector{<:Real}, k::Int = numberdim
 
     # Initialize the inverse map
     z = Vector{Float64}(undef, k)
-    for (i, component) in enumerate(M.components[1:k])
-        z[i] = inverse(component, z[1:(i - 1)], x[i])
+    for (i, component) in enumerate(view(M.components, 1:k))
+        z[i] = inverse(component, view(z, 1:(i - 1)), x[i])
     end
 
     return z
@@ -468,7 +469,7 @@ function inverse(M::PolynomialMap, X::AbstractMatrix{<:Real}, k::Int = numberdim
 
     # Use multithreading to compute inverse for each point
     Threads.@threads for i in 1:n_points
-        x_point = X[i, :]
+        x_point = @view X[i, :]
         results[i, :] = inverse(M, x_point, k)
     end
 
@@ -508,7 +509,7 @@ function inverse_jacobian(M::PolynomialMap, X::AbstractMatrix{<:Real})
 
     # Use multithreading to compute inverse Jacobian for each point
     Threads.@threads for i in 1:n_points
-        x_point = X[i, :]
+        x_point = @view X[i, :]
         results[i] = inverse_jacobian(M, x_point)
     end
 
@@ -561,7 +562,7 @@ function pullback(M::PolynomialMap, X::AbstractMatrix{<:Real})
 
     # Use multithreading to compute pullback for each point
     Threads.@threads for i in 1:n_points
-        x_point = X[i, :]
+        x_point = @view X[i, :]
         results[i] = pullback(M, x_point)
     end
 
@@ -608,7 +609,7 @@ function pushforward(M::PolynomialMap, target::MapTargetDensity, Z::AbstractMatr
 
     # Use multithreading to compute pushforward for each point
     Threads.@threads for i in 1:n_points
-        z_point = Z[i, :]
+        z_point = @view Z[i, :]
         results[i] = pushforward(M, target, z_point)
     end
 
@@ -626,7 +627,7 @@ Coefficients are ordered by component:
 function setcoefficients!(M::PolynomialMap, coefficients::AbstractVector{<:Real})
     counter = 1
     for component in M.components
-        setcoefficients!(component, coefficients[counter:(counter + length(component.basisfunctions) - 1)])
+        setcoefficients!(component, view(coefficients, counter:(counter + length(component.basisfunctions) - 1)))
         counter += length(component.basisfunctions)
     end
     return nothing

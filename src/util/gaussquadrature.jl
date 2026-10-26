@@ -2,12 +2,15 @@
 
 """
     gaussquadrature(fun::Function, n::Int, a::Real, b::Real)
+    gaussquadrature(fun, rule::Tuple{AbstractVector, AbstractVector}, a::Real, b::Real)
 
 Numerically integrates the function `fun` over the interval `[a, b]` using the Gauss-Legendre quadrature rule with `n` points.
 
 # Arguments
 - `fun::Function`: The function to integrate. Should accept a single `Float64` argument.
 - `n::Int`: The number of quadrature points to use.
+- `rule`: Alternatively, reuse the `(points, weights)` returned by `gausslegendre(n)`
+  on `[-1, 1]`. The rule is read-only and can be shared by concurrent calls.
 - `a::Real`: The lower bound of the integration interval.
 - `b::Real`: The upper bound of the integration interval.
 
@@ -16,19 +19,26 @@ Numerically integrates the function `fun` over the interval `[a, b]` using the G
 
 """
 function gaussquadrature(
-        fun::Function,
+        fun::F,
         n::Int,
         a::Real,
         b::Real
-    )
-    # Get Gauss-Legendre points and weights for the interval [-1, 1]
-    (points, weights) = gausslegendre(n)
+    ) where {F}
+    return gaussquadrature(fun, gausslegendre(n), a, b)
+end
 
-    # Change of variable from [-1, 1] to [a, b], vectorized computation
+function gaussquadrature(
+        fun::F,
+        rule::Tuple{AbstractVector, AbstractVector},
+        a::Real,
+        b::Real,
+    ) where {F}
+    points, weights = rule
+    length(points) == length(weights) || throw(DimensionMismatch("Quadrature nodes and weights must have equal lengths"))
     scale = 0.5 * (b - a)
     shift = 0.5 * (a + b)
-    x_transformed = muladd.(points, scale, shift)  # fused multiply-add for efficiency
-    integral_result = dot(weights, fun.(x_transformed)) * scale
-
-    return integral_result
+    # Preserve the empty-rule behavior without evaluating the integrand.
+    isempty(points) && return dot(weights, fun.(muladd.(points, scale, shift))) * scale
+    # Reduce weighted values directly: no transformed-node or function-value arrays.
+    return sum(q -> weights[q] * fun(muladd(points[q], scale, shift)), eachindex(points, weights)) * scale
 end

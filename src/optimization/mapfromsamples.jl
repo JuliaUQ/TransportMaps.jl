@@ -1,11 +1,11 @@
 # The two-argument methods retain the original standard-normal default.
-objective(component::PolynomialMapComponent, samples::Matrix{Float64}) =
+objective(component::PolynomialMapComponent, samples::AbstractMatrix{Float64}) =
     objective(component, MapReferenceDensity(), samples)
 
 objective(component::PolynomialMapComponent, precomp::PrecomputedBasis) =
     objective(component, MapReferenceDensity(), precomp)
 
-objective_gradient!(component::PolynomialMapComponent, samples::Matrix{Float64}) =
+objective_gradient!(component::PolynomialMapComponent, samples::AbstractMatrix{Float64}) =
     objective_gradient!(component, MapReferenceDensity(), samples)
 
 objective_gradient!(component::PolynomialMapComponent, precomp::PrecomputedBasis) =
@@ -16,11 +16,11 @@ objective_gradient!(component::PolynomialMapComponent, precomp::PrecomputedBasis
 function objective(
         component::PolynomialMapComponent,
         reference::MapReferenceDensity,
-        samples::Matrix{Float64},
+        samples::AbstractMatrix{Float64},
     )
     M_vals = evaluate(component, samples)
     ∂M_vals = partial_derivative_zk(component, samples)
-    return -logpdf(reference, M_vals) - sum(log.(abs.(∂M_vals)))
+    return -logpdf(reference, M_vals) - sum(x -> log(abs(x)), ∂M_vals; init = 0.0)
 end
 
 function objective(
@@ -31,20 +31,20 @@ function objective(
     c = component.coefficients
     M_vals = evaluate_M(precomp, c, component.rectifier)
     ∂M_vals = evaluate_∂M(precomp, c, component.rectifier)
-    return -logpdf(reference, M_vals) - sum(log.(abs.(∂M_vals)))
+    return -logpdf(reference, M_vals) - sum(x -> log(abs(x)), ∂M_vals; init = 0.0)
 end
 
 function objective_gradient!(
         component::PolynomialMapComponent,
         reference::MapReferenceDensity,
-        samples::Matrix{Float64},
+        samples::AbstractMatrix{Float64},
     )
     M_vals = evaluate(component, samples)
     negative_scores = -grad_logpdf(reference, M_vals)
     grad = zeros(Float64, length(component.coefficients))
 
     @inbounds for i in axes(samples, 1)
-        z = samples[i, :]
+        z = @view samples[i, :]
         ∂M = partial_derivative_zk(component, z)
         ∂M_∂c = gradient_coefficients(component, z)
         ∂∂M_∂c = partial_derivative_zk_gradient_coefficients(component, z)
@@ -62,16 +62,9 @@ function _map_coefficient_gradient!(
         precomp::PrecomputedBasis,
         sample_index::Int,
     )
-    c = component.coefficients
-    copyto!(gradient, view(precomp.Ψ₀, sample_index, :))
-    scale = precomp.quad_scales[sample_index]
-
-    @inbounds for q in 1:precomp.n_quad
-        ∂f = dot(view(precomp.∂Ψ_quad, sample_index, q, :), c)
-        weight = precomp.quad_weights[q] * derivative(component.rectifier, ∂f) * scale
-        gradient .+= weight .* view(precomp.∂Ψ_quad, sample_index, q, :)
-    end
-    return gradient
+    return _map_coefficient_gradient!(
+        gradient, precomp, component.coefficients, component.rectifier, sample_index,
+    )
 end
 
 # Return ∂Mᵏ(xⁱ)/∂c for one sample from a precomputed basis.
@@ -89,23 +82,58 @@ function objective_gradient!(
         reference::MapReferenceDensity,
         precomp::PrecomputedBasis,
     )
-    c = component.coefficients
-    M_vals = evaluate_M(precomp, c, component.rectifier)
-    ∂M_vals = evaluate_∂M(precomp, c, component.rectifier)
-    negative_scores = -grad_logpdf(reference, M_vals)
     grad = zeros(Float64, precomp.n_basis)
+    return objective_gradient!(grad, component, reference, precomp)
+end
+
+function objective_gradient!(
+        grad::AbstractVector{Float64}, component::PolynomialMapComponent,
+        reference::MapReferenceDensity, precomp::PrecomputedBasis,
+    )
+    @assert length(grad) == precomp.n_basis "Gradient length must match number of basis functions"
+    return _sample_objective_gradient!(
+        grad, precomp, component.coefficients, component.rectifier, reference,
+    )
+end
+
+function _sample_objective_gradient!(grad, precomp, c, rectifier, reference)
+    M_vals = evaluate_M(precomp, c, rectifier)
+    ∂M_vals = evaluate_∂M(precomp, c, rectifier)
+    negative_scores = -grad_logpdf(reference, M_vals)
+    fill!(grad, 0.0)
     map_gradient = similar(grad)
 
     @inbounds for i in 1:precomp.n_samples
-        _map_coefficient_gradient!(map_gradient, component, precomp, i)
+        _map_coefficient_gradient!(map_gradient, precomp, c, rectifier, i)
         grad .+= negative_scores[i] .* map_gradient
 
         ∂f_at_z = dot(view(precomp.∂Ψ_z, i, :), c)
-        g_prime_at_z = derivative(component.rectifier, ∂f_at_z)
+        g_prime_at_z = derivative(rectifier, ∂f_at_z)
         denom = max(abs(∂M_vals[i]), eps()) * (signbit(∂M_vals[i]) ? -1.0 : 1.0)
         grad .-= (g_prime_at_z / denom) .* view(precomp.∂Ψ_z, i, :)
     end
     return grad
+end
+
+# Optim may request a value, gradient, or both. The combined callback reuses the
+# same quadrature products and map values for all requested quantities.
+function _sample_value_gradient!(F, G, precomp, c, rectifier, reference, work)
+    _evaluate_basis!(work, precomp, c, rectifier)
+    if G !== nothing
+        scores = grad_logpdf(reference, work.values)
+        work.sample_factors .= .-scores
+        _contract_basis_gradient!(G, work, precomp, rectifier)
+        @inbounds for i in 1:precomp.n_samples
+            diagonal = rectifier(work.diagonal[i])
+            denominator = max(abs(diagonal), eps()) * (signbit(diagonal) ? -1.0 : 1.0)
+            work.sample_factors[i] = -derivative(rectifier, work.diagonal[i]) / denominator
+        end
+        mul!(G, transpose(precomp.∂Ψ_z), work.sample_factors, 1.0, 1.0)
+    end
+    if F !== nothing
+        return -logpdf(reference, work.values) - sum(x -> log(abs(rectifier(x))), work.diagonal; init = 0.0)
+    end
+    return nothing
 end
 
 _default_sample_optimizer(reference::MapReferenceDensity) =
@@ -134,7 +162,7 @@ _inverse_rectifier(::IdentityRectifier, value::Real) = value
 # Construct an affine, strictly feasible starting map for a uniform reference.
 function _initialize_uniform_component!(
         component::PolynomialMapComponent,
-        samples::Matrix{Float64},
+        samples::AbstractMatrix{Float64},
         reference::Uniform,
     )
     lower, upper = extrema(reference)
@@ -172,7 +200,7 @@ end
 
 """
     optimize!(
-        M::PolynomialMap, samples::Matrix{Float64}, lm::AbstractLinearMap = LinearMap();
+        M::PolynomialMap, samples::AbstractMatrix{Float64}, lm::AbstractLinearMap = LinearMap();
         optimizer::Optim.AbstractOptimizer = _default_sample_optimizer(M.reference),
         options::Optim.Options = Optim.Options(),
         test_fraction::Float64 = 0.0
@@ -195,7 +223,7 @@ If ``\\rho`` is uniform on ``[a,b]^d``, the fit additionally enforces
 
 # Arguments
 - `M::PolynomialMap`: The polynomial map to optimize.
-- `samples::Matrix{Float64}`: A matrix of sample data used to initialize and fit the map. Columns are interpreted as components/dimensions and rows as individual sample points.
+- `samples::AbstractMatrix{Float64}`: A matrix of sample data used to initialize and fit the map. Columns are interpreted as components/dimensions and rows as individual sample points.
 - `lm::AbstractLinearMap`: A linear map used to standardize the samples before optimization (default: `LinearMap()`, identity map).
 
 # Keyword Arguments
@@ -209,7 +237,7 @@ If ``\\rho`` is uniform on ``[a,b]^d``, the fit additionally enforces
 """
 function optimize!(
         M::PolynomialMap,
-        samples::Matrix{Float64},
+        samples::AbstractMatrix{Float64},
         lm::AbstractLinearMap = LinearMap();
         optimizer::Optim.AbstractOptimizer = _default_sample_optimizer(M.reference),
         options::Optim.Options = Optim.Options(),
@@ -233,14 +261,14 @@ function optimize!(
         component = M[k]
         @debug "Optimizing component $(k) / $(numberdimensions(M))"
 
-        component_samples = train_samples[:, 1:k]
+        component_samples = @view train_samples[:, 1:k]
         if M.reference.densitytype isa Uniform
             _initialize_uniform_component!(component, component_samples, M.reference.densitytype)
         end
 
         # Precompute basis evaluations for this component
         train_precomp = PrecomputedBasis(component, component_samples)
-        test_precomp = !isempty(test_samples) ? PrecomputedBasis(component, test_samples[:, 1:k]) : nothing
+        test_precomp = !isempty(test_samples) ? PrecomputedBasis(component, view(test_samples, :, 1:k)) : nothing
 
         res = optimize!(component, M.reference, train_precomp, optimizer, options)
 
@@ -257,7 +285,7 @@ end
 # Optimize a single map component (original interface, for backwards compatibility)
 function optimize!(
         component::PolynomialMapComponent,
-        samples::Matrix{Float64},
+        samples::AbstractMatrix{Float64},
         optimizer::Optim.AbstractOptimizer,
         options::Optim.Options
     )
@@ -293,19 +321,15 @@ function optimize!(
         )
     end
 
-    obj_fun = c -> begin
+    work = _BasisWorkspace(precomp)
+    fg! = (F, G, c) -> begin
         setcoefficients!(component, c)
-        objective(component, reference, precomp)
-    end
-
-    grad_fun! = (g, c) -> begin
-        setcoefficients!(component, c)
-        grad = objective_gradient!(component, reference, precomp)
-        g .= grad
+        _sample_value_gradient!(F, G, precomp, c, component.rectifier, reference, work)
     end
 
     initial_coefficients = getcoefficients(component)
-    result = optimize(obj_fun, grad_fun!, initial_coefficients, optimizer, options)
+    objective = OnceDifferentiable(Optim.NLSolversBase.only_fg!(fg!), initial_coefficients)
+    result = optimize(objective, initial_coefficients, optimizer, options)
 
     if !Optim.converged(result)
         @warn "Optimization has not converged."
@@ -389,12 +413,12 @@ function _optimize_uniform_component!(
     obj_fun = c -> begin
         setcoefficients!(component, c)
         ∂M_vals = evaluate_∂M(precomp, c, component.rectifier)
-        precomp.n_samples * log(width) - sum(log.(abs.(∂M_vals)))
+        precomp.n_samples * log(width) - sum(x -> log(abs(x)), ∂M_vals)
     end
 
     grad_fun! = (g, c) -> begin
         setcoefficients!(component, c)
-        g .= objective_gradient!(component, reference, precomp)
+        objective_gradient!(g, component, reference, precomp)
     end
 
     constraint_fun! = (values, c) -> begin
@@ -450,7 +474,7 @@ function _optimize_uniform_component!(
 end
 
 # Helper function to create train/test split
-function _test_train_split(samples::Matrix{Float64}, test_fraction::Float64)
+function _test_train_split(samples::AbstractMatrix{Float64}, test_fraction::Float64)
     @assert 0.0 <= test_fraction < 1.0 "test_fraction must be in [0, 1)"
     n_points = size(samples, 1)
 
