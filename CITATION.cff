@@ -26,6 +26,5 @@ keywords:
   - measure transport
   - Bayesian inference
 license: MIT
-commit: 5adcc33
-version: 0.1.5
-date-released: '2026-03-10'
+version: 0.2.0
+date-released: '2026-10-26'
