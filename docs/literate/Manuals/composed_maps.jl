@@ -66,8 +66,8 @@
 # The following chain applies a linear standardization followed by two polynomial
 # maps. These constructors initialize the layers; fitting is a separate operation.
 
-using TransportMaps, Distributions
-using CairoMakie, LaTeXStrings, Random # hide
+using TransportMaps, Distributions, Optim
+using CairoMakie, LaTeXStrings, Random, Statistics # hide
 set_theme!(transportmap_theme()) # hide
 #md using Main.DocPlots: save_docplot # hide
 
@@ -118,104 +118,130 @@ C_with_reference = ComposedMap(L, P, R; forwarddirection = :reference, reference
 # are accepted directly. Inferred direction and reference metadata follow later
 # changes to the underlying layers.
 #
-# ## Following Three Maps
+# ## Sequential Inference from Three Observations
 #
-# Consider three explicit maps, with ``a=1.2``, ``b=0.7``, ``c=0.45``,
-# ``\gamma=0.08``, and ``\eta=0.3``:
+# Start with a standard-normal prior on two unknown parameters,
+# ``\theta=(\theta_1,\theta_2)\sim\pi_0=\mathcal{N}(0,I_2)``. A nonlinear
+# sensor observes
 #
 # ```math
-# \begin{aligned}
-# T_1(z)&=(az_1,\;bz_2),\\
-# T_2(u)&=(u_1,\;u_2+c(u_1^2-a^2)),\\
-# T_3(v)&=(v_1+\gamma v_1^3,\;v_2+\eta v_1).
-# \end{aligned}
+# Y_n=h(\theta)+\varepsilon_n,\qquad
+# h(\theta)=\theta_2-\beta\theta_1^2,\qquad
+# \varepsilon_n\overset{\mathrm{iid}}{\sim}\mathcal{N}(0,\sigma^2).
 # ```
 #
-# The first layer changes the scales of a standard-normal reference. The second
-# is a **banana map**: it bends horizontal bands into parabolas. Subtracting
-# ``a^2=\mathbb{E}[u_1^2]`` keeps its second coordinate centered. The third layer
-# stretches the first coordinate's tails and adds a linear shear to the second.
-# All three are globally invertible and lower triangular.
+# Take ``\beta=0.65``, ``\sigma=0.6``, and assimilate the observed values
+# ``y_1=-0.4``, ``y_2=-0.2``, and ``y_3=-0.5`` one at a time. Each observation
+# gives a likelihood ``\ell_n(\theta)=\mathcal{N}(y_n;h(\theta),\sigma^2)``.
+# The posterior after the first ``n`` observations is
 #
-# `LinearMap` evaluates ``(z-\mu)/\sigma``, so reciprocal scales implement
-# ``T_1``. For the nonlinear layers, use Hermite expansions with `ShiftedELU()`,
-# which satisfies ``g(0)=1`` and ``g(\xi)=1+\xi`` for ``\xi\geq0``.
+# ```math
+# \pi_n(\theta)\propto\pi_0(\theta)\prod_{j=1}^{n}\ell_j(\theta),
+# \qquad
+# \log\bar\pi_n(\theta)=
+# -\frac{\|\theta\|^2}{2}
+# -\sum_{j=1}^{n}\frac{(y_j-h(\theta))^2}{2\sigma^2}+\mathrm{const}.
+# ```
+#
+# The likelihood concentrates around the parabola
+# ``\theta_2=\beta\theta_1^2+y_n``, so the first posterior has a **banana shape**.
+# Later observations refine that same posterior. This small model illustrates
+# the paper's sequential construction [rubio2021](@cite); it uses its own
+# nonlinear sensor rather than the paper's mechanical simulator.
 
-a, b, c = 1.2, 0.7, 0.45
-γ, η = 0.08, 0.3
-scale_map = LinearMap(zeros(2), [1 / a, 1 / b])
-
-banana_components = [
-    PolynomialMapComponent([[0]], ShiftedELU(), HermiteBasis(), Normal()),
-    PolynomialMapComponent([[0, 0], [2, 0]], ShiftedELU(), HermiteBasis(), Normal()),
-]
-banana_map = PolynomialMap(banana_components)
-setcoefficients!(banana_map.components[2], [c * (1 - a^2), c])
-
-stretch_components = [
-    PolynomialMapComponent([[1], [3]], ShiftedELU(), HermiteBasis(), Normal()),
-    PolynomialMapComponent([[1, 0]], ShiftedELU(), HermiteBasis(), Normal()),
-]
-stretch_map = PolynomialMap(stretch_components)
-setcoefficients!(stretch_map.components[1], [3γ, γ])
-setcoefficients!(stretch_map.components[2], [η])
-
-chain = ComposedMap(scale_map, banana_map, stretch_map; forwarddirection = :target)
+β, σ = 0.65, 0.6
+observations = [-0.4, -0.2, -0.5]
+logprior(θ) = -sum(abs2, θ) / 2 - log(2π)
+sensor(θ) = θ[2] - β * θ[1]^2
+loglikelihood(θ, y) = logpdf(Normal(0, σ), y - sensor(θ))
+logposterior(θ, n) = logprior(θ) +
+    sum(loglikelihood(θ, observations[j]) for j in 1:n; init = 0.0)
 #md nothing # hide
 
-# Here ``H_2(t)=t^2-1`` and ``H_3(t)=t^3-3t``. The banana component's
-# underlying polynomial is ``c(u_1^2-a^2)`` and has zero derivative in ``u_2``,
-# so integration adds exactly ``u_2``. The stretch component's polynomial is
-# ``\gamma v_1^3``, whose derivative ``3\gamma v_1^2`` is nonnegative; its
-# rectified integral is exactly ``v_1+\gamma v_1^3``. No optimization is required
-# for these illustrative layers.
+# ### Fit One New Correction per Observation
 #
-# ### Samples and Intermediate Densities
+# Let ``T_{n-1}`` map the fixed standard-normal reference ``\rho=\pi_0`` to
+# the previous posterior approximation. Following equation (19) of the paper,
+# fit a new reference-space correction ``Q_n`` to
 #
-# Draw reference samples once and evaluate the prefixes of the chain. Each panel
-# below shows the **same observations**, with color recording their original
-# first reference coordinate. Follow the arrows clockwise from the upper left.
-# Contours show the density of each prefix, including its Jacobian factor.
+# ```math
+# r_n(z)\propto\rho(z)\,\ell_n(T_{n-1}(z)),\qquad
+# T_n=T_{n-1}\circ Q_n.
+# ```
+#
+# The old transport is kept fixed. Only the current likelihood enters this
+# correction target: earlier observations are already represented by
+# ``T_{n-1}``. Because the new correction acts **before** the old transport,
+# it is prepended in the constructor's evaluation order.
+
+function assimilate_observation(previous, observation, quadrature; degree = 5)
+    update_target = MapTargetDensity(
+        z -> logprior(z) + loglikelihood(evaluate(previous, z), observation),
+    )
+    correction = PolynomialMap(2, degree, Normal(), ShiftedELU(), HermiteBasis())
+    result = optimize!(
+        correction, update_target, quadrature;
+        options = Optim.Options(iterations = 250, g_tol = 1.0e-7), δ = 0.0,
+    )
+    posterior = ComposedMap(correction, previous; forwarddirection = :target)
+    return posterior, result
+end
+
+prior_map = ComposedMap(LinearMap(2); forwarddirection = :target)
+posterior_maps = ComposedMap[prior_map]
+fit_results = []
+quadrature = GaussHermiteWeights(4, 2)
+
+for observation in observations
+    posterior, result = assimilate_observation(posterior_maps[end], observation, quadrature)
+    push!(posterior_maps, posterior)
+    push!(fit_results, result)
+end
+#md nothing # hide
+
+# There are three fitted corrections. Starting from the identity prior map,
+# ``T_1=Q_1``, ``T_2=Q_1\circ Q_2``, and
+# ``T_3=Q_1\circ Q_2\circ Q_3``. The stored maps are snapshots after each data
+# update; they are not the intermediate coordinates of a single forward
+# evaluation of ``T_3``. Each fit starts with a fresh identity-initialized
+# polynomial map: zero coefficients and `ShiftedELU()` give ``g(0)=1``.
+# The quadrature integrates the reference density and uses no posterior samples.
+#
+# The likelihood-only update is exact when the previous transport is exact.
+# With fitted maps it also carries forward their approximation error; the
+# [Sequential Fitting](@ref) section below gives the full pulled-back target.
+# Here we check the approximation against the posterior using **all** observed
+# likelihoods, rather than treating the fitted density as ground truth.
+#
+# ### Prior and Successive Posteriors
+#
+# Draw reference samples once. In panel ``n``, plot ``T_n(z_i)`` for those same
+# reference draws; color identifies the original first reference coordinate.
+# The arrows denote assimilation of observations 1, 2, and 3, clockwise from
+# the prior in the upper left. Each posterior map is evaluated on the original
+# reference samples, not on the preceding panel's transported samples.
 
 reference_samples = randn(MersenneTwister(42), 1200, 2)
-prefixes = (
-    ComposedMap(LinearMap(2); forwarddirection = :target),
-    ComposedMap(scale_map; forwarddirection = :target),
-    ComposedMap(scale_map, banana_map; forwarddirection = :target),
-    chain,
-)
-stage_samples = map(M -> evaluate(M, reference_samples), prefixes)
+stage_samples = map(M -> evaluate(M, reference_samples), posterior_maps)
 #md nothing # hide
 
-stage_titles = ("Reference", "1. Scale", "2. Banana", "3. Stretch") # hide
+stage_titles = ("Prior", "Posterior 1", "Posterior 2", "Posterior 3") # hide
 stage_locations = ((1, 1), (1, 3), (3, 3), (3, 1)) # hide
 stage_colors = clamp.(reference_samples[:, 1], -2.5, 2.5) # hide
-grid_coordinate = range(-2.5, 2.5; length = 81) # hide
-grid_boundary = vcat( # hide
-    hcat(grid_coordinate, fill(-2.5, length(grid_coordinate))), # hide
-    hcat(grid_coordinate, fill(2.5, length(grid_coordinate))), # hide
-    hcat(fill(-2.5, length(grid_coordinate)), grid_coordinate), # hide
-    hcat(fill(2.5, length(grid_coordinate)), grid_coordinate), # hide
-) # hide
-stage_limits = map(prefixes) do M # hide
-    boundary = evaluate(M, grid_boundary) # hide
-    lo, hi = vec(minimum(boundary; dims = 1)), vec(maximum(boundary; dims = 1)) # hide
-    margin = 0.08 .* (hi .- lo) # hide
-    (lo[1] - margin[1], hi[1] + margin[1], lo[2] - margin[2], hi[2] + margin[2]) # hide
-end # hide
-stage_density_grids = map(zip(prefixes, stage_limits)) do (M, limits) # hide
-    xs = range(limits[1], limits[2]; length = 65) # hide
-    ys = range(limits[3], limits[4]; length = 65) # hide
-    points = [Float64[x, y] for x in xs, y in ys] # hide
-    density = reshape(pdf(M, reduce(vcat, permutedims.(vec(points)))), length(xs), length(ys)) # hide
+plot_limits = (-2.7, 2.7, -2.0, 3.0) # hide
+stage_density_grids = map(0:length(observations)) do n # hide
+    xs = range(plot_limits[1], plot_limits[2]; length = 101) # hide
+    ys = range(plot_limits[3], plot_limits[4]; length = 101) # hide
+    logdensity = [logposterior([x, y], n) for x in xs, y in ys] # hide
+    density = exp.(logdensity .- maximum(logdensity)) # hide
     (; xs, ys, density) # hide
 end # hide
-function chain_plot_frame() # hide
+function sequential_plot_frame() # hide
     fig = Figure(size = (600, 650)) # hide
-    panels = map(eachindex(prefixes)) do k # hide
+    panels = map(eachindex(posterior_maps)) do k # hide
         row, col = stage_locations[k] # hide
-        ax = Axis(fig[row, col]; title = stage_titles[k], xlabel = L"u_{%$(k - 1),1}", ylabel = L"u_{%$(k - 1),2}", aspect = DataAspect()) # hide
-        limits!(ax, stage_limits[k]...) # hide
+        ax = Axis(fig[row, col]; title = stage_titles[k], xlabel = L"\theta_1", ylabel = L"\theta_2", aspect = DataAspect()) # hide
+        limits!(ax, plot_limits...) # hide
         ax # hide
     end # hide
     Label(fig[1, 2], L"\longrightarrow"; fontsize = 24, tellwidth = false, tellheight = false) # hide
@@ -233,52 +259,69 @@ function chain_plot_frame() # hide
 end # hide
 
 #md save_docplot("composed-map-samples.svg") do # hide
-fig, panels = chain_plot_frame() # hide
-for k in eachindex(prefixes) # hide
+fig, panels = sequential_plot_frame() # hide
+for k in eachindex(posterior_maps) # hide
     grid = stage_density_grids[k] # hide
-    contour!(panels[k], grid.xs, grid.ys, grid.density; levels = [0.1, 0.35, 0.7] .* maximum(grid.density), color = (theme(:textcolor)[], 0.65), linewidth = 1.4) # hide
+    contour!(panels[k], grid.xs, grid.ys, grid.density; levels = [0.1, 0.35, 0.7], color = (theme(:textcolor)[], 0.65), linewidth = 1.4) # hide
     scatter!(panels[k], stage_samples[k][:, 1], stage_samples[k][:, 2]; color = stage_colors, colormap = :viridis, markersize = 2.5, colorrange = (-2.5, 2.5)) # hide
 end # hide
 #md     fig # hide
 #md end # hide
-# ![The same reference samples passing through scaling, a banana map, and a nonlinear stretch, with intermediate density contours](composed-map-samples.svg)
+# ![Prior samples and successive posterior approximations after observations 1, 2, and 3, over exact Bayesian density contours](composed-map-samples.svg)
 #
-# The axes focus on the image of the reference square ``[-2.5,2.5]^2`` with
-# a small margin; samples outside those view limits are clipped. Each panel
-# uses its own coordinate limits. Colors identify corresponding observations
-# across panels rather than density values.
+# Contours come directly from ``\bar\pi_n``, at 10%, 35%, and 70% of its peak
+# on the plotting grid. Their levels do not require the normalizing constant.
+# All four panels use the same physical coordinates and limits, so contraction
+# across observations is visible. Samples outside the displayed limits are
+# clipped; colors indicate corresponding reference draws, not density values.
 #
-# ### Deformation of a Reference Grid
+# ### How Each Data Update Changes the Transport
 #
-# The second figure follows the same regular reference grid through all three
-# prefixes. Each panel is the image of the **original grid under the cumulative
-# map**, rather than a newly generated grid in that panel's coordinates.
+# Transport the same regular reference grid with each stored map ``T_n``. The
+# first update bends it toward the banana posterior; the next two updates
+# refine the posterior as new observations arrive. Each panel shows a complete
+# reference-to-parameter map after the indicated observation, rather than the
+# isolated correction ``Q_n``.
 
+grid_coordinate = range(-2.5, 2.5; length = 81) # hide
 #md save_docplot("composed-map-grid.svg") do # hide
-fig, panels = chain_plot_frame() # hide
-for k in eachindex(prefixes) # hide
-    mappingplot!(panels[k], prefixes[k], (grid_coordinate, grid_coordinate); gridlines = 9, color = :steelblue, linewidth = 1.5) # hide
+fig, panels = sequential_plot_frame() # hide
+for k in eachindex(posterior_maps) # hide
+    mappingplot!(panels[k], posterior_maps[k], (grid_coordinate, grid_coordinate); gridlines = 9, color = :steelblue, linewidth = 1.5) # hide
 end # hide
 #md     fig # hide
 #md end # hide
-# ![A reference grid propagated through the three-map chain, showing the banana bend and subsequent nonlinear stretch](composed-map-grid.svg)
+# ![A reference grid mapped to the prior and successive posteriors as three observations are assimilated](composed-map-grid.svg)
 #
-# For this example the final map and determinant are available explicitly:
+# ### Checking the Accumulated Approximation
+#
+# Use independent reference draws to evaluate the full-posterior log-density
+# ratio. It is constant for an exact transport, even when the target density
+# is known only up to normalization:
 #
 # ```math
-# \begin{aligned}
-# C(z)&=\left(
-# az_1+\gamma a^3z_1^3,\;
-# bz_2+ca^2(z_1^2-1)+\eta az_1
-# \right),\\
-# \det DC(z)&=ab(1+3\gamma a^2z_1^2)>0.
-# \end{aligned}
+# V_n=\tfrac12\operatorname{Var}_{Z\sim\rho}\!\left[
+# \log\bar\pi_n(T_n(Z))+\log|\det DT_n(Z)|-\log\rho(Z)
+# \right].
 # ```
+
+validation_samples = randn(MersenneTwister(123), 2000, 2)
+posterior_diagnostics = map(eachindex(observations)) do n
+    transport = posterior_maps[n + 1]
+    parameters = evaluate(transport, validation_samples)
+    logratios = [logposterior(θ, n) for θ in eachrow(parameters)] .+
+        logabsdetjacobian(transport, validation_samples) .-
+        [logprior(z) for z in eachrow(validation_samples)]
+    var(logratios) / 2
+end
+#md nothing # hide
+
+#md using Markdown # hide
+#md Markdown.parse("| Observations assimilated | Variance diagnostic |\n|:--|--:|\n" * join(["| $n | $(round(posterior_diagnostics[n]; sigdigits = 3)) |" for n in eachindex(observations)], "\n")) # hide
 #
-# The banana layer has determinant one: it bends the contours while preserving
-# area. Scaling changes area by ``ab``, and the last layer adds a spatially
-# varying factor ``1+3\gamma v_1^2``. Together these explain the intermediate
-# density contours as well as the grid deformation.
+# A small value supports the displayed approximation but does not guarantee
+# global accuracy. The diagnostic checks all likelihoods, so it also measures
+# error carried over from earlier fitted corrections.
 #
 # ## Sequential Fitting
 #
