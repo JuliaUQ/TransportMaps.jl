@@ -1,6 +1,6 @@
 # # Beam: Sequential Inference with Composed Maps
 #
-# This example presents sequential Bayesian inference for oad position and force on a beam
+# This example presents sequential Bayesian inference for load position and force on a beam
 # from repeated tip-displacement readings. A fixed prior transformation and fitted corrections
 # assimilate the measurements one at a time. See [Composing Maps](@ref)
 # for the composition convention, map directions, and density evaluation.
