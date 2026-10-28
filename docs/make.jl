@@ -7,6 +7,13 @@ using TransportMaps
 include("plotting.jl")
 using .DocPlots: themed_images
 
+# Match the classic TeX math font used by the UQ.jl documentation.
+struct ClassicMathFont <: Documenter.Plugin end
+
+function DocumenterVitepress.vitepress_config_transform(::ClassicMathFont, config::String)
+    return replace(config, "mathjaxPlugin()" => "mathjaxPlugin({ font: 'mathjax-tex' })")
+end
+
 # Setup bibliography
 # Vitepress cannot render the CitationSiteNode wrappers used for backlinks yet.
 # https://github.com/LuxDL/DocumenterVitepress.jl/issues/391
@@ -59,7 +66,7 @@ makedocs(
         devbranch = "main",
     ),
     modules = [TransportMaps],
-    plugins = [bib],
+    plugins = [bib, ClassicMathFont()],
     repo = Remotes.GitHub("JuliaUQ", "TransportMaps.jl"),
     pages = [
         "Home" => "index.md",
