@@ -1,6 +1,6 @@
 """
-    ComposedMap(maps...; reference=nothing, forwarddirection=:auto)
-    ComposedMap(maps::Union{Tuple,AbstractVector}; kwargs...)
+    ComposedMap(maps...; reference = nothing, forwarddirection = :auto)
+    ComposedMap(maps::Union{Tuple, AbstractVector}; kwargs...)
 
 Compose maps in **evaluation order**: `ComposedMap(A, B, C)` evaluates
 `C(B(A(x)))`. Inversion applies the inverse layers in reverse order. Layers
@@ -31,8 +31,8 @@ methods always use the direction of the whole composition.
 
 # Sequential updates
 ```julia
-S = ComposedMap(S_previous, R; forwarddirection=:reference) # R ∘ S_previous
-T = ComposedMap(Q, T_previous; forwarddirection=:target)   # T_previous ∘ Q
+S = ComposedMap(S_previous, R; forwarddirection = :reference) # R ∘ S_previous
+T = ComposedMap(Q, T_previous; forwarddirection = :target)   # T_previous ∘ Q
 ```
 This container composes fitted maps; it does not fit or freeze their parameters.
 """
@@ -137,7 +137,7 @@ function inverse(C::ComposedMap, z::Union{AbstractVector{<:Real}, AbstractMatrix
 end
 
 """
-    jacobian(L::Union{LinearMap,LaplaceMap}, x)
+    jacobian(L::Union{LinearMap, LaplaceMap}, x)
 
 Forward determinant of the linear standardization at a point (or each matrix
 row). Unlike the legacy zero-argument `jacobian(L)` scale determinant, this
@@ -204,6 +204,23 @@ Determinant of the inverse map at `x`, or each row of a matrix.
 inverse_jacobian(C::ComposedMap, x::AbstractVector{<:Real}) = inv(jacobian(C, inverse(C, x)))
 inverse_jacobian(C::ComposedMap, X::AbstractMatrix{<:Real}) = (_check_composed_input(C, X); [inverse_jacobian(C, x) for x in eachrow(X)])
 
+# Accumulate inverse determinants as we walk backwards through a chain. A
+# support-limited layer may return `nothing` for points outside its image.
+function _inverse_logabsdet(M, x)
+    z = inverse(M, x)
+    return z, -logabsdetjacobian(M, z)
+end
+function _inverse_logabsdet(C::ComposedMap, x)
+    _check_composed_input(C, x)
+    logdet = zero(eltype(x))
+    for layer in reverse(C.layers)
+        x, contribution = _inverse_logabsdet(layer, x)
+        x === nothing && return nothing, -Inf
+        logdet += contribution
+    end
+    return x, logdet
+end
+
 """
     logpdf(C::ComposedMap, x)
     pdf(C::ComposedMap, x)
@@ -220,8 +237,9 @@ function logpdf(C::ComposedMap, x::AbstractVector{<:Real})
         z, logdet = _evaluate_logabsdet(C, x)
         return logpdf(C.reference, collect(z)) + logdet
     end
-    z = inverse(C, x)
-    return logpdf(C.reference, collect(z)) - logabsdetjacobian(C, z)
+    z, logdet = _inverse_logabsdet(C, x)
+    z === nothing && return -Inf
+    return logpdf(C.reference, collect(z)) + logdet
 end
 logpdf(C::ComposedMap, X::AbstractMatrix{<:Real}) = (_check_composed_input(C, X); [logpdf(C, x) for x in eachrow(X)])
 pdf(C::ComposedMap, x::Union{AbstractVector{<:Real}, AbstractMatrix{<:Real}}) = exp.(logpdf(C, x))

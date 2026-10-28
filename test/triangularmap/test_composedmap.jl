@@ -109,9 +109,9 @@ end
     @test inverse_jacobian(C, X) ≈ [inverse_jacobian(C, r) for r in eachrow(X)]
     @test logabsdetjacobian(C, X) ≈ log.(jacobian(C, X))
 
-    h = 1e-5
+    h = 1.0e-5
     J = hcat([(C(x + h * I(2)[:, j]) - C(x - h * I(2)[:, j])) / (2h) for j in 1:2]...)
-    @test jacobian(C, x) ≈ det(J) rtol = 1e-8
+    @test jacobian(C, x) ≈ det(J) rtol = 1.0e-8
     @test pdf(C, x) ≈ prod(pdf.(Normal(), y)) * determinant
     @test logpdf(C, x) ≈ sum(logpdf.(Normal(), y)) + log(determinant)
     @test pullback(C, X) ≈ exp.(logpdf(C, X))
@@ -146,7 +146,7 @@ end
     @test inverse(ComposedMap(LinearMap(), P), evaluate(P, x)) ≈ x
 
     # Log densities remain usable when forming determinants would underflow.
-    large = ComposedMap(LinearMap(zeros(2), fill(1e200, 2)))
+    large = ComposedMap(LinearMap(zeros(2), fill(1.0e200, 2)))
     @test isfinite(logpdf(large, zeros(2)))
     @test logpdf(large, zeros(2)) ≈ -log(2π) - 400log(10)
     @test logabsdetjacobian(large, zeros(2)) ≈ -400log(10)
@@ -178,19 +178,21 @@ end
 
 @testitem "ComposedMap polynomial layers and metadata" begin
     using TransportMaps, Test, Distributions, LinearAlgebra
-    maps = [PolynomialMap(2, 3, Normal(), Softplus(), basis)
-            for basis in (LinearizedHermiteBasis(), HermiteBasis(), GaussianWeightedHermiteBasis())]
+    maps = [
+        PolynomialMap(2, 3, Normal(), Softplus(), basis)
+            for basis in (LinearizedHermiteBasis(), HermiteBasis(), GaussianWeightedHermiteBasis())
+    ]
     for (i, M) in enumerate(maps)
         setcoefficients!(M, 0.05 .* sin.(i .* (1:numbercoefficients(M))))
         M.forwarddirection = :reference
     end
     C = ComposedMap(maps)
     x = [0.3, -0.2]
-    @test inverse(C, C(x)) ≈ x atol = 1e-7
-    h = 1e-5
+    @test inverse(C, C(x)) ≈ x atol = 1.0e-7
+    h = 1.0e-5
     J = hcat([(C(x + h * I(2)[:, j]) - C(x - h * I(2)[:, j])) / (2h) for j in 1:2]...)
-    @test jacobian(C, x) ≈ det(J) rtol = 1e-6
-    @test exp(logabsdetjacobian(C, x)) ≈ det(J) rtol = 1e-6
+    @test jacobian(C, x) ≈ det(J) rtol = 1.0e-6
+    @test exp(logabsdetjacobian(C, x)) ≈ det(J) rtol = 1.0e-6
     @test C.reference === last(maps).reference
     for M in maps
         M.forwarddirection = :target

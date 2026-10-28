@@ -122,6 +122,7 @@ export MultivariateBasis
 export LinearMap
 export LaplaceMap
 export ComposedMap
+export PriorMap
 export PolynomialMapComponent
 export PolynomialMap
 export Softplus
@@ -175,6 +176,7 @@ include("triangularmap/conditionaldensities.jl")
 include("triangularmap/linearmap.jl")
 include("triangularmap/laplacemap.jl")
 include("triangularmap/composedmap.jl")
+include("triangularmap/priormap.jl")
 
 include("mapcomponents/precomputed_basis.jl")
 

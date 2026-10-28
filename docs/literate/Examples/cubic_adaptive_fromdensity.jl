@@ -1,4 +1,4 @@
-# # Cubic: Adaptive Transport Map from Density
+# # Cubic: Adaptive Map from Density
 
 # This example demonstrates the adaptive map construction from
 # a given density $\pi(\boldsymbol{x})$. The target is the normalized joint density
@@ -12,7 +12,7 @@
 # quadratic term in the second term of the product.
 
 # ## Key Differences from Sample-Based ATM
-# Unlike the sample-based adaptive transport map approach (see [Banana: Adaptive Transport Map from Samples](@ref)),
+# Unlike the sample-based adaptive transport map approach (see [Banana: Adaptive Map from Samples](@ref)),
 # this method constructs the map directly from the analytical density function without requiring samples.
 # The key differences are:
 #

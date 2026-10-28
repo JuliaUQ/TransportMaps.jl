@@ -1,7 +1,5 @@
 # Maps
 
-See [Composing Maps](../Manuals/composed_maps.md) for a guide to composing fitted maps.
-
 ## Index
 
 ```@index
@@ -16,6 +14,7 @@ PolynomialMapComponent
 LinearMap
 LaplaceMap
 ComposedMap
+PriorMap
 ```
 
 ## Functions

@@ -1,4 +1,4 @@
-# # Banana: Adaptive Transport Map from Samples
+# # Banana: Adaptive Map from Samples
 
 # This implements the ATM algorithm from [baptista2023](@cite) to
 # approximate the banana distribution using an adaptive polynomial transport map.
