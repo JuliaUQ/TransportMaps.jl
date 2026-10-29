@@ -13,7 +13,9 @@ using Random
 using StatsFuns
 using Statistics
 
-import Distributions: mean, mode, cov, MvNormal, pdf, logpdf, gradlogpdf, support
+import Distributions:
+    mean, mode, cov, cor, var, std, entropy, MvNormal, pdf, logpdf, gradlogpdf, support,
+    insupport
 
 # Abstract type definitions
 abstract type AbstractBasisFunction end
@@ -77,6 +79,8 @@ export partial_derivative_z
 export partial_derivative_zk
 export pullback
 export pushforward
+export logpullback
+export logpushforward
 
 # Coefficient utilities
 export setcoefficients!
@@ -154,6 +158,8 @@ export pdf
 export logpdf
 export grad_logpdf
 
+export TransportMapDistribution
+
 # Include files
 include("util/mapdensity.jl")
 include("plotting/plotting.jl")
@@ -189,5 +195,7 @@ include("quadrature/quadratureweights.jl")
 
 include("util/gaussquadrature.jl")
 include("util/hybridrootfinder.jl")
+
+include("distributions/transportmapdistribution.jl")
 
 end

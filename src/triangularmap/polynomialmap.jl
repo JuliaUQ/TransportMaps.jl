@@ -367,6 +367,10 @@ function jacobian(M::PolynomialMap, Z::AbstractMatrix{<:Real})
     return results
 end
 
+function _logabsdetjacobian(M::PolynomialMap, z::AbstractVector{<:Real})
+    return sum(value -> log(abs(value)), gradient_zk(M, z); init = 0.0)
+end
+
 
 """
     jacobian_logdet_gradient(M::PolynomialMap, z::AbstractVector{<:Real})
@@ -476,6 +480,88 @@ function inverse(M::PolynomialMap, X::AbstractMatrix{<:Real}, k::Int = numberdim
     return results
 end
 
+# Return reference coordinates, or nothing when the point is outside the map's
+# induced support. Density evaluation reuses this inverse instead of solving
+# again after a separate support check.
+function _reference_point_in_support(pm::PolynomialMap, x::AbstractVector{<:Real})
+    length(x) == numberdimensions(pm) || return nothing
+    all(isfinite, x) || return nothing
+    isempty(x) && return Float64[]
+    reference = pm.reference.densitytype
+    lower, upper = extrema(reference)
+    if pm.forwarddirection == :reference
+        z = evaluate(pm, x)
+        all(value -> _reference_insupport(reference, value), z) || return nothing
+        # Keep roundoff at a closed boundary consistent with logpdf(reference, z).
+        return clamp.(z, lower, upper)
+    end
+
+    z = Vector{Float64}(undef, length(x))
+    for (k, component) in enumerate(pm.components)
+        fun, ∂fun = _inverse_component_functions(
+            component.basisfunctions, component.coefficients, component.rectifier,
+            view(z, 1:(k - 1)), x[k], k,
+        )
+        bounds = _support_inverse_bounds(fun, lower, upper, x[k])
+        isnothing(bounds) && return nothing
+        a, b = bounds
+        z[k] = if a == b
+            a
+        else
+            xtol = eps(Float64) * max(1.0, abs(a), abs(b))
+            ftol = eps(Float64) * max(1.0, abs(x[k]))
+            first(hybridrootfinder(fun, ∂fun, a, b; xtol = xtol, ftol = ftol))
+        end
+        _reference_insupport(reference, z[k]) || return nothing
+        z[k] = clamp(z[k], lower, upper)
+    end
+    return z
+end
+
+function _reference_insupport(reference, value)
+    insupport(reference, value) && return true
+    isfinite(value) || return false
+    lower, upper = extrema(reference)
+    (isfinite(lower) && isfinite(upper)) || return false
+    atol = 16 * eps(Float64) * max(abs(lower), abs(upper), upper - lower)
+    return lower - atol <= value <= upper + atol &&
+        insupport(reference, clamp(value, lower, upper))
+end
+
+function _support_inverse_bounds(fun, lower, upper, target)
+    a = isfinite(lower) ? lower : -1.0
+    b = isfinite(upper) ? upper : 1.0
+    fa, fb = fun(a), fun(b)
+    scale = max(abs(target), isfinite(fa) ? abs(fa) : 0.0, isfinite(fb) ? abs(fb) : 0.0)
+    atol = 16 * eps(Float64) * scale
+    # Finite reference endpoints delimit the conditional target support. For
+    # unbounded references, expand only finite brackets and cap the search so a
+    # point outside the map's image cannot leave support checks looping forever.
+    # Starting from ±1, doubling an endpoint exhausts Float64's exponent range
+    # after this many expansions.
+    max_bracket_expansions = exponent(floatmax(Float64)) + 1
+    for _ in 1:max_bracket_expansions
+        (isnan(fa) || isnan(fb)) && return nothing
+        iszero(fa) && return (a, a)
+        iszero(fb) && return (b, b)
+        isfinite(lower) && abs(fa) <= atol && return (a, a)
+        isfinite(upper) && abs(fb) <= atol && return (b, b)
+        fa < 0 < fb && return (a, b)
+        if fa > 0 && !isfinite(lower)
+            a *= 2
+            isfinite(a) || return nothing
+            fa = fun(a)
+        elseif fb < 0 && !isfinite(upper)
+            b *= 2
+            isfinite(b) || return nothing
+            fb = fun(b)
+        else
+            return nothing
+        end
+    end
+    return nothing
+end
+
 """
     inverse_jacobian(M::PolynomialMap, x::AbstractVector{<:Real})
 
@@ -517,42 +603,53 @@ function inverse_jacobian(M::PolynomialMap, X::AbstractMatrix{<:Real})
 end
 
 """
-    pullback(M::PolynomialMap, x::AbstractVector{<:Real})
+    logpullback(M::PolynomialMap, x::AbstractVector{<:Real})
 
-Evaluate the target-density approximation induced by the map.
+Evaluate the log of the target-density approximation induced by the map.
 
 For a map from density, ``M:z\\mapsto x``,
 
 ```math
-\\widehat\\pi(x)
-= \\rho(M^{-1}(x))\\left|\\det\\nabla M^{-1}(x)\\right|.
+\\log\\widehat\\pi(x)
+= \\log\\rho(M^{-1}(x))-\\log\\left|\\det\\nabla M(M^{-1}(x))\\right|.
 ```
 
 For a map from samples, ``M:x\\mapsto z``,
 
 ```math
-\\widehat\\pi(x)
-= \\rho(M(x))\\left|\\det\\nabla M(x)\\right|.
+\\log\\widehat\\pi(x)
+= \\log\\rho(M(x))+\\log\\left|\\det\\nabla M(x)\\right|.
 ```
+
+The log-Jacobian is computed as a sum of logs of its diagonal entries, avoiding
+overflow or underflow from forming the determinant. Prefer this method to
+`log(pullback(M, x))` for numerical stability.
+
+Returns `-Inf` for points outside the induced support, including nonfinite
+coordinates. The reference coordinates are computed once with a guarded inverse
+and reused for the density and Jacobian.
 """
-function pullback(M::PolynomialMap, x::AbstractVector{<:Real})
+function logpullback(M::PolynomialMap, x::AbstractVector{<:Real})
     @assert length(M.components) == length(x) "Number of components must match the dimension of x"
 
-    value = M.forwarddirection == :target ? pdf(M.reference, inverse(M, x)) * abs(inverse_jacobian(M, x)) :
-        pdf(M.reference, evaluate(M, x)) * abs(jacobian(M, x))
-
-    # Compute pull-back density π̂(x) = ρ(M⁻¹(x)) * |det J(M^-1(x))|
-    return value
+    z = _reference_point_in_support(M, x)
+    isnothing(z) && return -Inf
+    if M.forwarddirection == :target
+        return logpdf(M.reference, z) - _logabsdetjacobian(M, z)
+    else
+        return logpdf(M.reference, z) + _logabsdetjacobian(M, x)
+    end
 end
 
 """
-    pullback(M::PolynomialMap, X::AbstractMatrix{<:Real})
+    logpullback(M::PolynomialMap, X::AbstractMatrix{<:Real})
 
-Compute pullback densities at multiple points using multithreading.
+Compute log-pullback densities at multiple points using multithreading.
 
-Returns a vector where element i is the pullback density at X[i,:].
+Each row of `X` is a point. Returns a vector whose element `i` is
+`logpullback(M, X[i, :])`.
 """
-function pullback(M::PolynomialMap, X::AbstractMatrix{<:Real})
+function logpullback(M::PolynomialMap, X::AbstractMatrix{<:Real})
     @assert size(X, 2) == length(M.components) "Number of columns must match the dimension of the map"
 
     n_points = size(X, 1)
@@ -560,46 +657,60 @@ function pullback(M::PolynomialMap, X::AbstractMatrix{<:Real})
     # Preallocate result vector
     results = Vector{Float64}(undef, n_points)
 
-    # Use multithreading to compute pullback for each point
+    # Use multithreading to compute log-pullback for each point
     Threads.@threads for i in 1:n_points
         x_point = @view X[i, :]
-        results[i] = pullback(M, x_point)
+        results[i] = logpullback(M, x_point)
     end
 
     return results
 end
 
+"""
+    pullback(M::PolynomialMap, x::AbstractVector{<:Real})
+    pullback(M::PolynomialMap, X::AbstractMatrix{<:Real})
+
+Evaluate the target-density approximation induced by the map as
+`exp.(logpullback(M, x))`. A vector represents one point; matrix rows represent
+multiple points.
+
+See [`logpullback`](@ref) for the change-of-variables formulas.
+"""
+pullback(M::PolynomialMap, x::AbstractVector{<:Real}) = exp(logpullback(M, x))
+pullback(M::PolynomialMap, X::AbstractMatrix{<:Real}) = exp.(logpullback(M, X))
+
 
 """
-    pushforward(M::PolynomialMap, target::MapTargetDensity, z::AbstractVector{<:Real})
+    logpushforward(M::PolynomialMap, target::MapTargetDensity, z::AbstractVector{<:Real})
 
-Compute the target density represented in reference coordinates:
+Compute the target log-density represented in reference coordinates:
 
 ```math
-\\widetilde\\rho(z)
-= \\pi(M(z))\\left|\\det\\nabla M(z)\\right|.
+\\log\\widetilde\\rho(z)
+= \\log\\pi(M(z))+\\log\\left|\\det\\nabla M(z)\\right|.
 ```
 
-Maps the target density back through M to the reference space.
+Maps the target log-density back through `M` to the reference space. Supported
+for maps from density (`forwarddirection == :target`). The log-Jacobian is
+computed as a sum of logs of its diagonal entries. Prefer this method to
+`log(pushforward(M, target, z))` for numerical stability.
 """
-function pushforward(M::PolynomialMap, target::MapTargetDensity, z::AbstractVector{<:Real})
+function logpushforward(M::PolynomialMap, target::MapTargetDensity, z::AbstractVector{<:Real})
     @assert length(M.components) == length(z) "Number of components must match the dimension of z"
 
-    value = M.forwarddirection == :target ? pdf(target, evaluate(M, z)) * abs(jacobian(M, z)) :
-        error("Can't evaluate pushforward for a map from samples!")
-
-    # Compute push-forward density ρ(z) = π(M(z)) * |det J(M(z))|
-    return value
+    M.forwarddirection == :target || error("Can't evaluate pushforward for a map from samples!")
+    return logpdf(target, evaluate(M, z)) + _logabsdetjacobian(M, z)
 end
 
 """
-    pushforward(M::PolynomialMap, target::MapTargetDensity, Z::AbstractMatrix{<:Real})
+    logpushforward(M::PolynomialMap, target::MapTargetDensity, Z::AbstractMatrix{<:Real})
 
-Compute pushforward densities at multiple points using multithreading.
+Compute log-pushforward densities at multiple points using multithreading.
 
-Returns a vector where element i is the pushforward density at Z[i,:].
+Each row of `Z` is a point. Returns a vector whose element `i` is
+`logpushforward(M, target, Z[i, :])`.
 """
-function pushforward(M::PolynomialMap, target::MapTargetDensity, Z::AbstractMatrix{<:Real})
+function logpushforward(M::PolynomialMap, target::MapTargetDensity, Z::AbstractMatrix{<:Real})
     @assert size(Z, 2) == length(M.components) "Number of columns must match the dimension of the map"
 
     n_points = size(Z, 1)
@@ -607,14 +718,29 @@ function pushforward(M::PolynomialMap, target::MapTargetDensity, Z::AbstractMatr
     # Preallocate result vector
     results = Vector{Float64}(undef, n_points)
 
-    # Use multithreading to compute pushforward for each point
+    # Use multithreading to compute log-pushforward for each point
     Threads.@threads for i in 1:n_points
         z_point = @view Z[i, :]
-        results[i] = pushforward(M, target, z_point)
+        results[i] = logpushforward(M, target, z_point)
     end
 
     return results
 end
+
+"""
+    pushforward(M::PolynomialMap, target::MapTargetDensity, z::AbstractVector{<:Real})
+    pushforward(M::PolynomialMap, target::MapTargetDensity, Z::AbstractMatrix{<:Real})
+
+Compute the target density represented in reference coordinates as
+`exp.(logpushforward(M, target, z))`. A vector represents one point; matrix rows
+represent multiple points.
+
+See [`logpushforward`](@ref) for the change-of-variables formula.
+"""
+pushforward(M::PolynomialMap, target::MapTargetDensity, z::AbstractVector{<:Real}) =
+    exp(logpushforward(M, target, z))
+pushforward(M::PolynomialMap, target::MapTargetDensity, Z::AbstractMatrix{<:Real}) =
+    exp.(logpushforward(M, target, Z))
 
 """
     setcoefficients!(M::PolynomialMap, coefficients::AbstractVector{<:Real})
