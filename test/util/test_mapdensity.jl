@@ -215,7 +215,12 @@ end
         target = MapTargetDensity(x -> pdf(Normal(), x[1]))
         ref = MapReferenceDensity(Normal())
 
-        @test_nowarn display(target)
-        @test_nowarn display(ref)
+        expected_target = "MapTargetDensity(backend=$(AutoForwardDiff()))"
+        expected_ref = "MapReferenceDensity(density=$(Normal()))"
+
+        @test sprint(show, target) == expected_target
+        @test sprint(show, ref) == expected_ref
+        @test sprint(show, MIME"text/plain"(), target) == expected_target
+        @test sprint(show, MIME"text/plain"(), ref) == expected_ref
     end
 end
