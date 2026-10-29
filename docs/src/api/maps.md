@@ -21,6 +21,8 @@ ComposedMap
 ```@docs
 evaluate
 inverse
+logpushforward
+logpullback
 pushforward
 pullback
 setcoefficients!

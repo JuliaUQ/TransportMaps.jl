@@ -125,4 +125,3 @@ the reference distribution's bounds.
 function insupport(d::TransportMapDistribution, x::AbstractVector{<:Real})
     return !isnothing(_reference_point_in_support(d.map, x))
 end
-
