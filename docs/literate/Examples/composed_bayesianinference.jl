@@ -12,7 +12,7 @@ set_theme!(transportmap_theme()) # hide
 
 # ## Beam with an Unknown Load
 #
-# We adapt the beam example from [grashorn2024](@cite) to sequential inference.
+# We adapt the beam example from [grashorn2024a](@cite) to sequential inference.
 # A cantilever beam is clamped at one end. A point
 # force ``F`` acts at distance ``aL`` from the clamp, where ``a`` is the
 # dimensionless relative load position and ``L`` is the beam length. We want
