@@ -14,6 +14,7 @@ PolynomialMapComponent
 LinearMap
 LaplaceMap
 ComposedMap
+PriorMap
 ```
 
 ## Functions
@@ -23,6 +24,7 @@ evaluate
 inverse
 pushforward
 pullback
+logabsdetjacobian
 setcoefficients!
 getcoefficients
 setparameters!

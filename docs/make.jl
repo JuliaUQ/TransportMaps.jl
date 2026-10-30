@@ -7,6 +7,13 @@ using TransportMaps
 include("plotting.jl")
 using .DocPlots: themed_images
 
+# Match the classic TeX math font used by the UQ.jl documentation.
+struct ClassicMathFont <: Documenter.Plugin end
+
+function DocumenterVitepress.vitepress_config_transform(::ClassicMathFont, config::String)
+    return replace(config, "mathjaxPlugin()" => "mathjaxPlugin({ font: 'mathjax-tex' })")
+end
+
 # Setup bibliography
 # Vitepress cannot render the CitationSiteNode wrappers used for backlinks yet.
 # https://github.com/LuxDL/DocumenterVitepress.jl/issues/391
@@ -59,7 +66,7 @@ makedocs(
         devbranch = "main",
     ),
     modules = [TransportMaps],
-    plugins = [bib],
+    plugins = [bib, ClassicMathFont()],
     repo = Remotes.GitHub("JuliaUQ", "TransportMaps.jl"),
     pages = [
         "Home" => "index.md",
@@ -73,14 +80,16 @@ makedocs(
             "Plotting" => "Manuals/plotting.md",
             "Conditional Densities and Samples" => "Manuals/conditional_densities.md",
             "Adaptive Transport Maps" => "Manuals/adaptive_transport_map.md",
+            "Composing Maps" => "Manuals/composed_maps.md",
         ],
         "Examples" => [
             "CDF Estimation (1D)" => "Examples/cdf_estimation.md",
             "Banana: Map from Density" => "Examples/banana_mapfromdensity.md",
             "Banana: Map from Samples" => "Examples/banana_mapfromsamples.md",
-            "Banana: Adaptive Transport Map from Samples" => "Examples/banana_adaptive.md",
-            "Cubic: Adaptive Transport Map from Density" => "Examples/cubic_adaptive_fromdensity.md",
-            "Bayesian Inference: BOD" => "Examples/bod_bayesianinference.md",
+            "Banana: Adaptive Map from Samples" => "Examples/banana_adaptive.md",
+            "Cubic: Adaptive Map from Density" => "Examples/cubic_adaptive_fromdensity.md",
+            "BOD: Bayesian Inference" => "Examples/bod_bayesianinference.md",
+            "Beam: Sequential Inference with Composed Maps" => "Examples/composed_bayesianinference.md",
         ],
         "API" => [
             "Bases" => "api/bases.md",

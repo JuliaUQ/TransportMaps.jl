@@ -333,3 +333,23 @@ end
         @test filesize(path) > 0
     end
 end
+
+@testitem "Makie composed layer sequences" begin
+    using CairoMakie, TransportMaps, Test
+    ext = Base.get_extension(TransportMaps, :TransportMapsMakieExt)
+    P = PolynomialMap(2, 1)
+    Q = PolynomialMap(2, 1)
+    P.forwarddirection = Q.forwarddirection = :reference
+    C = ComposedMap(LinearMap([0.1, -0.2], [1.2, 0.8]), P, Q)
+    X = [0.1 0.2; 0.3 0.4; 0.5 0.6]
+    Z = C(X)
+    @test ext.comparison_samples(C, X, :target) == (Z, X)
+    @test ext.diagnostic_samples(C, X, :target) ≈ Z
+    @test ext.plotmatrix_samples(C, X, :target, :reference) ≈ Z
+    @test !isempty(ext.mapping_positions(C, ([-1.0, 1.0], [-1.0, 1.0]), :forward, 2))
+    @test referenceplot(C, X; qqpoints = 5) isa Figure
+    @test plotmatrix(C, X) isa Figure
+    fig = reference_target_plot(C, X; xgrid = -1:1, ygrid = -1:1)
+    ax = contents(fig[1, 2])[1]
+    @test ax.scene.plots[1][3][] ≈ [pullback(C, [x, y]) for x in -1:1, y in -1:1]
+end
