@@ -8,9 +8,11 @@ inverse generates the corresponding Gaussian samples. Compositions inherit the
 polynomial layer's reference and the direction of the whole map.
 
 `rand(d, n)` returns samples in columns, following Distributions.jl. Map-level
-batch operations use rows. Moments and entropy accept a `quad` keyword for
-reference-space quadrature. Maps are retained by reference, so later parameter
-changes affect the distribution. Use `deepcopy(map)` to freeze a fitted map.
+batch operations use rows. Statistics for standalone linear and Laplace maps
+use exact Gaussian formulas by default. Other maps use reference-space
+quadrature. An explicit `quad` keyword requests quadrature for any map.
+Maps are retained by reference, so later parameter changes affect the
+distribution. Use `deepcopy(map)` to freeze a fitted map.
 
 ### Example
 ```julia
@@ -139,32 +141,43 @@ function Distributions._logpdf(d::TransportMapDistribution, x::AbstractVector{<:
 end
 
 ## Moments
-function mean(d::TransportMapDistribution; quad::AbstractQuadratureWeights = SparseSmolyakWeights(3, d.map))
-    return _nth_moment(d.map, 1, quad)
-end
+_statistics_quadrature(map::AbstractTransportMap) = SparseSmolyakWeights(3, map)
+_statistics_quadrature(::Union{LinearMap, LaplaceMap}) = nothing
 
-function var(d::TransportMapDistribution; quad::AbstractQuadratureWeights = SparseSmolyakWeights(3, d.map))
-    centered = _centered_map_values(d.map, quad)
+mean(d::TransportMapDistribution; quad::Union{Nothing, AbstractQuadratureWeights} = _statistics_quadrature(d.map)) =
+    _map_mean(d.map, quad)
+var(d::TransportMapDistribution; quad::Union{Nothing, AbstractQuadratureWeights} = _statistics_quadrature(d.map)) =
+    _map_var(d.map, quad)
+std(d::TransportMapDistribution; quad::Union{Nothing, AbstractQuadratureWeights} = _statistics_quadrature(d.map)) =
+    _map_std(d.map, quad)
+cov(d::TransportMapDistribution; quad::Union{Nothing, AbstractQuadratureWeights} = _statistics_quadrature(d.map)) =
+    _map_cov(d.map, quad)
+cor(d::TransportMapDistribution; quad::Union{Nothing, AbstractQuadratureWeights} = _statistics_quadrature(d.map)) =
+    _map_cor(d.map, quad)
+entropy(d::TransportMapDistribution; quad::Union{Nothing, AbstractQuadratureWeights} = _statistics_quadrature(d.map)) =
+    _map_entropy(d.map, quad)
+
+_map_mean(map::AbstractTransportMap, quad::AbstractQuadratureWeights) = _nth_moment(map, 1, quad)
+
+function _map_var(map::AbstractTransportMap, quad::AbstractQuadratureWeights)
+    centered = _centered_map_values(map, quad)
     return (centered .^ 2)' * quad.weights
 end
 
-function std(d::TransportMapDistribution; quad::AbstractQuadratureWeights = SparseSmolyakWeights(3, d.map))
-    return sqrt.(var(d; quad = quad))
-end
+_map_std(map::AbstractTransportMap, quad::AbstractQuadratureWeights) = sqrt.(_map_var(map, quad))
 
-function cov(d::TransportMapDistribution; quad::AbstractQuadratureWeights = SparseSmolyakWeights(3, d.map))
-    centered = _centered_map_values(d.map, quad)
+function _map_cov(map::AbstractTransportMap, quad::AbstractQuadratureWeights)
+    centered = _centered_map_values(map, quad)
     return centered' * (quad.weights .* centered)
 end
 
-function cor(d::TransportMapDistribution; quad::AbstractQuadratureWeights = SparseSmolyakWeights(3, d.map))
-    C = cov(d; quad = quad)
+function _map_cor(map::AbstractTransportMap, quad::AbstractQuadratureWeights)
+    C = _map_cov(map, quad)
     σ = sqrt.(diag(C))
     return C ./ (σ .* σ')
 end
 
-function entropy(d::TransportMapDistribution; quad::AbstractQuadratureWeights = SparseSmolyakWeights(3, d.map))
-    tm = d.map
+function _map_entropy(tm::AbstractTransportMap, quad::AbstractQuadratureWeights)
     points = _map_direction(tm) == :target ? quad.points :
         _from_reference(tm, quad.points)
 
@@ -175,6 +188,29 @@ function entropy(d::TransportMapDistribution; quad::AbstractQuadratureWeights = 
     return _map_direction(tm) == :target ?
         H_reference + correction :
         H_reference - correction
+end
+
+# These maps invert a standard normal reference into a Gaussian. Keep all six
+# statistics independent of quadrature, and return fresh arrays for locations.
+_map_mean(map::LinearMap, ::Nothing) = copy(map.μ)
+_map_mean(map::LaplaceMap, ::Nothing) = copy(map.mode)
+_map_var(map::LinearMap, ::Nothing) = map.σ .^ 2
+_map_var(map::LaplaceMap, ::Nothing) = vec(sum(abs2, map.chol; dims = 2))
+_map_std(map::LinearMap, ::Nothing) = abs.(map.σ)
+_map_std(map::LaplaceMap, ::Nothing) = norm.(eachrow(map.chol))
+_map_cov(map::LinearMap, ::Nothing) = Matrix(Diagonal(map.σ .^ 2))
+_map_cov(map::LaplaceMap, ::Nothing) = cov(map)
+_map_cor(map::LinearMap, ::Nothing) = Matrix{Float64}(I, numberdimensions(map), numberdimensions(map))
+
+function _map_cor(map::LaplaceMap, ::Nothing)
+    # Normalize the factor first to avoid squaring extreme scales in covariance.
+    normalized = map.chol ./ _map_std(map, nothing)
+    return normalized * normalized'
+end
+
+function _map_entropy(map::Union{LinearMap, LaplaceMap}, ::Nothing)
+    scales = map isa LinearMap ? map.σ : diag(map.chol)
+    return numberdimensions(map) * entropy(Normal()) + sum(value -> log(abs(value)), scales)
 end
 
 ## Support

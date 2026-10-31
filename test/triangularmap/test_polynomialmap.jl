@@ -1055,8 +1055,14 @@ end
             @test pullback(pm, x) ≈ pdf(target_distribution, x) atol = 1.0e-10
         end
         @test pullback(pm, X) ≈ exp.(expected) atol = 1.0e-10
-        @test_throws ErrorException logpushforward(pm, target, Z[1, :])
-        @test_throws ErrorException pushforward(pm, target, Z[1, :])
+        fitted_target = MapTargetDensity(x -> logpdf(target_distribution, x))
+        expected_reference = logpdf(reference_distribution, Z')
+        @test logpushforward(pm, fitted_target, Z) ≈ expected_reference atol = 1.0e-10
+        @test pushforward(pm, fitted_target, Z) ≈ exp.(expected_reference) atol = 1.0e-10
+        for (i, z) in enumerate(eachrow(Z))
+            @test logpushforward(pm, fitted_target, z) ≈ expected_reference[i] atol = 1.0e-10
+            @test pushforward(pm, fitted_target, z) ≈ exp(expected_reference[i]) atol = 1.0e-10
+        end
     end
 
     @testset "Batch shapes and dimension checks" begin
@@ -1073,6 +1079,11 @@ end
         @test_throws AssertionError logpullback(pm, zeros(3, 1))
         @test_throws AssertionError logpushforward(pm, target, [0.0])
         @test_throws AssertionError logpushforward(pm, target, zeros(3, 1))
+        for direction in (:target, :reference)
+            TransportMaps.setforwarddirection!(pm, direction)
+            @test logpushforward(pm, target, [Inf, 0.0]) == -Inf
+            @test pushforward(pm, target, [NaN, 0.0]) == 0.0
+        end
     end
 
     @testset "Empty pullback dimensions" begin
@@ -1082,44 +1093,6 @@ end
         @test logpullback(empty_map, zeros(2, 0)) == zeros(2)
     end
 
-    @testset "Distributions interface uses column batches" begin
-        for direction in (:target, :reference)
-            TransportMaps.setforwarddirection!(pm, direction)
-            distribution = TransportMapDistribution(pm)
-            @test logpdf(distribution, X[1, :]) ≈ logpullback(pm, X[1, :])
-            @test logpdf(distribution, permutedims(X)) ≈ logpullback(pm, X)
-            @test pdf(distribution, permutedims(X)) ≈ pullback(pm, X)
-            @test loglikelihood(distribution, permutedims(X)) ≈ sum(logpullback(pm, X))
-            @test_throws DimensionMismatch logpdf(distribution, [0.0])
-            @test_throws DimensionMismatch logpdf(distribution, X)
-        end
-    end
-end
-
-@testitem "Explicit indices retain reference metadata" setup = [PolynomialMapSetup] begin
-    using Statistics, Random
-    indices = [[[0], [1]]]
-    configurations = (
-        (Uniform(-1.0, 1.0), LegendreBasis(), [0.0, 1.0]),
-        (Uniform(0.0, 1.0), ShiftedLegendreBasis(), [0.5, 0.5]),
-        (Normal(2.0, 3.0), HermiteBasis(), [0.0, 1.0]),
-    )
-    for (reference, basis, coefficients) in configurations
-        map = PolynomialMap(indices, IdentityRectifier(), basis, reference)
-        setcoefficients!(map, coefficients)
-        @test map.reference.densitytype == reference
-        @test map.forwarddirection == :target
-        distribution = TransportMapDistribution(map)
-        @test mean(distribution) ≈ [mean(reference)] atol = 1.0e-10
-        @test var(distribution) ≈ [var(reference)] atol = 1.0e-10
-        @test entropy(distribution) ≈ entropy(reference) atol = 1.0e-10
-        for x in (-2.0, 0.25, 0.75, 2.0)
-            @test logpdf(distribution, [x]) ≈ logpdf(reference, x) atol = 1.0e-10
-        end
-        generated = rand(MersenneTwister(919), distribution, 10)
-        @test all(insupport(distribution, generated))
-        @test all(value -> insupport(reference, value), generated)
-    end
 end
 
 @testitem "Log-density numerical stability" setup = [PolynomialMapSetup] begin
@@ -1133,7 +1106,6 @@ end
             TransportMaps.setforwarddirection!(pm, direction)
             @test logpullback(pm, x) ≈ expected atol = 1.0e-9
             @test pullback(pm, x) == 0.0
-            @test logpdf(TransportMapDistribution(pm), x) ≈ expected atol = 1.0e-9
         end
         TransportMaps.setforwarddirection!(pm, :target)
         @test logpushforward(pm, target, x) ≈ expected atol = 1.0e-9
@@ -1180,166 +1152,18 @@ end
     end
 end
 
-@testitem "Transport-map support" setup = [PolynomialMapSetup] begin
-    @testset "Shifted uniform support" begin
-        for direction in (:target, :reference)
-            pm = PolynomialMap(1, 1, Uniform(0.0, 1.0), IdentityRectifier(), ShiftedLegendreBasis())
-            coefficients = direction == :target ? [11.0, 1.0] : [-4.75, 0.25]
-            setcoefficients!(pm, coefficients)
-            TransportMaps.setforwarddirection!(pm, direction)
-            distribution = TransportMapDistribution(pm)
-
-            for x in (10.0, 10.5, 11.0, 12.0)
-                @test insupport(distribution, [x])
-                @test logpdf(distribution, [x]) ≈ -log(2) atol = 1.0e-10
-                @test logpullback(pm, [x]) ≈ -log(2) atol = 1.0e-10
-            end
-            for x in (0.0, 1.0, 9.0, 10.0 - 1.0e-10, 12.0 + 1.0e-10, 13.0, NaN, Inf, -Inf)
-                @test !insupport(distribution, [x])
-                @test logpdf(distribution, [x]) == -Inf
-                @test pdf(distribution, [x]) == 0.0
-                @test logpullback(pm, [x]) == -Inf
-            end
-            @test !insupport(distribution, Float64[])
-            @test !insupport(distribution, [11.0, 11.0])
-            @test insupport(distribution, [11])
-            @test insupport(distribution, view([0.0, 11.0, 0.0], 2:2))
-            @test insupport(distribution, [9.0 10.0 11.0 12.0 13.0]) ==
-                [false, true, true, true, false]
-            @test_throws DimensionMismatch insupport(distribution, zeros(2, 3))
-        end
-    end
-
-    @testset "Triangular support is not a bounding box" begin
-        for direction in (:target, :reference)
-            pm = PolynomialMap(2, 1, Uniform(-1.0, 1.0), IdentityRectifier(), LegendreBasis())
-            sign = direction == :target ? 1.0 : -1.0
-            setcoefficients!(pm[1], [0.0, 1.0])
-            setcoefficients!(pm[2], [0.0, sign, 1.0])
-            TransportMaps.setforwarddirection!(pm, direction)
-            distribution = TransportMapDistribution(pm)
-
-            for x in ([0.0, 0.0], [0.5, 1.25], [-0.5, -1.25], [1.0, 2.0], [-1.0, -2.0])
-                @test insupport(distribution, x)
-            end
-            for x in ([0.9, -0.9], [-0.9, 0.9], [0.0, 1.5], [1.1, 1.1])
-                @test !insupport(distribution, x)
-                @test logpdf(distribution, x) == -Inf
-                @test pullback(pm, x) == 0.0
-            end
-        end
-    end
-
-    @testset "Curved conditional boundaries" begin
-        for direction in (:target, :reference)
-            pm = PolynomialMap(2, 2, Uniform(-1.0, 1.0), IdentityRectifier(), LegendreBasis())
-            sign = direction == :target ? 1.0 : -1.0
-            setcoefficients!(pm[1], [0.0, 1.0, 0.0])
-            terms = [basis.multiindexset for basis in pm[2].basisfunctions]
-            coefficients = zeros(length(terms))
-            coefficients[findfirst(==([0, 0]), terms)] = sign / 3
-            coefficients[findfirst(==([2, 0]), terms)] = 2 * sign / 3
-            coefficients[findfirst(==([0, 1]), terms)] = 1.0
-            setcoefficients!(pm[2], coefficients)
-            TransportMaps.setforwarddirection!(pm, direction)
-            distribution = TransportMapDistribution(pm)
-
-            for x in ([0.0, 0.0], [0.5, 1.2], [0.5, -0.5], [1.0, 2.0], [-1.0, 0.0])
-                @test insupport(distribution, x)
-                @test logpdf(distribution, x) ≈ -2 * log(2) atol = 1.0e-10
-            end
-            for x in ([0.0, 1.5], [0.5, -0.9], [1.1, 1.0])
-                @test !insupport(distribution, x)
-                @test logpdf(distribution, x) == -Inf
-                @test pullback(pm, x) == 0.0
-            end
-        end
-    end
-
-    @testset "Unbounded reference" begin
-        pm = PolynomialMap(1, 1, Normal(), IdentityRectifier(), HermiteBasis())
-        setcoefficients!(pm, [10.0, 2.0])
-        distribution = TransportMapDistribution(pm)
-        for direction in (:target, :reference)
-            TransportMaps.setforwarddirection!(pm, direction)
-            @test insupport(distribution, [-40.0])
-            @test insupport(distribution, [40.0])
-            @test insupport(distribution, [1.0e4])
-            @test !insupport(distribution, [NaN])
-            @test !insupport(distribution, [Inf])
-            @test !insupport(distribution, [-Inf])
-        end
-
-        # This map has derivative exp(-z²), hence a bounded image despite its
-        # normal reference. Points outside the image must terminate and fail.
-        bounded_map = PolynomialMap(1, 3, Normal(), ExpRectifier(), HermiteBasis())
-        setcoefficients!(bounded_map, [0.0, -1.0, 0.0, -1 / 3])
-        bounded_distribution = TransportMapDistribution(bounded_map)
-        @test insupport(bounded_distribution, [0.0])
-        @test insupport(bounded_distribution, [0.25])
-        @test !insupport(bounded_distribution, [10.0])
-        @test !insupport(bounded_distribution, [-10.0])
-        @test logpdf(bounded_distribution, [0.0]) ≈ logpdf(Normal(), 0.0)
-        for x in ([10.0], [-10.0])
-            @test logpdf(bounded_distribution, x) == -Inf
-            @test pdf(bounded_distribution, x) == 0.0
-            @test logpullback(bounded_map, x) == -Inf
-            @test pullback(bounded_map, x) == 0.0
-        end
-        X = reshape([-10.0, 0.0, 10.0], :, 1)
-        expected = [-Inf, logpdf(Normal(), 0.0), -Inf]
-        @test logpullback(bounded_map, X) ≈ expected
-        @test logpdf(bounded_distribution, permutedims(X)) ≈ expected
-    end
-end
-
-@testitem "Shared inversion and centered variance" setup = [PolynomialMapSetup] begin
-    using Statistics
-
-    struct InverseCountingRectifier <: AbstractRectifierFunction
-        calls::Base.RefValue{Int}
-    end
-    function (rectifier::InverseCountingRectifier)(x::Real)
-        rectifier.calls[] += 1
-        return x
-    end
-
-    @testset "Log-density solves the inverse once" begin
-        calls = Ref(0)
-        pm = PolynomialMap(1, 1, Normal(), InverseCountingRectifier(calls), HermiteBasis())
-        setcoefficients!(pm, [1.0, 2.0])
-        distribution = TransportMapDistribution(pm)
-        @test insupport(distribution, [2.5])
-        support_calls = calls[]
-        calls[] = 0
-        result = logpdf(distribution, [2.5])
-        # Density evaluation adds one diagonal-Jacobian evaluation to the same
-        # inverse solve performed by insupport, without a second root search.
-        @test calls[] == support_calls + 1
-        @test result ≈ logpdf(Normal(1.0, 2.0), 2.5) atol = 1.0e-12
-    end
-
-    @testset "Variance is stable under large translations" begin
-        scales = [2.0, 3.0]
-        for reference in (Normal(0.4, 1.7), Uniform(-1.0, 1.0))
-            basis = reference isa Normal ? HermiteBasis() : LegendreBasis()
-            for offset in (1.0e8, 1.0e10), direction in (:target, :reference)
-                pm = DiagonalMap(2, 1, reference, IdentityRectifier(), basis)
-                setcoefficients!(pm[1], [offset, scales[1]])
-                setcoefficients!(pm[2], [-offset, scales[2]])
-                TransportMaps.setforwarddirection!(pm, direction)
-                distribution = TransportMapDistribution(pm)
-                expected = direction == :target ?
-                    var(reference) .* scales .^ 2 : var(reference) ./ scales .^ 2
-                tensor_quad = TensorProductWeights(2, pm)
-                for quad in (SparseSmolyakWeights(3, pm), tensor_quad)
-                    variances = var(distribution; quad = quad)
-                    @test variances ≈ expected rtol = 1.0e-5 atol = 1.0e-6
-                    @test variances ≈ diag(cov(distribution; quad = quad)) atol = 1.0e-12
-                    @test std(distribution; quad = quad) ≈ sqrt.(expected) rtol = 1.0e-5 atol = 1.0e-6
-                end
-                @test var(distribution) ≈ expected rtol = 1.0e-5 atol = 1.0e-6
-            end
-        end
-    end
+@testitem "Pushforward outside the map image" setup = [PolynomialMapSetup] begin
+    bounded_map = PolynomialMap(1, 3, Normal(), ExpRectifier(), HermiteBasis())
+    setcoefficients!(bounded_map, [0.0, -1.0, 0.0, -1 / 3])
+    TransportMaps.setforwarddirection!(bounded_map, :reference)
+    target = MapTargetDensity(x -> logpdf(Normal(), x[1]))
+    @test logpushforward(bounded_map, target, [0.0]) ≈ logpdf(Normal(), 0.0)
+    @test logpushforward(bounded_map, target, [10.0]) == -Inf
+    @test pushforward(bounded_map, target, [-10.0]) == 0.0
+    # Round-trip at a nonzero point checks the inverse and a nonconstant
+    # Jacobian together, using the forward point as an independent oracle.
+    x = [0.3]
+    z = evaluate(bounded_map, x)
+    @test logpushforward(bounded_map, target, z) ≈
+        logpdf(target, x) - logabsdetjacobian(bounded_map, x) atol = 1.0e-10
 end

@@ -515,6 +515,15 @@ function _reference_point_in_support(pm::AbstractTransportMap, x::AbstractVector
         return clamp.(z, lower, upper)
     end
 
+    z = _inverse_point_in_bounds(pm, x, lower, upper)
+    isnothing(z) && return nothing
+    all(value -> _reference_insupport(reference, value), z) || return nothing
+    return z
+end
+
+# Guarded inversion is shared by pullback (reference-domain bounds) and
+# pushforward (the full input domain of a map fitted from samples).
+function _inverse_point_in_bounds(pm::AbstractTransportMap, x, lower, upper)
     z = Vector{Float64}(undef, length(x))
     for k in eachindex(z)
         fun, ∂fun = _inverse_coordinate_functions(pm, view(z, 1:(k - 1)), x[k], k)
@@ -528,7 +537,7 @@ function _reference_point_in_support(pm::AbstractTransportMap, x::AbstractVector
             ftol = eps(Float64) * max(1.0, abs(x[k]))
             first(hybridrootfinder(fun, ∂fun, a, b; xtol = xtol, ftol = ftol))
         end
-        _reference_insupport(reference, z[k]) || return nothing
+        isfinite(z[k]) || return nothing
         z[k] = clamp(z[k], lower, upper)
     end
     return z
@@ -707,7 +716,7 @@ pullback(M::AbstractTransportMap, X::AbstractMatrix{<:Real}) = exp.(logpullback(
 
 
 """
-    logpushforward(M::PolynomialMap, target::MapTargetDensity, z::AbstractVector{<:Real})
+    logpushforward(M::AbstractTransportMap, target::MapTargetDensity, z::AbstractVector{<:Real})
 
 Compute the target log-density represented in reference coordinates:
 
@@ -716,28 +725,43 @@ Compute the target log-density represented in reference coordinates:
 = \\log\\pi(M(z))+\\log\\left|\\det\\nabla M(z)\\right|.
 ```
 
-Maps the target log-density back through `M` to the reference space. Supported
-for maps from density (`forwarddirection == :target`). The log-Jacobian is
-computed as a sum of logs of its diagonal entries. Prefer this method to
-`log(pushforward(M, target, z))` for numerical stability.
-"""
-function logpushforward(M::PolynomialMap, target::MapTargetDensity, z::AbstractVector{<:Real})
-    @assert length(M.components) == length(z) "Number of components must match the dimension of z"
+For a map from density (`:target`), evaluate `M(z)` and add the forward
+log-Jacobian as above. For a map from samples (`:reference`), including standalone
+linear and Laplace maps, evaluate `x = inverse(M, z)` and return
+`logpdf(target, x) - logabsdetjacobian(M, x)`.
 
-    M.forwarddirection == :target || error("Can't evaluate pushforward for a map from samples!")
-    return logpdf(target, evaluate(M, z)) + _logabsdetjacobian(M, z)
+The reference coordinates describe the whole map, including all layers of a
+composition. Prefer this method to `log(pushforward(M, target, z))` for numerical
+stability. Nonfinite reference coordinates and points outside the image of a
+map fitted from samples return `-Inf`.
+"""
+function logpushforward(M::AbstractTransportMap, target::MapTargetDensity, z::AbstractVector{<:Real})
+    @assert numberdimensions(M) == length(z) "Input dimension must match the map"
+    all(isfinite, z) || return -Inf
+
+    if _map_direction(M) == :target
+        return logpdf(target, evaluate(M, z)) + logabsdetjacobian(M, z)
+    else
+        x = _pushforward_target_point(M, z)
+        isnothing(x) && return -Inf
+        all(isfinite, x) || return -Inf
+        return logpdf(target, x) - logabsdetjacobian(M, x)
+    end
 end
 
+_pushforward_target_point(M::AbstractTransportMap, z) = _inverse_point_in_bounds(M, z, -Inf, Inf)
+_pushforward_target_point(M::AbstractLinearMap, z) = inverse(M, z)
+
 """
-    logpushforward(M::PolynomialMap, target::MapTargetDensity, Z::AbstractMatrix{<:Real})
+    logpushforward(M::AbstractTransportMap, target::MapTargetDensity, Z::AbstractMatrix{<:Real})
 
 Compute log-pushforward densities at multiple points using multithreading.
 
 Each row of `Z` is a point. Returns a vector whose element `i` is
 `logpushforward(M, target, Z[i, :])`.
 """
-function logpushforward(M::PolynomialMap, target::MapTargetDensity, Z::AbstractMatrix{<:Real})
-    @assert size(Z, 2) == length(M.components) "Number of columns must match the dimension of the map"
+function logpushforward(M::AbstractTransportMap, target::MapTargetDensity, Z::AbstractMatrix{<:Real})
+    @assert size(Z, 2) == numberdimensions(M) "Number of columns must match the dimension of the map"
 
     n_points = size(Z, 1)
 
@@ -754,8 +778,8 @@ function logpushforward(M::PolynomialMap, target::MapTargetDensity, Z::AbstractM
 end
 
 """
-    pushforward(M::PolynomialMap, target::MapTargetDensity, z::AbstractVector{<:Real})
-    pushforward(M::PolynomialMap, target::MapTargetDensity, Z::AbstractMatrix{<:Real})
+    pushforward(M::AbstractTransportMap, target::MapTargetDensity, z::AbstractVector{<:Real})
+    pushforward(M::AbstractTransportMap, target::MapTargetDensity, Z::AbstractMatrix{<:Real})
 
 Compute the target density represented in reference coordinates as
 `exp.(logpushforward(M, target, z))`. A vector represents one point; matrix rows
@@ -763,9 +787,9 @@ represent multiple points.
 
 See [`logpushforward`](@ref) for the change-of-variables formula.
 """
-pushforward(M::PolynomialMap, target::MapTargetDensity, z::AbstractVector{<:Real}) =
+pushforward(M::AbstractTransportMap, target::MapTargetDensity, z::AbstractVector{<:Real}) =
     exp(logpushforward(M, target, z))
-pushforward(M::PolynomialMap, target::MapTargetDensity, Z::AbstractMatrix{<:Real}) =
+pushforward(M::AbstractTransportMap, target::MapTargetDensity, Z::AbstractMatrix{<:Real}) =
     exp.(logpushforward(M, target, Z))
 
 """

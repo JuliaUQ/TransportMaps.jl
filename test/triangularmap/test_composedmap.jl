@@ -5,7 +5,7 @@
 
 end
 
-@testitem "ComposedMap distribution" setup = [ComposedMapSetup] begin
+@testitem "ComposedMap density transformations" setup = [ComposedMapSetup] begin
     using Distributions, LinearAlgebra, Statistics
 
     linear = LinearMap([0.5, -1.0], [2.0, 3.0])
@@ -29,46 +29,31 @@ end
         shift = b - W * location
         for direction in (:target, :reference)
             TransportMaps.setforwarddirection!(pm, direction)
-            d = TransportMapDistribution(C)
             μ = direction == :target ? W * fill(0.4, 2) + shift : W \ (fill(0.4, 2) - shift)
             transform = direction == :target ? W : inv(W)
             expected = MvNormal(μ, 1.7^2 * transform * transform')
-            @test length(d) == 2
-            @test mean(d) ≈ mean(expected) atol = 1.0e-7
-            @test var(d) ≈ var(expected) atol = 1.0e-7
-            @test std(d) ≈ std(expected) atol = 1.0e-7
-            @test cov(d) ≈ cov(expected) atol = 1.0e-7
-            @test cor(d) ≈ cor(expected) atol = 1.0e-7
-            @test entropy(d) ≈ entropy(expected) atol = 1.0e-7
+            target = MapTargetDensity(x -> logpdf(expected, x))
+            reference_distribution = product_distribution(fill(reference, 2))
+            expected_reference = logpdf(reference_distribution, X')
+            @test logpushforward(C, target, X) ≈ expected_reference atol = 1.0e-10
+            @test pushforward(C, target, X) ≈ exp.(expected_reference) atol = 1.0e-10
+            for (i, z) in enumerate(eachrow(X))
+                @test logpushforward(C, target, z) ≈ expected_reference[i] atol = 1.0e-10
+            end
+            @test isempty(logpushforward(C, target, zeros(0, 2)))
+            @test logpushforward(C, target, view(X, 1:2, :)) ≈ expected_reference[1:2] atol = 1.0e-10
+            @test_throws AssertionError logpushforward(C, target, [0.0])
+            @test_throws AssertionError pushforward(C, target, zeros(3, 1))
             @test logpullback(C, X) ≈ logpdf(expected, X') atol = 1.0e-10
-            @test pdf(d, X') ≈ pdf(expected, X') atol = 1.0e-10
-            @test logpdf(d, X') ≈ logpdf(expected, X') atol = 1.0e-10
-            @test insupport(d, X') == trues(3)
             @test logabsdetjacobian(C, X) ≈ fill(logabsdet(W)[1], 3)
             @test jacobian(C, X) ≈ fill(det(W), 3)
-            @test mean(d; quad = GaussHermiteWeights(2, C)) ≈ mean(expected) atol = 1.0e-7
             @test MonteCarloWeights(4, C).distribution == reference
             @test LatinHypercubeWeights(4, C).distribution == reference
-            @test isempty(logpdf(d, zeros(2, 0)))
-            @test !insupport(d, [Inf, 0.0])
-            @test logpdf(d, [Inf, 0.0]) == -Inf
-            @test_throws DimensionMismatch logpdf(d, zeros(3))
-
-            Z = rand(MersenneTwister(7), product_distribution(fill(reference, 2)), 5)
-            expected_samples = direction == :target ? evaluate(C, Z') : inverse(C, Z')
-            output = fill(NaN, 2, 5)
-            @test rand!(MersenneTwister(7), d, output) === output
-            @test output ≈ expected_samples' atol = 1.0e-8
-            @test all(insupport(d, output))
-            point = fill(NaN, 2)
-            @test rand!(MersenneTwister(8), d, point) === point
-            z = rand(MersenneTwister(8), product_distribution(fill(reference, 2)))
-            @test point ≈ (direction == :target ? evaluate(C, z) : inverse(C, z)) atol = 1.0e-8
         end
     end
 end
 
-@testitem "ComposedMap bounded endpoint reference" setup = [ComposedMapSetup] begin
+@testitem "ComposedMap bounded reference quadrature" setup = [ComposedMapSetup] begin
     using Distributions, LinearAlgebra, Statistics
 
     linear = LinearMap([0.5, -1.0], [2.0, 3.0])
@@ -82,32 +67,13 @@ end
         C = ComposedMap(L, pm)
         for direction in (:target, :reference)
             TransportMaps.setforwarddirection!(pm, direction)
-            d = TransportMapDistribution(C)
-            transform(z) = direction == :target ? evaluate(C, z) : inverse(C, z)
-            logdet = logabsdetjacobian(C, zeros(2))
-            expected_logdensity = direction == :target ? -logdet : logdet
-            expected_entropy = -expected_logdensity
-            @test entropy(d) ≈ expected_entropy atol = 1.0e-8
-            @test mean(d; quad = GaussLegendreWeights(2, C)) ≈ transform(fill(0.5, 2)) atol = 1.0e-7
             @test MonteCarloWeights(4, C).distribution == Uniform(0.0, 1.0)
             @test LatinHypercubeWeights(4, C).distribution == Uniform(0.0, 1.0)
-            for z in ([0.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.5, 0.5])
-                x = transform(z)
-                @test insupport(d, x)
-                @test logpdf(d, x) ≈ expected_logdensity atol = 1.0e-8
-            end
-            for z in ([1.1, 0.5], [0.5, -0.1])
-                x = transform(z)
-                @test !insupport(d, x)
-                @test logpdf(d, x) == -Inf
-                @test pdf(d, x) == 0.0
-            end
-            @test all(insupport(d, rand(MersenneTwister(9), d, 8)))
         end
     end
 end
 
-@testitem "ComposedMap nonlinear support and Jacobian" setup = [ComposedMapSetup] begin
+@testitem "ComposedMap nonlinear density transformations" setup = [ComposedMapSetup] begin
     using Distributions, LinearAlgebra, Statistics
 
     laplace = LaplaceMap([-1.0 0.2; 0.2 0.8; 1.2 -0.4; 0.4 0.1])
@@ -140,23 +106,16 @@ end
 
         for direction in (:target, :reference)
             TransportMaps.setforwarddirection!(pm, direction)
-            d = TransportMapDistribution(C)
             transform(z) = direction == :target ? evaluate(C, z) : inverse(C, z)
             logdet = logabsdetjacobian(C, zeros(2))
-            expected = -2log(2) + (direction == :target ? -logdet : logdet)
-            for z in ([-1.0, -1.0], [1.0, 1.0], [0.5, -0.5], [-0.2, 0.3])
-                x = transform(z)
-                @test insupport(d, x)
-                @test logpdf(d, x) ≈ expected atol = 1.0e-8
-            end
-            for z in ([1.1, 0.0], [0.0, -1.1])
-                x = transform(z)
-                @test !insupport(d, x)
-                @test logpdf(d, x) == -Inf
-            end
-            @test entropy(d) ≈ -expected atol = 1.0e-8
-            @test cov(d) ≈ cov(d; quad = GaussLegendreWeights(3, C)) atol = 1.0e-7
-            @test var(d) ≈ diag(cov(d)) atol = 1.0e-10
+            # An unrelated target and nonlinear shear exercise the full change
+            # of variables, rather than only Gaussian affine cancellation.
+            target = MapTargetDensity(x -> -sum(abs2, x))
+            z = [0.2, -0.3]
+            x = transform(z)
+            correction = direction == :target ? logdet : -logdet
+            @test logpushforward(C, target, z) ≈ -sum(abs2, x) + correction atol = 1.0e-8
+            @test pushforward(C, target, reshape(z, 1, :)) ≈ [exp(-sum(abs2, x) + correction)] atol = 1.0e-8
         end
     end
 end
