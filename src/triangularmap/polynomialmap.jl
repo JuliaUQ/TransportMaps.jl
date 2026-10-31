@@ -49,6 +49,9 @@ mutable struct PolynomialMap <: AbstractTriangularMap
     end
 end
 
+_reference_marginal(M::PolynomialMap) = M.reference.densitytype
+_map_direction(M::PolynomialMap) = M.forwarddirection
+
 _default_basis(::Normal) = LinearizedHermiteBasis()
 
 function _default_basis(reference::Uniform)
@@ -148,7 +151,7 @@ function PolynomialMap(
         components[k] = PolynomialMapComponent(Λ[k], rectifier, basis, reference_density)
     end
 
-    return PolynomialMap(components; forwarddirection = :target)
+    return PolynomialMap(components, reference_density; forwarddirection = :target)
 end
 
 """
@@ -367,9 +370,25 @@ function jacobian(M::PolynomialMap, Z::AbstractMatrix{<:Real})
     return results
 end
 
-function _logabsdetjacobian(M::PolynomialMap, z::AbstractVector{<:Real})
+"""
+    logabsdetjacobian(map, x)
+
+Log absolute determinant of the forward map at a vector point, or at each row of
+a matrix. Polynomial maps sum component log-derivatives; compositions add layer
+contributions. Linear standardizations use the forward determinant, unlike the
+legacy scale determinant returned by `jacobian(L)` without a point argument.
+"""
+function logabsdetjacobian(M::PolynomialMap, z::AbstractVector{<:Real})
     return sum(value -> log(abs(value)), gradient_zk(M, z); init = 0.0)
 end
+
+function logabsdetjacobian(M::AbstractTransportMap, X::AbstractMatrix{<:Real})
+    @assert size(X, 2) == numberdimensions(M) "Number of columns must match the dimension of the map"
+    return [logabsdetjacobian(M, x) for x in eachrow(X)]
+end
+
+# Retain the internal spelling used by earlier distribution implementations.
+_logabsdetjacobian(M::AbstractTransportMap, x) = logabsdetjacobian(M, x)
 
 
 """
@@ -483,13 +502,13 @@ end
 # Return reference coordinates, or nothing when the point is outside the map's
 # induced support. Density evaluation reuses this inverse instead of solving
 # again after a separate support check.
-function _reference_point_in_support(pm::PolynomialMap, x::AbstractVector{<:Real})
+function _reference_point_in_support(pm::AbstractTransportMap, x::AbstractVector{<:Real})
     length(x) == numberdimensions(pm) || return nothing
     all(isfinite, x) || return nothing
     isempty(x) && return Float64[]
-    reference = pm.reference.densitytype
+    reference = _reference_marginal(pm)
     lower, upper = extrema(reference)
-    if pm.forwarddirection == :reference
+    if _map_direction(pm) == :reference
         z = evaluate(pm, x)
         all(value -> _reference_insupport(reference, value), z) || return nothing
         # Keep roundoff at a closed boundary consistent with logpdf(reference, z).
@@ -497,11 +516,8 @@ function _reference_point_in_support(pm::PolynomialMap, x::AbstractVector{<:Real
     end
 
     z = Vector{Float64}(undef, length(x))
-    for (k, component) in enumerate(pm.components)
-        fun, ∂fun = _inverse_component_functions(
-            component.basisfunctions, component.coefficients, component.rectifier,
-            view(z, 1:(k - 1)), x[k], k,
-        )
+    for k in eachindex(z)
+        fun, ∂fun = _inverse_coordinate_functions(pm, view(z, 1:(k - 1)), x[k], k)
         bounds = _support_inverse_bounds(fun, lower, upper, x[k])
         isnothing(bounds) && return nothing
         a, b = bounds
@@ -516,6 +532,14 @@ function _reference_point_in_support(pm::PolynomialMap, x::AbstractVector{<:Real
         z[k] = clamp(z[k], lower, upper)
     end
     return z
+end
+
+function _inverse_coordinate_functions(pm::PolynomialMap, previous, target, k)
+    component = pm[k]
+    return _inverse_component_functions(
+        component.basisfunctions, component.coefficients, component.rectifier,
+        previous, target, k,
+    )
 end
 
 function _reference_insupport(reference, value)
@@ -603,7 +627,7 @@ function inverse_jacobian(M::PolynomialMap, X::AbstractMatrix{<:Real})
 end
 
 """
-    logpullback(M::PolynomialMap, x::AbstractVector{<:Real})
+    logpullback(M::AbstractTransportMap, x::AbstractVector{<:Real})
 
 Evaluate the log of the target-density approximation induced by the map.
 
@@ -629,28 +653,30 @@ Returns `-Inf` for points outside the induced support, including nonfinite
 coordinates. The reference coordinates are computed once with a guarded inverse
 and reused for the density and Jacobian.
 """
-function logpullback(M::PolynomialMap, x::AbstractVector{<:Real})
-    @assert length(M.components) == length(x) "Number of components must match the dimension of x"
+function logpullback(M::AbstractTransportMap, x::AbstractVector{<:Real})
+    @assert numberdimensions(M) == length(x) "Number of components must match the dimension of x"
 
     z = _reference_point_in_support(M, x)
     isnothing(z) && return -Inf
-    if M.forwarddirection == :target
-        return logpdf(M.reference, z) - _logabsdetjacobian(M, z)
+    reference = _reference_marginal(M)
+    logdensity = sum(value -> logpdf(reference, value), z; init = 0.0)
+    if _map_direction(M) == :target
+        return logdensity - logabsdetjacobian(M, z)
     else
-        return logpdf(M.reference, z) + _logabsdetjacobian(M, x)
+        return logdensity + logabsdetjacobian(M, x)
     end
 end
 
 """
-    logpullback(M::PolynomialMap, X::AbstractMatrix{<:Real})
+    logpullback(M::AbstractTransportMap, X::AbstractMatrix{<:Real})
 
 Compute log-pullback densities at multiple points using multithreading.
 
 Each row of `X` is a point. Returns a vector whose element `i` is
 `logpullback(M, X[i, :])`.
 """
-function logpullback(M::PolynomialMap, X::AbstractMatrix{<:Real})
-    @assert size(X, 2) == length(M.components) "Number of columns must match the dimension of the map"
+function logpullback(M::AbstractTransportMap, X::AbstractMatrix{<:Real})
+    @assert size(X, 2) == numberdimensions(M) "Number of columns must match the dimension of the map"
 
     n_points = size(X, 1)
 
@@ -667,8 +693,8 @@ function logpullback(M::PolynomialMap, X::AbstractMatrix{<:Real})
 end
 
 """
-    pullback(M::PolynomialMap, x::AbstractVector{<:Real})
-    pullback(M::PolynomialMap, X::AbstractMatrix{<:Real})
+    pullback(M::AbstractTransportMap, x::AbstractVector{<:Real})
+    pullback(M::AbstractTransportMap, X::AbstractMatrix{<:Real})
 
 Evaluate the target-density approximation induced by the map as
 `exp.(logpullback(M, x))`. A vector represents one point; matrix rows represent
@@ -676,8 +702,8 @@ multiple points.
 
 See [`logpullback`](@ref) for the change-of-variables formulas.
 """
-pullback(M::PolynomialMap, x::AbstractVector{<:Real}) = exp(logpullback(M, x))
-pullback(M::PolynomialMap, X::AbstractMatrix{<:Real}) = exp.(logpullback(M, X))
+pullback(M::AbstractTransportMap, x::AbstractVector{<:Real}) = exp(logpullback(M, x))
+pullback(M::AbstractTransportMap, X::AbstractMatrix{<:Real}) = exp.(logpullback(M, X))
 
 
 """

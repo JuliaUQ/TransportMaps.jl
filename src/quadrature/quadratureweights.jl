@@ -60,14 +60,14 @@ reference density configured on `map`, including its mean and standard deviation
 Returns a [`TensorProductWeights`](@ref) object.
 """
 function GaussHermiteWeights(level::Int64, map::AbstractTransportMap)
-    if !(map.reference.densitytype isa Normal)
-        error("GaussHermiteWeights requires Normal reference distribution, got $(typeof(map.reference.densitytype))")
+    if !(_reference_marginal(map) isa Normal)
+        error("GaussHermiteWeights requires Normal reference distribution, got $(typeof(_reference_marginal(map)))")
     end
 
     return TensorProductWeights(
         level,
         numberdimensions(map),
-        GaussHermiteKnots(map.reference.densitytype),
+        GaussHermiteKnots(_reference_marginal(map)),
     )
 end
 
@@ -90,8 +90,8 @@ Returns a [`TensorProductWeights`](@ref) object.
 """
 function GaussLegendreWeights(level::Int64, map::AbstractTransportMap)
 
-    if !(map.reference.densitytype isa Uniform)
-        error("GaussLegendreWeights requires Uniform reference distribution, got $(typeof(map.reference.densitytype))")
+    if !(_reference_marginal(map) isa Uniform)
+        error("GaussLegendreWeights requires Uniform reference distribution, got $(typeof(_reference_marginal(map)))")
     end
 
     return TensorProductWeights(level, numberdimensions(map), _determine_knots_from_reference(map))
@@ -138,7 +138,7 @@ end
 Base.eltype(::Type{SparseSmolyakWeights{T}}) where {T <: AbstractQuadratureKnots} = T
 
 function _determine_knots_from_reference(map::AbstractTransportMap)
-    ref = map.reference.densitytype
+    ref = _reference_marginal(map)
     if ref isa Normal
         return GaussHermiteKnots(ref)
     elseif ref isa Uniform
@@ -174,9 +174,9 @@ struct MonteCarloWeights <: AbstractQuadratureWeights
 
     function MonteCarloWeights(numberpoints::Int64, map::AbstractTransportMap)
         # Generate random points in the reference space
-        points, weights = montecarlo_weights(numberpoints, numberdimensions(map), map.reference.densitytype)
+        points, weights = montecarlo_weights(numberpoints, numberdimensions(map), _reference_marginal(map))
 
-        return new(points, weights, map.reference.densitytype)
+        return new(points, weights, _reference_marginal(map))
     end
 
     function MonteCarloWeights(points::Matrix{Float64}, weights::Vector{Float64} = Float64[])
@@ -222,8 +222,8 @@ struct LatinHypercubeWeights <: AbstractQuadratureWeights
 
     function LatinHypercubeWeights(n::Int64, map::AbstractTransportMap)
         # Generate Latin Hypercube points in the reference space
-        points, weights = latinhypercube_weights(n, numberdimensions(map), map.reference.densitytype)
-        return new(points, weights, map.reference.densitytype)
+        points, weights = latinhypercube_weights(n, numberdimensions(map), _reference_marginal(map))
+        return new(points, weights, _reference_marginal(map))
     end
 end
 

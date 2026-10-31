@@ -1,6 +1,74 @@
-# Distributions interface for fitted transport map
+"""
+    TransportMapDistribution(map::M) where {M <: AbstractTransportMap}
+
+Represent a fitted `PolynomialMap`, `ComposedMap`, `LinearMap`, or `LaplaceMap`
+as a continuous multivariate distribution. Standalone linear and Laplace maps
+use a product standard-normal reference and map target to reference, so their
+inverse generates the corresponding Gaussian samples. Compositions inherit the
+polynomial layer's reference and the direction of the whole map.
+
+`rand(d, n)` returns samples in columns, following Distributions.jl. Map-level
+batch operations use rows. Moments and entropy accept a `quad` keyword for
+reference-space quadrature. Maps are retained by reference, so later parameter
+changes affect the distribution. Use `deepcopy(map)` to freeze a fitted map.
+
+### Example
+```julia
+map = PolynomialMap(2, 2) # initialize and fit map, optimize!() etc..
+d = TransportMapDistribution(map)
+# Sampling
+samples = rand(d, 10)
+# Moments
+μ = mean(d)
+σ = std(d)
+Σ = cov(d)
+# Density
+dens = pdf(d, [1.0, -1.0])
+```
+"""
 struct TransportMapDistribution{M <: AbstractTransportMap} <: Distributions.ContinuousMultivariateDistribution
     map::M
+
+    function TransportMapDistribution(map::M) where {M <: AbstractTransportMap}
+        numberdimensions(map) > 0 || throw(ArgumentError("A distribution requires a dimensioned map; use LinearMap(n) for a standalone identity"))
+        _validate_distribution_map(map)
+        return new{M}(map)
+    end
+end
+
+function _validate_distribution_map(map::AbstractTransportMap)
+    throw(ArgumentError("Distribution operations are not implemented for $(typeof(map))"))
+end
+
+function _validate_distribution_map(map::PolynomialMap)
+    _reference_marginal(map) isa Distributions.ContinuousUnivariateDistribution ||
+        throw(ArgumentError("TransportMapDistribution requires a continuous reference"))
+    _map_direction(map) in (:reference, :target) || throw(ArgumentError("Invalid map direction"))
+    return nothing
+end
+
+function _validate_distribution_map(map::LinearMap)
+    length(map.μ) == length(map.σ) || throw(DimensionMismatch("Linear location and scale dimensions must agree"))
+    all(isfinite, map.μ) && all(value -> isfinite(value) && !iszero(value), map.σ) ||
+        throw(ArgumentError("Linear maps require finite locations and finite nonzero scales"))
+    return nothing
+end
+
+function _validate_distribution_map(map::LaplaceMap)
+    d = numberdimensions(map)
+    size(map.chol) == (d, d) || throw(DimensionMismatch("Laplace location and factor dimensions must agree"))
+    all(isfinite, map.mode) && all(isfinite, map.chol) && istril(map.chol) &&
+        all(value -> !iszero(value), diag(map.chol)) ||
+        throw(ArgumentError("Laplace maps require a finite location and nonsingular lower-triangular factor"))
+    return nothing
+end
+
+function _validate_distribution_map(map::ComposedMap)
+    _validate_distribution_map(map.linearmap)
+    _validate_distribution_map(map.polynomialmap)
+    numberdimensions(map.linearmap) in (0, numberdimensions(map.polynomialmap)) ||
+        throw(DimensionMismatch("Composed map dimensions must agree"))
+    return nothing
 end
 
 function Base.show(io::IO, d::TransportMapDistribution)
@@ -14,32 +82,32 @@ Distributions.sampler(d::TransportMapDistribution) = d
 Base.eltype(::Type{<:TransportMapDistribution}) = Float64
 
 ## Helper functions
-function _reference_distribution(pm::PolynomialMap)
-    return product_distribution(fill(pm.reference.densitytype, numberdimensions(pm)))
+function _reference_distribution(tm::AbstractTransportMap)
+    return product_distribution(fill(_reference_marginal(tm), numberdimensions(tm)))
 end
 
-function _from_reference(pm::PolynomialMap, x::AbstractVecOrMat{<:Real})
-    if pm.forwarddirection == :target
-        return evaluate(pm, x) # map from density
+function _from_reference(tm::AbstractTransportMap, x::AbstractVecOrMat{<:Real})
+    if _map_direction(tm) == :target
+        return evaluate(tm, x) # map from density
     else
-        return inverse(pm, x) # map from samples
+        return inverse(tm, x) # map from samples
     end
 end
 
-function _to_reference(pm::PolynomialMap, x::AbstractVecOrMat{<:Real})
-    if pm.forwarddirection == :target
-        return inverse(pm, x) # map from density
+function _to_reference(tm::AbstractTransportMap, x::AbstractVecOrMat{<:Real})
+    if _map_direction(tm) == :target
+        return inverse(tm, x) # map from density
     else
-        return evaluate(pm, x) # map from samples
+        return evaluate(tm, x) # map from samples
     end
 end
 
-function _nth_moment(pm::PolynomialMap, n::Int64, quad::AbstractQuadratureWeights)
-    return (_from_reference(pm, quad.points) .^ n)' * quad.weights
+function _nth_moment(tm::AbstractTransportMap, n::Int64, quad::AbstractQuadratureWeights)
+    return (_from_reference(tm, quad.points) .^ n)' * quad.weights
 end
 
-function _centered_map_values(pm::PolynomialMap, quad::AbstractQuadratureWeights)
-    X = _from_reference(pm, quad.points)
+function _centered_map_values(tm::AbstractTransportMap, quad::AbstractQuadratureWeights)
+    X = _from_reference(tm, quad.points)
     μ = X' * quad.weights
     return X .- μ'
 end
@@ -96,15 +164,15 @@ function cor(d::TransportMapDistribution; quad::AbstractQuadratureWeights = Spar
 end
 
 function entropy(d::TransportMapDistribution; quad::AbstractQuadratureWeights = SparseSmolyakWeights(3, d.map))
-    pm = d.map
-    points = pm.forwarddirection == :target ? quad.points :
-        _from_reference(pm, quad.points)
+    tm = d.map
+    points = _map_direction(tm) == :target ? quad.points :
+        _from_reference(tm, quad.points)
 
-    logdet = [_logabsdetjacobian(pm, point) for point in eachrow(points)]
+    logdet = [logabsdetjacobian(tm, point) for point in eachrow(points)]
     correction = dot(quad.weights, logdet)
-    H_reference = entropy(_reference_distribution(pm))
+    H_reference = entropy(_reference_distribution(tm))
 
-    return pm.forwarddirection == :target ?
+    return _map_direction(tm) == :target ?
         H_reference + correction :
         H_reference - correction
 end

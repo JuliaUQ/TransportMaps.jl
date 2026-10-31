@@ -6,6 +6,62 @@
 
 end
 
+@testitem "LinearMap distribution" setup = [LinearMapSetup] begin
+    using Distributions, Statistics
+
+    L = LinearMap([1.0, -2.0], [2.0, 3.0])
+    d = TransportMapDistribution(L)
+    expected = MvNormal(L.μ, Diagonal(L.σ .^ 2))
+    X = [0.0 0.0; 1.0 -2.0; -0.5 0.3]
+    @test length(d) == 2
+    @test mean(d) ≈ mean(expected)
+    @test var(d) ≈ var(expected)
+    @test std(d) ≈ std(expected)
+    @test cov(d) ≈ cov(expected)
+    @test cor(d) ≈ cor(expected)
+    @test entropy(d) ≈ entropy(expected)
+    @test logpullback(L, X) ≈ logpdf(expected, permutedims(X))
+    @test pdf(d, permutedims(X)) ≈ pdf(expected, permutedims(X))
+    @test loglikelihood(d, permutedims(X)) ≈ loglikelihood(expected, permutedims(X))
+    @test logabsdetjacobian(L, X) ≈ fill(-log(6), 3)
+    @test jacobian(L, X) ≈ fill(1 / 6, 3)
+    @test insupport(d, X') == trues(3)
+    @test !insupport(d, [Inf, 0.0])
+    @test logpdf(d, [Inf, 0.0]) == -Inf
+    @test isempty(logpdf(d, zeros(2, 0)))
+    @test_throws DimensionMismatch logpdf(d, zeros(3))
+
+    rng = MersenneTwister(101)
+    expected_point = inverse(L, rand(MersenneTwister(101), MvNormal(zeros(2), I)))
+    point = fill(NaN, 2)
+    @test rand!(rng, d, point) === point
+    @test point ≈ expected_point
+    @test size(rand(MersenneTwister(1), d, 7)) == (2, 7)
+    output = fill(NaN, 2, 5)
+    expected_samples = inverse(L, permutedims(rand(MersenneTwister(2), MvNormal(zeros(2), I), 5)))'
+    @test rand!(MersenneTwister(2), d, output) === output
+    @test output ≈ expected_samples
+    buffer = fill(NaN, 2, 6)
+    @test rand!(MersenneTwister(3), d, view(buffer, :, 2:4)) === view(buffer, :, 2:4)
+    @test all(isfinite, buffer[:, 2:4])
+    @test all(isnan, buffer[:, [1, 5, 6]])
+    @test mean(d; quad = GaussHermiteWeights(2, L)) ≈ mean(expected)
+    @test MonteCarloWeights(4, L).distribution == Normal()
+    @test LatinHypercubeWeights(4, L).distribution == Normal()
+    @test_throws ErrorException GaussLegendreWeights(2, L)
+
+    signed = TransportMapDistribution(LinearMap([1.0, -2.0], [-2.0, 3.0]))
+    @test logpdf(signed, X') ≈ logpdf(expected, X')
+    @test cov(signed) ≈ cov(expected)
+    large = LinearMap(zeros(2), fill(1.0e200, 2))
+    @test logpdf(TransportMapDistribution(large), zeros(2)) ≈ -log(2π) - 400log(10)
+    @test entropy(TransportMapDistribution(large)) ≈ log(2π * exp(1)) + 400log(10)
+    @test_throws ArgumentError TransportMapDistribution(LinearMap())
+    @test_throws ArgumentError TransportMapDistribution(LinearMap([0.0], [0.0]))
+    @test_throws ArgumentError TransportMapDistribution(LinearMap([0.0], [Inf]))
+    @test_throws DimensionMismatch TransportMapDistribution(LinearMap([0.0], [1.0, 2.0]))
+end
+
 @testitem "LinearMap" setup = [LinearMapSetup] begin
     rng = MersenneTwister(1234)
 

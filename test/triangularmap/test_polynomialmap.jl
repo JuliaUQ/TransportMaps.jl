@@ -1096,6 +1096,32 @@ end
     end
 end
 
+@testitem "Explicit indices retain reference metadata" setup = [PolynomialMapSetup] begin
+    using Statistics, Random
+    indices = [[[0], [1]]]
+    configurations = (
+        (Uniform(-1.0, 1.0), LegendreBasis(), [0.0, 1.0]),
+        (Uniform(0.0, 1.0), ShiftedLegendreBasis(), [0.5, 0.5]),
+        (Normal(2.0, 3.0), HermiteBasis(), [0.0, 1.0]),
+    )
+    for (reference, basis, coefficients) in configurations
+        map = PolynomialMap(indices, IdentityRectifier(), basis, reference)
+        setcoefficients!(map, coefficients)
+        @test map.reference.densitytype == reference
+        @test map.forwarddirection == :target
+        distribution = TransportMapDistribution(map)
+        @test mean(distribution) ≈ [mean(reference)] atol = 1.0e-10
+        @test var(distribution) ≈ [var(reference)] atol = 1.0e-10
+        @test entropy(distribution) ≈ entropy(reference) atol = 1.0e-10
+        for x in (-2.0, 0.25, 0.75, 2.0)
+            @test logpdf(distribution, [x]) ≈ logpdf(reference, x) atol = 1.0e-10
+        end
+        generated = rand(MersenneTwister(919), distribution, 10)
+        @test all(insupport(distribution, generated))
+        @test all(value -> insupport(reference, value), generated)
+    end
+end
+
 @testitem "Log-density numerical stability" setup = [PolynomialMapSetup] begin
     @testset "Normal tails remain finite in log space" begin
         pm = DiagonalMap(1, 1, Normal(), IdentityRectifier(), HermiteBasis())
