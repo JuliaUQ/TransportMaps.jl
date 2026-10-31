@@ -8,6 +8,37 @@
 
 end
 
+@testitem "Density refitting updates distribution direction" setup = [MapFromDensitySetup] begin
+    using Statistics
+    samples = reshape(collect(range(-2.0, 2.0; length = 101)), :, 1)
+    expected = Normal(2.0, 3.0)
+    target = MapTargetDensity(x -> logpdf(expected, x[1]))
+    for use_precomputed in (false, true)
+        map = PolynomialMap(1, 1)
+        sample_result = optimize!(map, samples)
+        @test Optim.converged(sample_result.optimization_results[1])
+        @test map.forwarddirection == :reference
+        # Retain the wrapper across refitting: it must follow the new direction.
+        distribution = TransportMapDistribution(map)
+        quadrature = GaussHermiteWeights(3, map)
+        fitting_rule = use_precomputed ?
+            PrecomputedMapBasis(map, quadrature.points, quadrature.weights) : quadrature
+        result = optimize!(map, target, fitting_rule)
+        @test Optim.converged(result)
+        @test map.forwarddirection == :target
+        @test mean(distribution) ≈ [mean(expected)] atol = 1.0e-5
+        @test var(distribution) ≈ [var(expected)] atol = 1.0e-5
+        @test entropy(distribution) ≈ entropy(expected) atol = 1.0e-5
+        for x in (-1.0, 2.0, 5.0)
+            @test logpdf(distribution, [x]) ≈ logpdf(expected, x) atol = 1.0e-5
+        end
+        generated = rand(MersenneTwister(918), distribution, 5000)
+        @test size(generated) == (1, 5000)
+        @test mean(generated) ≈ mean(expected) atol = 0.15
+        @test std(generated) ≈ std(expected) atol = 0.15
+    end
+end
+
 @testitem "Regularization selects nonlinear and interaction coefficients" setup = [MapFromDensitySetup] begin
     M = PolynomialMap(2, 2, :normal, Softplus())
 

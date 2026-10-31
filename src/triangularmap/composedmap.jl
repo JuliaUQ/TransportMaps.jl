@@ -4,7 +4,11 @@
 A composed transport map consisting of a linear map followed by a polynomial map.
 
 The composition is ``S(x)=M(L(x))``, where `L` is a linear map of type `T` and
-`M` is the polynomial map. The linear map can be a `LinearMap` or `LaplaceMap`.
+`M` is the polynomial map. The linear map can be a `LinearMap` or `LaplaceMap`. The direction of the whole
+composition is inherited from the polynomial map: `:reference` means target to
+reference and `:target` means reference to target. Its reference distribution is
+the endpoint reference of the whole map, before both layers for `:target` and
+after both layers for `:reference`.
 
 # Fields
 - `linearmap<:T`: The linear map component
@@ -69,30 +73,39 @@ function inverse(C::ComposedMap{T}, Z::AbstractMatrix{<:Real}) where {T <: Abstr
     return inverse(C.linearmap, Y)
 end
 
-"""
-    pullback(C::ComposedMap, x::AbstractVector{<:Real})
+# Keep composition metadata behind accessors so distribution operations do not
+# depend on this two-layer container's fields. The whole map is M ∘ L, matching
+# the evaluation-order and direction conventions of the map-chains branch.
+_reference_marginal(C::ComposedMap) = _reference_marginal(C.polynomialmap)
+_map_direction(C::ComposedMap) = _map_direction(C.polynomialmap)
 
-Compute the pullback density of the composed map:
-
-```math
-\\operatorname{pullback}(C,x)
-= \\operatorname{pullback}(M,L(x))\\,|\\det\\nabla L(x)|
-= \\frac{\\operatorname{pullback}(M,L(x))}{\\prod_i\\sigma_i}.
-```
-"""
-function pullback(C::ComposedMap{T}, x::AbstractVector{<:Real}) where {T <: AbstractLinearMap}
-    y = evaluate(C.linearmap, x)
-    return pullback(C.polynomialmap, y) ./ jacobian(C.linearmap)  # Adjust for map scaling
+function logabsdetjacobian(C::ComposedMap, x::AbstractVector{<:Real})
+    return logabsdetjacobian(C.linearmap, x) +
+        logabsdetjacobian(C.polynomialmap, evaluate(C.linearmap, x))
 end
 
-"""
-    pullback(C::ComposedMap, X::AbstractMatrix{<:Real})
+function jacobian(C::ComposedMap, x::AbstractVector{<:Real})
+    return jacobian(C.linearmap, x) * jacobian(C.polynomialmap, evaluate(C.linearmap, x))
+end
 
-Compute the pullback density for multiple points (row-wise).
-"""
-function pullback(C::ComposedMap{T}, X::AbstractMatrix{<:Real}) where {T <: AbstractLinearMap}
-    Y = evaluate(C.linearmap, X)
-    return pullback(C.polynomialmap, Y) ./ jacobian(C.linearmap)  # Adjust for map scaling
+function jacobian(C::ComposedMap, X::AbstractMatrix{<:Real})
+    @assert size(X, 2) == numberdimensions(C) "Input dimension must match the map"
+    return [jacobian(C, x) for x in eachrow(X)]
+end
+
+function _inverse_coordinate_functions(C::ComposedMap, previous, target, k)
+    transformed, slope = _linear_prefix(C.linearmap, previous, k)
+    fun, derivative = _inverse_coordinate_functions(
+        C.polynomialmap, view(transformed, 1:(k - 1)), target, k,
+    )
+    # The input to polynomial component k is affine in the original coordinate.
+    # Orient the residual upwards even for a signed linear scale, so guarded
+    # bracketing always uses the reference interval of the whole composition.
+    orientation = sign(slope)
+    coordinate(t) = muladd(slope, t, transformed[k])
+    residual(t) = orientation * fun(coordinate(t))
+    gradient(t) = abs(slope) * derivative(coordinate(t))
+    return residual, gradient
 end
 
 """
@@ -100,7 +113,7 @@ end
 
 Return the number of dimensions of the composed map.
 """
-numberdimensions(C::ComposedMap{T}) where {T <: AbstractLinearMap} = numberdimensions(C.linearmap)
+numberdimensions(C::ComposedMap{T}) where {T <: AbstractLinearMap} = numberdimensions(C.polynomialmap)
 
 function Base.show(io::IO, C::ComposedMap{T}) where {T <: AbstractLinearMap}
     print(io, "ComposedMap{$(T)}(")

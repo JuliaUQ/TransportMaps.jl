@@ -82,6 +82,17 @@ struct LaplaceMap <: AbstractLinearMap
     end
 end
 
+function logabsdetjacobian(L::LaplaceMap, x::AbstractVector{<:Real})
+    @assert length(x) == numberdimensions(L) "Input dimension must match the map"
+    return -sum(value -> log(abs(value)), diag(L.chol); init = 0.0)
+end
+
+function _linear_prefix(L::LaplaceMap, previous, k)
+    point = [previous; 0.0]
+    transformed = LowerTriangular(view(L.chol, 1:k, 1:k)) \ (point .- view(L.mode, 1:k))
+    return transformed, inv(L.chol[k, k])
+end
+
 """
     evaluate(L::LaplaceMap, x::AbstractVector{<:Real})
 

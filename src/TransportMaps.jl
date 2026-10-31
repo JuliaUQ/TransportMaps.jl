@@ -13,7 +13,9 @@ using Random
 using StatsFuns
 using Statistics
 
-import Distributions: mean, mode, cov, MvNormal, pdf, logpdf, gradlogpdf, support
+import Distributions:
+    mean, mode, cov, cor, var, std, entropy, MvNormal, pdf, logpdf, gradlogpdf, support,
+    insupport
 
 # Abstract type definitions
 abstract type AbstractBasisFunction end
@@ -27,7 +29,7 @@ abstract type AbstractMultivariateBasis end
 abstract type AbstractRectifierFunction end
 abstract type AbstractQuadratureWeights end
 abstract type AbstractMapDensity end
-abstract type AbstractComposedMap end
+abstract type AbstractComposedMap <: AbstractTransportMap end
 abstract type AbstractLinearMap <: AbstractTriangularMap end
 abstract type AbstractQuadratureKnots end
 
@@ -71,12 +73,15 @@ export gradient_coefficients
 export gradient_z
 export gradient_zk
 export jacobian
+export logabsdetjacobian
 export inverse
 export inverse_jacobian
 export partial_derivative_z
 export partial_derivative_zk
 export pullback
 export pushforward
+export logpullback
+export logpushforward
 
 # Coefficient utilities
 export setcoefficients!
@@ -154,6 +159,8 @@ export pdf
 export logpdf
 export grad_logpdf
 
+export TransportMapDistribution
+
 # Include files
 include("util/mapdensity.jl")
 include("plotting/plotting.jl")
@@ -189,5 +196,7 @@ include("quadrature/quadratureweights.jl")
 
 include("util/gaussquadrature.jl")
 include("util/hybridrootfinder.jl")
+
+include("distributions/transportmapdistribution.jl")
 
 end

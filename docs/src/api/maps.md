@@ -14,6 +14,7 @@ PolynomialMapComponent
 LinearMap
 LaplaceMap
 ComposedMap
+TransportMapDistribution
 ```
 
 ## Functions
@@ -21,6 +22,9 @@ ComposedMap
 ```@docs
 evaluate
 inverse
+logabsdetjacobian
+logpushforward
+logpullback
 pushforward
 pullback
 setcoefficients!
