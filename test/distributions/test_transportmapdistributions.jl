@@ -80,8 +80,9 @@ end
         @test statistic(d; quad = quad) ≈ statistic(d)
     end
     biased_rule = MonteCarloWeights([2.0 -1.0], [1.0])
-    @test mean(d; quad = biased_rule) == [-3.0, -5.0]
-    @test var(d; quad = biased_rule) == zeros(2)
+    for statistic in (mean, var, std, cov, cor, entropy)
+        @test statistic(d; quad = biased_rule) == statistic(d)
+    end
 
     # Exact standard deviations and correlations do not square extreme scales.
     extreme = TransportMapDistribution(LinearMap(zeros(2), [-1.0e200, 1.0e-200]))
@@ -122,6 +123,28 @@ end
     @test_throws DimensionMismatch logpdf(d, zeros(3))
 end
 
+@testitem "Polynomial distribution quadrature" setup = [TransportMapDistributionSetup] begin
+    map = PolynomialMap(1, 1, Normal(), IdentityRectifier(), HermiteBasis())
+    setcoefficients!(map, [1.0, 2.0])
+    d = TransportMapDistribution(map)
+    quad = MonteCarloWeights(reshape([-1.0, 0.0, 2.0], :, 1), [0.2, 0.3, 0.5])
+    reference_mean, reference_variance = 0.8, 1.56
+    for direction in (:target, :reference)
+        TransportMaps.setforwarddirection!(map, direction)
+        shift, scale = direction == :target ? (1.0, 2.0) : (-0.5, 0.5)
+        expected_mean = shift + scale * reference_mean
+        expected_variance = scale^2 * reference_variance
+        @test mean(d; quad = quad) ≈ [expected_mean]
+        @test var(d; quad = quad) ≈ [expected_variance]
+        @test std(d; quad = quad) ≈ [sqrt(expected_variance)]
+        @test cov(d; quad = quad) ≈ fill(expected_variance, 1, 1)
+        @test cor(d; quad = quad) ≈ ones(1, 1)
+        @test entropy(d; quad = quad) ≈ entropy(Normal()) + log(scale)
+        @test mean(d) ≈ [shift]
+        @test var(d) ≈ [scale^2]
+    end
+end
+
 @testitem "LaplaceMap exact statistics" setup = [TransportMapDistributionSetup] begin
     L = LaplaceMap([-1.0 0.2; 0.2 0.8; 1.2 -0.4; 0.4 0.1])
     d = TransportMapDistribution(L)
@@ -137,8 +160,9 @@ end
     @test mean(d) == L.mode
     @test var(d) ≈ var(expected)
     biased_rule = MonteCarloWeights([2.0 -1.0], [1.0])
-    @test mean(d; quad = biased_rule) ≈ inverse(L, [2.0, -1.0])
-    @test var(d; quad = biased_rule) == zeros(2)
+    for statistic in (mean, var, std, cov, cor, entropy)
+        @test statistic(d; quad = biased_rule) == statistic(d)
+    end
 
     expected_std, expected_cor, expected_entropy = std(d), cor(d), entropy(d)
     L.chol .*= 1.0e200

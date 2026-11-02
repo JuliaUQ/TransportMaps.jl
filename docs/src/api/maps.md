@@ -14,7 +14,6 @@ PolynomialMapComponent
 LinearMap
 LaplaceMap
 ComposedMap
-TransportMapDistribution
 ```
 
 ## Functions

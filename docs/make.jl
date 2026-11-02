@@ -88,6 +88,7 @@ makedocs(
             "Reference and Target Densities" => "api/densities.md",
             "Quadrature" => "api/quadrature.md",
             "Maps" => "api/maps.md",
+            "Distributions Interface" => "api/distributions.md",
             "Optimization" => "api/optimization.md",
             "Plotting" => "api/plotting.md",
         ],
