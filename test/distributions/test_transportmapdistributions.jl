@@ -526,6 +526,42 @@ end
     end
 end
 
+@testitem "BOD posterior density inversion" setup = [TransportMapDistributionSetup] begin
+    using Logging
+
+    times = [1, 2, 3, 4, 5]
+    observations = [0.18, 0.32, 0.42, 0.49, 0.54]
+    noise = sqrt(1.0e-3)
+    function logposterior(θ)
+        A = 0.4 + (1.2 - 0.4) * cdf(Normal(), θ[1])
+        B = 0.01 + (0.31 - 0.01) * cdf(Normal(), θ[2])
+        likelihood = sum(
+            logpdf(Normal(A * (1 - exp(-B * t)), noise), value)
+                for (t, value) in zip(times, observations)
+        )
+        return likelihood + logpdf(Normal(), θ[1]) + logpdf(Normal(), θ[2])
+    end
+    map = PolynomialMap(2, 3, Normal(), Softplus(), LinearizedHermiteBasis())
+    optimize!(map, MapTargetDensity(logposterior), GaussHermiteWeights(3, map))
+    posterior = TransportMapDistribution(map)
+
+    # This is the plotting grid from the BOD documentation example. Previously
+    # several inversions oscillated at round-off accuracy for 10,000 iterations.
+    values = @test_logs min_level = Logging.Warn [
+        pdf(posterior, [θ₁, θ₂])
+            for θ₁ in range(-0.5, 1.5; length = 100), θ₂ in range(-0.5, 3.0; length = 100)
+    ]
+    @test all(isfinite, values)
+    @test all(>=(0.0), values)
+    @test maximum(values) > 0.0
+
+    for point in ([-0.4393939393939394, 0.7727272727272727], [-0.03535353535353535, 0.13636363636363635])
+        reference_point = TransportMaps._reference_point_in_support(map, point)
+        @test !isnothing(reference_point)
+        @test evaluate(map, reference_point) ≈ point atol = 1.0e-13
+    end
+end
+
 @testitem "Density refitting updates distribution direction" setup = [TransportMapDistributionSetup] begin
     samples = reshape(collect(range(-2.0, 2.0; length = 101)), :, 1)
     expected = Normal(2.0, 3.0)
