@@ -15,6 +15,7 @@ using LaTeXStrings
 set_theme!(transportmap_theme()) # hide
 #md using Main.DocPlots: save_docplot # hide
 using Distributions
+using Statistics
 
 # ## The Forward Model
 #
@@ -106,7 +107,7 @@ target = MapTargetDensity(x -> logposterior(x))
 #
 # We use a 2-dimensional polynomial transport map with degree 3 and Softplus rectifier:
 
-M = PolynomialMap(2, 3, :normal, Softplus(), LinearizedHermiteBasis())
+M = PolynomialMap(2, 3, Normal(), Softplus(), LinearizedHermiteBasis())
 
 # Set up Gauss-Hermite quadrature for optimization:
 quadrature = GaussHermiteWeights(3, M)
@@ -117,17 +118,28 @@ println("Optimization result: ", res)
 
 # ## Generating Posterior Samples
 #
-# Generate samples from the standard normal distribution and map them to the posterior:
+# Wrap the fitted map in [`TransportMapDistribution`](@ref) to sample through the
+# Distributions.jl interface. It represents the normalized fitted approximation,
+# even though the target log-posterior was supplied without its normalizing constant:
 
-samples_z = randn(1000, 2)
+posterior = TransportMapDistribution(M)
+posterior_samples = rand(posterior, 1000)
+#md nothing # hide
 
-# Map the samples through our transport map:
-mapped_samples = evaluate(M, samples_z)
+# Each column is one sample of the transformed parameters ``(\theta_1, \theta_2)``.
+# Their approximate posterior mean and covariance are available directly:
+
+println("Posterior mean in θ coordinates: ", mean(posterior))
+println("Posterior covariance in θ coordinates: ", cov(posterior))
+
+# These moments use reference-space quadrature. See the
+# [distribution API](../api/distributions.md) for integration options and other statistics.
 
 # ## Quality Assessment
 #
-# Compute the variance diagnostic to assess the quality of our approximation:
+# Draw separate reference samples for the map-specific variance diagnostic:
 
+samples_z = randn(1000, 2)
 var_diag = variance_diagnostic(M, target, samples_z)
 println("Variance Diagnostic: ", var_diag)
 
@@ -142,7 +154,7 @@ posterior_values = [pdf(target, [θ₁, θ₂]) for θ₁ in θ₁, θ₂ in θ�
 
 #md save_docplot("samples-bod.svg") do # hide
 samples_fig, samples_ax, plt = sampleplot(
-    mapped_samples; color = (:steelblue, 0.5),
+    permutedims(posterior_samples); color = (:steelblue, 0.5),
     axis = (; xlabel = L"\theta_1", ylabel = L"\theta_2"),
 )
 contour!(samples_ax, θ₁, θ₂, posterior_values; colormap = :viridis)
@@ -150,8 +162,10 @@ contour!(samples_ax, θ₁, θ₂, posterior_values; colormap = :viridis)
 #md end # hide
 # ![BOD Samples](samples-bod.svg)
 
-# Finally, we can compute the pullback density to visualize how well our transport map approximates the posterior:
-posterior_pullback = [pullback(M, [θ₁, θ₂]) for θ₁ in θ₁, θ₂ in θ₂]
+# The plotting functions take samples in rows, hence the layout conversion above.
+# Evaluate the fitted posterior PDF on the grid to compare its shape with the
+# unnormalized target. Both grids are rescaled by their maximum for this plot:
+posterior_density = [pdf(posterior, [θ₁, θ₂]) for θ₁ in θ₁, θ₂ in θ₂]
 
 #md save_docplot("pullback-bod.svg") do # hide
 pullback_fig = Figure(size = (600, 420))
@@ -162,8 +176,8 @@ contour!(
     levels, color = :steelblue, label = "Target"
 )
 contour!(
-    pullback_ax, θ₁, θ₂, posterior_pullback ./ maximum(posterior_pullback);
-    levels, color = :orange, linestyle = :dash, label = "Pullback"
+    pullback_ax, θ₁, θ₂, posterior_density ./ maximum(posterior_density);
+    levels, color = :orange, linestyle = :dash, label = "Fitted distribution"
 )
 axislegend(pullback_ax)
 #md     pullback_fig # hide

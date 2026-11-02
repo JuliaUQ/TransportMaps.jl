@@ -3,6 +3,7 @@ using CairoMakie
 using LaTeXStrings
 set_theme!(transportmap_theme())
 using Distributions
+using Statistics
 
 function forward_model(t, θ)
     A = 0.4 + (1.2 - 0.4) * cdf(Normal(), θ[1])
@@ -39,17 +40,20 @@ end
 
 target = MapTargetDensity(x -> logposterior(x))
 
-M = PolynomialMap(2, 3, :normal, Softplus(), LinearizedHermiteBasis())
+M = PolynomialMap(2, 3, Normal(), Softplus(), LinearizedHermiteBasis())
 
 quadrature = GaussHermiteWeights(3, M)
 
 res = optimize!(M, target, quadrature)
 println("Optimization result: ", res)
 
+posterior = TransportMapDistribution(M)
+posterior_samples = rand(posterior, 1000)
+
+println("Posterior mean in θ coordinates: ", mean(posterior))
+println("Posterior covariance in θ coordinates: ", cov(posterior))
+
 samples_z = randn(1000, 2)
-
-mapped_samples = evaluate(M, samples_z)
-
 var_diag = variance_diagnostic(M, target, samples_z)
 println("Variance Diagnostic: ", var_diag)
 
@@ -59,12 +63,12 @@ println("Variance Diagnostic: ", var_diag)
 posterior_values = [pdf(target, [θ₁, θ₂]) for θ₁ in θ₁, θ₂ in θ₂]
 
 samples_fig, samples_ax, plt = sampleplot(
-    mapped_samples; color = (:steelblue, 0.5),
+    permutedims(posterior_samples); color = (:steelblue, 0.5),
     axis = (; xlabel = L"\theta_1", ylabel = L"\theta_2"),
 )
 contour!(samples_ax, θ₁, θ₂, posterior_values; colormap = :viridis)
 
-posterior_pullback = [pullback(M, [θ₁, θ₂]) for θ₁ in θ₁, θ₂ in θ₂]
+posterior_density = [pdf(posterior, [θ₁, θ₂]) for θ₁ in θ₁, θ₂ in θ₂]
 
 pullback_fig = Figure(size = (600, 420))
 pullback_ax = Axis(pullback_fig[1, 1]; xlabel = L"\theta_1", ylabel = L"\theta_2")
@@ -74,8 +78,8 @@ contour!(
     levels, color = :steelblue, label = "Target"
 )
 contour!(
-    pullback_ax, θ₁, θ₂, posterior_pullback ./ maximum(posterior_pullback);
-    levels, color = :orange, linestyle = :dash, label = "Pullback"
+    pullback_ax, θ₁, θ₂, posterior_density ./ maximum(posterior_density);
+    levels, color = :orange, linestyle = :dash, label = "Fitted distribution"
 )
 axislegend(pullback_ax)
 
