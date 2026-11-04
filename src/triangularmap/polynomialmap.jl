@@ -379,12 +379,42 @@ contributions. Linear standardizations use the forward determinant, unlike the
 legacy scale determinant returned by `jacobian(L)` without a point argument.
 """
 function logabsdetjacobian(M::PolynomialMap, z::AbstractVector{<:Real})
-    return sum(value -> log(abs(value)), gradient_zk(M, z); init = 0.0)
+    @assert length(z) == length(M.components) "Dimension mismatch: z and components must have same length"
+    # Pre-allocate result for type stability
+    logdet = 0.0
+    @inbounds for (i, component) in enumerate(M.components)
+        # Compute diagonal Jacobian element for component i
+        ∂Mᵢ_∂zᵢ = partial_derivative_zk(component, view(z, 1:i))
+        logdet += log(abs(∂Mᵢ_∂zᵢ))
+    end
+    return logdet
 end
 
+function logabsdetjacobian(M::PolynomialMap, X::AbstractMatrix{<:Real})
+    @assert size(X, 2) == numberdimensions(M) "Number of columns must match the dimension of the map"
+    n_points = size(X, 1)
+    n_dims = length(M.components)
+    
+    # Preallocate result vector for type stability
+    results = Vector{Float64}(undef, n_points)
+    
+    # Use multithreading for better performance
+    Threads.@threads for i in 1:n_points
+        @inbounds results[i] = logabsdetjacobian(M, @view(X[i, :]))
+    end
+    
+    return results
+end
+
+# Generic fallback for other AbstractTransportMap types
 function logabsdetjacobian(M::AbstractTransportMap, X::AbstractMatrix{<:Real})
     @assert size(X, 2) == numberdimensions(M) "Number of columns must match the dimension of the map"
-    return [logabsdetjacobian(M, x) for x in eachrow(X)]
+    n_points = size(X, 1)
+    results = Vector{Float64}(undef, n_points)
+    @inbounds for i in 1:n_points
+        results[i] = logabsdetjacobian(M, @view(X[i, :]))
+    end
+    return results
 end
 
 # Retain the internal spelling used by earlier distribution implementations.

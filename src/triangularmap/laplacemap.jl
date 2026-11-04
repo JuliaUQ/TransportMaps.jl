@@ -84,7 +84,20 @@ end
 
 function logabsdetjacobian(L::LaplaceMap, x::AbstractVector{<:Real})
     @assert length(x) == numberdimensions(L) "Input dimension must match the map"
-    return -sum(value -> log(abs(value)), diag(L.chol); init = 0.0)
+    # Pre-compute log-sum of diagonal elements for type stability
+    logdet = 0.0
+    chol_diag = diag(L.chol)
+    @inbounds @simd for i in eachindex(chol_diag)
+        logdet += log(abs(chol_diag[i]))
+    end
+    return -logdet
+end
+
+# Matrix version: for LaplaceMap, Jacobian is constant, so fill with same value
+function logabsdetjacobian(L::LaplaceMap, X::AbstractMatrix{<:Real})
+    @assert size(X, 2) == numberdimensions(L) "Input dimension must match the map"
+    # The logabsdetjacobian is constant for LaplaceMap (doesn't depend on x)
+    return fill(logabsdetjacobian(L, X[1, :]), size(X, 1))
 end
 
 function _linear_prefix(L::LaplaceMap, previous, k)

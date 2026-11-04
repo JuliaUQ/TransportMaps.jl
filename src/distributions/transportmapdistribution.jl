@@ -103,13 +103,22 @@ function _to_reference(tm::AbstractTransportMap, x::AbstractVecOrMat{<:Real})
 end
 
 function _nth_moment(tm::AbstractTransportMap, n::Int64, quad::AbstractQuadratureWeights)
-    return (_from_reference(tm, quad.points) .^ n)' * quad.weights
+    # Transform points from reference to target space
+    X = _from_reference(tm, quad.points)
+    # Compute nth power element-wise
+    Xn = X .^ n
+    # Return weighted sum (moment)
+    return Xn' * quad.weights
 end
 
 function _centered_map_values(tm::AbstractTransportMap, quad::AbstractQuadratureWeights)
+    # Transform points from reference to target space
     X = _from_reference(tm, quad.points)
+    # Compute mean using weighted sum
     μ = X' * quad.weights
-    return X .- μ'
+    # Center the values (subtract mean from each point)
+    # Use @. for type-stable broadcasting
+    return @. X - μ'
 end
 
 ## Sampling
@@ -296,7 +305,8 @@ function entropy(d::TransportMapDistribution; quad::AbstractQuadratureWeights = 
     points = _map_direction(tm) == :target ? quad.points :
         _from_reference(tm, quad.points)
 
-    logdet = [logabsdetjacobian(tm, point) for point in eachrow(points)]
+    # Use matrix version of logabsdetjacobian for better performance
+    logdet = logabsdetjacobian(tm, points)
     correction = dot(quad.weights, logdet)
     H_reference = entropy(_reference_distribution(tm))
 

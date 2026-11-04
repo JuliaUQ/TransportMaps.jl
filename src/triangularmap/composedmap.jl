@@ -80,8 +80,34 @@ _reference_marginal(C::ComposedMap) = _reference_marginal(C.polynomialmap)
 _map_direction(C::ComposedMap) = _map_direction(C.polynomialmap)
 
 function logabsdetjacobian(C::ComposedMap, x::AbstractVector{<:Real})
-    return logabsdetjacobian(C.linearmap, x) +
-        logabsdetjacobian(C.polynomialmap, evaluate(C.linearmap, x))
+    # For ComposedMap, log|det J| = log|det J_linear| + log|det J_poly|
+    # The linear map's Jacobian is constant, and the polynomial map's Jacobian
+    # depends on the transformed point
+    logdet_linear = logabsdetjacobian(C.linearmap, x)
+    # Transform x through linear map and compute polynomial Jacobian at that point
+    x_transformed = evaluate(C.linearmap, x)
+    logdet_poly = logabsdetjacobian(C.polynomialmap, x_transformed)
+    return logdet_linear + logdet_poly
+end
+
+function logabsdetjacobian(C::ComposedMap, X::AbstractMatrix{<:Real})
+    @assert size(X, 2) == numberdimensions(C) "Input dimension must match the map"
+    n_points = size(X, 1)
+    results = Vector{Float64}(undef, n_points)
+    
+    # Transform all points through linear map first
+    X_transformed = evaluate(C.linearmap, X)
+    
+    # Compute linear map Jacobian (constant for all points)
+    # For LinearMap and LaplaceMap, this is the same for all x
+    logdet_linear = logabsdetjacobian(C.linearmap, X[1, :])
+    
+    # Use multithreading for polynomial map Jacobians
+    Threads.@threads for i in 1:n_points
+        @inbounds results[i] = logdet_linear + logabsdetjacobian(C.polynomialmap, @view(X_transformed[i, :]))
+    end
+    
+    return results
 end
 
 function jacobian(C::ComposedMap, x::AbstractVector{<:Real})

@@ -50,7 +50,19 @@ _map_direction(::AbstractLinearMap) = :reference
 
 function logabsdetjacobian(L::LinearMap, x::AbstractVector{<:Real})
     @assert numberdimensions(L) == 0 || length(x) == numberdimensions(L) "Input dimension must match the map"
-    return -sum(value -> log(abs(value)), L.σ; init = 0.0)
+    # Pre-compute log-sum for type stability
+    logdet = 0.0
+    @inbounds @simd for σᵢ in L.σ
+        logdet += log(abs(σᵢ))
+    end
+    return -logdet
+end
+
+# Matrix version: for LinearMap, Jacobian is constant, so fill with same value
+function logabsdetjacobian(L::LinearMap, X::AbstractMatrix{<:Real})
+    @assert size(X, 2) == numberdimensions(L) || numberdimensions(L) == 0 "Input dimension must match the map"
+    # The logabsdetjacobian is constant for LinearMap (doesn't depend on x)
+    return fill(logabsdetjacobian(L, X[1, :]), size(X, 1))
 end
 
 # Point-dependent Jacobians follow the forward transformation convention.
