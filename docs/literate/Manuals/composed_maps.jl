@@ -65,6 +65,11 @@ X_recovered = inverse(C, Z)
 # Tuples, vectors, and nested compositions are also accepted:
 # `ComposedMap((linear, correction))`, `ComposedMap([linear, correction])`, and
 # `ComposedMap(ComposedMap(linear), correction)` have the same evaluation order.
+# Nested compositions are flattened automatically: `C.layers` contains the
+# individual maps in evaluation order. Repeatedly adding corrections uses the
+# same flat execution loop, without encoding chain length or nesting in its
+# type. Direction and reference are resolved once from the original constructor
+# arguments, preserving explicit settings on nested compositions.
 # Layers must have matching dimensions and compatible supports. `LinearMap()`
 # is a dimension-free identity.
 #
@@ -76,7 +81,7 @@ X_recovered = inverse(C, Z)
 # |:--|:--|:--|
 # | [`LinearMap`](@ref) | ``z_i=(x_i-\mu_i)/\sigma_i`` | Componentwise centering and scaling |
 # | [`LaplaceMap`](@ref) | ``z=L^{-1}(x-\mu)`` | Whitening with a full covariance or a Laplace approximation |
-# | [`PriorMap`](@ref) | ``x_i=F_i^{-1}(G(z_i))`` | Reference-to-prior transformation for independent continuous marginals |
+# | [`MarginalMap`](@ref) | ``x_i=F_i^{-1}(G(z_i))`` | Transformation for independent continuous marginals |
 #
 # ### LinearMap and LaplaceMap
 #
@@ -114,14 +119,14 @@ laplace_chain = ComposedMap(density_whitening, correction; forwarddirection = :r
 # original coordinates. Standardization alone need not make a non-Gaussian
 # density Gaussian.
 #
-# ### PriorMap
+# ### MarginalMap
 #
-# `PriorMap` accepts a vector of independent continuous prior marginals. For
+# `MarginalMap` accepts a vector of independent continuous marginals. For
 # their CDFs ``F_i`` and reference CDF ``G``, it evaluates
-# ``P_i(z_i)=F_i^{-1}(G(z_i))``. Its inverse transforms physical prior
+# ``P_i(z_i)=F_i^{-1}(G(z_i))``. Its inverse transforms physical (prior)
 # coordinates to reference coordinates:
 
-prior = PriorMap([LogNormal(0.3, 0.7), Uniform(0.4, 1.2)])
+prior = MarginalMap([LogNormal(0.3, 0.7), Uniform(0.4, 1.2)])
 physical_point = evaluate(prior, [0.0, 0.0])
 reference_point = inverse(prior, physical_point)
 #md nothing # hide
@@ -129,29 +134,29 @@ reference_point = inverse(prior, physical_point)
 # The default reference is `Normal()`. Choose a different continuous univariate
 # reference with the keyword; it is repeated independently in every dimension:
 
-uniform_prior = PriorMap(
+uniform_prior = MarginalMap(
     [LogNormal(0.3, 0.7), Uniform(0.4, 1.2)];
     reference = Uniform(0, 1)
 )
 #md nothing # hide
 
-# To combine a reference-space correction ``T`` with the physical prior map
-# ``P``, apply the correction first, then the prior transformation:
+# To combine a reference-space correction ``T`` with the marginal map
+# ``P``, apply the correction first, then the marginal transformation:
 
 physical_map = ComposedMap(correction, prior; forwarddirection = :target)
 parameters = evaluate(physical_map, [0.0, 0.0])
 #md nothing # hide
 
-# The correction's output must lie within the prior map's reference support.
+# The correction's output must lie within the marginal map's reference support.
 # In particular, a bounded reference requires a correction that preserves that
 # support. Out-of-support inputs to `PriorMap` throw `DomainError`.
 #
 # In Bayesian inference, transforming a physical posterior through an exact
-# prior map absorbs the prior and its Jacobian into the reference density:
+# marginal (prior) map absorbs the prior and its Jacobian into the reference density:
 #
 # ```math
-# \pi(x| y)\propto L(y| x)\,\pi_0(x),\qquad
-# \widetilde\pi(z| y)\propto L(y| P(z))\,\rho(z).
+# \pi(x| y)\propto \mathcal{L}(y| x)\,\pi_0(x),\qquad
+# \widetilde\pi(z| y)\propto \mathcal{L}(y| P(z))\,\rho(z).
 # ```
 #
 # See [BOD: Bayesian Inference](@ref)
@@ -169,7 +174,9 @@ parameters = evaluate(physical_map, [0.0, 0.0])
 #
 # The reference density is taken from the last layer with reference metadata
 # for `:reference`, or the first such layer for `:target`. Linear-only chains
-# use a product standard normal. Set the reference explicitly when needed:
+# use a product standard normal. These settings are fixed at construction;
+# later changes to a layer's direction or reference do not affect the composition.
+# Set the reference explicitly when needed:
 
 C_with_reference = ComposedMap(
     linear, correction;
@@ -201,6 +208,10 @@ log_determinant = logabsdetjacobian(C, x)
 # ```julia
 # T_new = ComposedMap(Q, T; forwarddirection = :target)
 # ```
+#
+# This stores `Q` followed by the individual layers of `T`; evaluation does not
+# recurse through the previous compositions. The maps themselves are shared,
+# so changing a fitted layer's parameters affects every composition using it.
 #
 # For a target-to-reference map ``S``, append a correction ``R``:
 #

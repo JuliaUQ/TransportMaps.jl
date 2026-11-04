@@ -38,10 +38,10 @@ beam_model(θ) = θ[2] * (θ[1] * L)^2 * (3 * L - θ[1] * L) / (6 * E * I)
 
 # For the prior distributions ``a\sim\operatorname{Beta}(10,3)`` and
 # ``F\sim\mathcal{N}(1000\,\mathrm{N},(300\,\mathrm{N})^2)`` are chosen. A fixed
-# [`PriorMap`](@ref) layer ``P`` maps the standard-normal reference
+# [`MarginalMap`](@ref) layer ``P`` maps the standard-normal reference
 # ``z\sim\rho=\mathcal{N}(0,I_2)`` into these physical prior coordinates.
 
-sequential_prior = PriorMap([Beta(10, 3), Normal(1000, 300)])
+sequential_prior = MarginalMap([Beta(10, 3), Normal(1000, 300)])
 sequential_reference = sequential_prior.reference
 logprior(θ) = logpdf(sequential_prior, θ)
 #md nothing # hide

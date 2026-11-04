@@ -66,7 +66,7 @@ end
 @testsnippet ComposedCustomLayer begin
     using TransportMaps
     # An independently invertible nonlinear map, exercising the custom-map protocol.
-    struct CubicLayer end
+    struct CubicLayer <: AbstractTransportMap end
     TransportMaps.numberdimensions(::CubicLayer) = 2
     TransportMaps.evaluate(::CubicLayer, x::AbstractVector{<:Real}) = [x[1] + x[1]^3, x[2] + x[1]^2 / 5]
     function TransportMaps.inverse(::CubicLayer, y::AbstractVector{<:Real})
@@ -91,7 +91,7 @@ end
     determinant = (1 + 3u[1]^2) / prod(A.σ) / prod(D.σ)
 
     @test C isa AbstractTransportMap
-    @test C.layers === (A, B, D)
+    @test C.layers == [A, B, D]
     @test C.forwarddirection === :reference
     @test C(x) ≈ y
     @test evaluate(ComposedMap((A, B, D)), x) ≈ y
@@ -137,10 +137,14 @@ end
     @test hasproperty(legacy, :linearmap) && hasproperty(legacy, :polynomialmap)
     @test !hasproperty(C, :polynomialmap)
     @test pullback(legacy, x) ≈ pullback(P, evaluate(A, x)) / prod(A.σ)
+    original_density = pullback(legacy, x)
     P.forwarddirection = :target
-    z = inverse(legacy, x)
-    @test legacy.forwarddirection === :target
-    @test pullback(legacy, x) ≈ prod(pdf.(Normal(), z)) / jacobian(legacy, z)
+    @test legacy.forwarddirection === :reference
+    @test pullback(legacy, x) ≈ original_density
+    retargeted = ComposedMap(A, P)
+    z = inverse(retargeted, x)
+    @test retargeted.forwarddirection === :target
+    @test pullback(retargeted, x) ≈ prod(pdf.(Normal(), z)) / jacobian(retargeted, z)
     @test numberdimensions(ComposedMap(LinearMap(), P)) == 2
     @test evaluate(ComposedMap(LinearMap(), P), x) ≈ evaluate(P, x)
     @test inverse(ComposedMap(LinearMap(), P), evaluate(P, x)) ≈ x
@@ -194,14 +198,19 @@ end
     @test jacobian(C, x) ≈ det(J) rtol = 1.0e-6
     @test exp(logabsdetjacobian(C, x)) ≈ det(J) rtol = 1.0e-6
     @test C.reference === last(maps).reference
+    original_reference = C.reference
     for M in maps
         M.forwarddirection = :target
     end
-    @test C.reference === first(maps).reference
-    @test C.forwarddirection === :target
+    @test C.reference === original_reference
+    @test C.forwarddirection === :reference
+    rebuilt = ComposedMap(maps)
+    @test rebuilt.reference === first(maps).reference
+    @test rebuilt.forwarddirection === :target
     first(maps).forwarddirection = :reference
     @test_throws ArgumentError ComposedMap(maps)
-    @test_throws ArgumentError C.forwarddirection
+    @test C.forwarddirection === :reference
+    @test rebuilt.forwarddirection === :target
     @test ComposedMap(maps; forwarddirection = :reference).forwarddirection === :reference
     # A linear layer after a polynomial is allowed, with the global reference explicit.
     @test ComposedMap(first(maps), LinearMap(2); reference = Normal()).reference.densitytype == Normal()
@@ -217,4 +226,154 @@ end
     @test jacobian(C, x) ≈ inv(det(L.chol))
     @test logabsdetjacobian(C, x) ≈ -log(det(L.chol))
     @test pdf(C, x) ≈ pdf(MvNormal(L), x)
+end
+
+@testitem "ComposedMap flattens nested execution in evaluation order" setup = [ComposedCustomLayer] begin
+    using TransportMaps, Distributions, ForwardDiff, LinearAlgebra
+
+    A = LinearMap([0.5, -1.0], [2.0, 3.0])
+    B = CubicLayer()
+    D = LinearMap([-0.2, 0.7], [0.5, 1.5])
+    flat = ComposedMap(A, B, D)
+    nested = ComposedMap(ComposedMap(A), ComposedMap(ComposedMap(B), D))
+    tuple_nested = ComposedMap((ComposedMap(A, B), ComposedMap(D)))
+    vector_nested = ComposedMap([ComposedMap(A), ComposedMap(B, D)])
+    x = [0.9, -0.4]
+    X = [0.9 -0.4; -0.2 0.5; 0.3 0.1]
+
+    for C in (nested, tuple_nested, vector_nested)
+        @test C.layers == [A, B, D]
+        @test all(layer -> !(layer isa ComposedMap), C.layers)
+        @test typeof(C) === typeof(flat)
+        for points in (x, X)
+            @test evaluate(C, points) ≈ evaluate(flat, points)
+            @test inverse(C, evaluate(C, points)) ≈ points
+            @test jacobian(C, points) ≈ jacobian(flat, points)
+            @test logabsdetjacobian(C, points) ≈ logabsdetjacobian(flat, points)
+            @test inverse_jacobian(C, evaluate(C, points)) ≈ inverse_jacobian(flat, evaluate(flat, points))
+            @test logpdf(C, points) ≈ logpdf(flat, points)
+            @test pdf(C, points) ≈ pdf(flat, points)
+        end
+    end
+
+    # Flat execution must propagate ForwardDiff dual values through custom maps.
+    u = evaluate(A, x)
+    expected_jacobian = Diagonal(1 ./ D.σ) *
+        [1 + 3u[1]^2 0; 2u[1] / 5 1] * Diagonal(1 ./ A.σ)
+    @test ForwardDiff.jacobian(z -> evaluate(nested, z), x) ≈ expected_jacobian
+    expected_score = -expected_jacobian' * evaluate(nested, x) +
+        [6u[1] / ((1 + 3u[1]^2) * A.σ[1]), 0.0]
+    @test ForwardDiff.gradient(z -> logpdf(nested, z), x) ≈ expected_score
+
+    # Changing the caller's container cannot change an already-built chain.
+    supplied_layers = Any[ComposedMap(A), B, D]
+    from_vector = ComposedMap(supplied_layers)
+    supplied_layers[1] = D
+    empty!(supplied_layers)
+    @test from_vector.layers == [A, B, D]
+    @test evaluate(from_vector, x) ≈ evaluate(flat, x)
+    @test logpdf(from_vector, x) ≈ logpdf(flat, x)
+
+    # A nested dimension-free identity must remain compatible with fixed-size
+    # leaves once its wrapper has been flattened.
+    identity = ComposedMap(ComposedMap(LinearMap()))
+    with_identity = ComposedMap(identity, nested)
+    @test numberdimensions(with_identity) == 2
+    @test length(with_identity.layers) == 4
+    @test evaluate(with_identity, X) ≈ evaluate(flat, X)
+    @test inverse(with_identity, evaluate(flat, X)) ≈ X
+
+    # All wrappers keep the original leaf objects, including later updates.
+    setparameters!(A, [0.1, 0.2], [1.2, 0.8])
+    @test nested.layers[1] === A
+    @test evaluate(nested, X) ≈ evaluate(D, evaluate(B, evaluate(A, X)))
+end
+
+@testitem "ComposedMap type stays fixed as a sequential chain grows" begin
+    using TransportMaps, Distributions
+
+    let layer = LinearMap([0.001, -0.002], [1.001, 0.999])
+        appended = ComposedMap(layer)
+        prepended = ComposedMap(layer)
+        chain_type = typeof(appended)
+        x = [0.3, -0.2]
+        expected = evaluate(layer, x)
+
+        for n in 2:128
+            appended = ComposedMap(appended, layer)
+            prepended = ComposedMap(layer, prepended)
+            @test typeof(appended) === chain_type
+            @test typeof(prepended) === chain_type
+            @test length(appended.layers) == n
+            @test length(prepended.layers) == n
+            expected = evaluate(layer, expected)
+        end
+        @test evaluate(appended, x) ≈ expected
+        @test evaluate(prepended, x) ≈ expected
+        @test inverse(appended, expected) ≈ x
+        @test logabsdetjacobian(appended, x) ≈ -128 * sum(log, layer.σ)
+    end
+end
+
+@testitem "ComposedMap resolves nested settings at construction" begin
+    using TransportMaps, Distributions
+
+    P = PolynomialMap(2, 1, Normal(0.2, 1.3))
+    Q = PolynomialMap(2, 1, Normal(-0.4, 0.8))
+    inner = ComposedMap(P, Q)
+    outer = ComposedMap(inner; forwarddirection = :reference)
+    x = [0.3, -0.2]
+
+    @test outer.layers == [P, Q]
+    # The inner :target map supplies its first reference even when the outer
+    # direction would select the last leaf of an entirely flat composition.
+    @test outer.reference === P.reference
+    @test logpdf(outer, x) ≈ logpdf(P.reference, evaluate(outer, x)) + logabsdetjacobian(outer, x)
+    original_reference = P.reference
+    P.reference = MapReferenceDensity(Normal(0.7, 1.1))
+    @test inner.reference === original_reference
+    @test outer.reference === original_reference
+    @test ComposedMap(P, Q).reference === P.reference
+
+    inherited = ComposedMap(inner)
+    P.forwarddirection = :reference
+    Q.forwarddirection = :reference
+    @test inner.forwarddirection === :target
+    @test inherited.forwarddirection === :target
+    @test inherited.reference === original_reference
+    @test outer.reference === original_reference
+    updated = ComposedMap(P, Q)
+    @test updated.forwarddirection === :reference
+    @test updated.reference === Q.reference
+    @test ComposedMap(inner).forwarddirection === :target
+
+    # An inner explicit direction deliberately masks mixed leaf directions.
+    Q.forwarddirection = :target
+    explicit_reference = MapReferenceDensity(Normal(0.1, 1.7))
+    overridden = ComposedMap(P, Q; forwarddirection = :target, reference = explicit_reference)
+    wrapped = ComposedMap(overridden)
+    @test wrapped.layers == [P, Q]
+    @test wrapped.forwarddirection === :target
+    @test wrapped.reference === explicit_reference
+    @test logpdf(wrapped, x) ≈ logpdf(overridden, x)
+    @test_throws ArgumentError ComposedMap(P, Q)
+    @test inherited.forwarddirection === :target
+
+    # Resolve endpoint settings from whole constructor arguments before
+    # flattening; the outer keywords take precedence over either inner map.
+    left = ComposedMap(P; forwarddirection = :target, reference = Normal(0.4, 1.2))
+    right = ComposedMap(Q; forwarddirection = :target, reference = Normal(-0.7, 0.9))
+    combined = ComposedMap(left, right)
+    @test combined.layers == [P, Q]
+    @test combined.forwarddirection === :target
+    @test combined.reference === left.reference
+    reversed_direction = ComposedMap(left, right; forwarddirection = :reference)
+    @test reversed_direction.forwarddirection === :reference
+    @test reversed_direction.reference === right.reference
+    outer_override = ComposedMap(left, right; forwarddirection = :reference, reference = explicit_reference)
+    @test outer_override.forwarddirection === :reference
+    @test outer_override.reference === explicit_reference
+    conflicting = ComposedMap(Q; forwarddirection = :reference)
+    @test_throws ArgumentError ComposedMap(left, conflicting)
+    @test ComposedMap(left, conflicting; forwarddirection = :target).reference === left.reference
 end

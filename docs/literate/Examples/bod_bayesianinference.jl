@@ -19,7 +19,7 @@ using Distributions
 # The noiseless biochemical oxygen demand is
 # ```math
 # \mathcal{B}(t;A,B)=A(1-\exp(-Bt)),\qquad
-# A\sim\mathcal{U}(0.4,1.2),\quad B\sim\mathcal{U}(0.01,0.31).
+# A\sim\mathcal{U}(0.4,1.2),\quad B\sim\mathcal{U}(0.01,0.51).
 # ```
 # Measurements have independent Gaussian noise with variance ``10^{-3}``.
 # The forward model takes the physical parameters directly:
@@ -30,14 +30,14 @@ function forward_model(t, parameters)
 end
 #md nothing #hide
 
-# [`PriorMap`](@ref) handles the transformation from a standard-normal auxiliary
+# [`MarginalMap`](@ref) handles the transformation from a standard-normal auxiliary
 # variable ``\theta`` to the physical prior. Its inverse goes back to ``\theta``:
 # ```math
 # (A,B)=P(\theta),\qquad
 # P_i(\theta_i)=F_i^{-1}(\Phi(\theta_i)).
 # ```
 
-prior_map = PriorMap([Uniform(0.4, 1.2), Uniform(0.01, 0.31)])
+prior_map = MarginalMap([Uniform(0.4, 1.2), Uniform(0.01, 0.51)])
 
 # ## Experimental Data
 
@@ -68,7 +68,7 @@ Legend(realizations_fig[2, 1], realizations_ax; orientation = :horizontal, nbank
 #
 # Define the likelihood and the unnormalized posterior in physical coordinates:
 # ```math
-# \pi(A,B\mid D)\propto L(D\mid A,B)\,\pi_0(A,B).
+# \pi(A,B | D)\propto \mathcal{L}(D | A,B)\,\pi_0(A,B).
 # ```
 
 loglikelihood(parameters) = sum(logpdf(Normal(forward_model(t[k], parameters), σ), D[k]) for k in eachindex(t))
@@ -77,7 +77,7 @@ physical_target = MapTargetDensity(parameters -> logposterior(parameters))
 
 # Fit in auxiliary coordinates, where the prior is standard normal:
 # ```math
-# \widetilde\pi(\theta\mid D)\propto L(D\mid P(\theta))\,\phi_2(\theta).
+# \widetilde\pi(\theta| D)\propto \mathcal{L}(D| P(\theta))\,\phi_2(\theta).
 # ```
 # The prior and the Jacobian of ``P`` combine into ``\phi_2``. No additional
 # Jacobian term is needed in this transformed target.
@@ -120,7 +120,7 @@ println("Variance Diagnostic: ", var_diag)
 # target can be compared without knowing its evidence:
 
 A_values = range(0.4, 1.2; length = 100)
-B_values = range(0.01, 0.31; length = 100)
+B_values = range(0.01, 0.51; length = 100)
 posterior_values = [pdf(physical_target, [A, B]) for A in A_values, B in B_values]
 
 #md save_docplot("samples-bod.svg") do # hide
@@ -128,7 +128,7 @@ samples_fig, samples_ax, plt = sampleplot(
     mapped_samples; color = (:steelblue, 0.5),
     axis = (; xlabel = L"A", ylabel = L"B"),
 )
-limits!(samples_ax, 0.4, 1.2, 0.01, 0.31)
+limits!(samples_ax, 0.4, 1.2, 0.01, 0.51)
 contour!(
     samples_ax, A_values, B_values, posterior_values ./ maximum(posterior_values);
     levels = [0.2, 0.4, 0.6, 0.8], colormap = :viridis
@@ -154,7 +154,7 @@ contour!(
     pullback_ax, A_values, B_values, posterior_pullback ./ maximum(posterior_pullback);
     levels, color = :orange, linestyle = :dash, label = "Transport approximation"
 )
-limits!(pullback_ax, 0.4, 1.2, 0.01, 0.31)
+limits!(pullback_ax, 0.4, 1.2, 0.01, 0.51)
 axislegend(
     pullback_ax, [LineElement(color = :steelblue), LineElement(color = :orange, linestyle = :dash)],
     ["Target", "Transport"]; position = :lb
@@ -181,19 +181,19 @@ conditional_samples = evaluate(prior_map, hcat(fill(fixed_θ₁, length(conditio
 # Numerically normalize the physical posterior over the full support of ``B``
 # to obtain a reference conditional density. The unknown evidence cancels.
 
-B_range = range(0.011, 0.309; length = 300)
-conditional_normalizer = gaussquadrature(B -> pdf(physical_target, [fixed_A, B]), 200, 0.01, 0.31)
+B_range = range(0.011, 0.509; length = 300)
+conditional_normalizer = gaussquadrature(B -> pdf(physical_target, [fixed_A, B]), 200, 0.01, 0.51)
 reference_conditional(B) = pdf(physical_target, [fixed_A, B]) / conditional_normalizer
 conditional_reference = reference_conditional.(B_range)
 #md nothing # hide
 
 # Convert the fitted conditional density using the inverse prior Jacobian:
 # ```math
-# \widehat\pi(B\mid A)=\widehat\pi_\theta(\theta_2\mid\theta_1)
+# \widehat\pi(B| A)=\widehat\pi_\theta(\theta_2|\theta_1)
 # \left|\frac{dP_2^{-1}(B)}{dB}\right|.
 # ```
 
-B_prior_map = PriorMap([prior_map.marginals[2]])
+B_prior_map = MarginalMap([prior_map.marginals[2]])
 B_points = reshape(collect(B_range), :, 1)
 θ₂_range = inverse(B_prior_map, B_points)[:, 1]
 conditional_mapped = conditional_density(M, θ₂_range, fixed_θ₁) .* inverse_jacobian(B_prior_map, B_points)
@@ -202,11 +202,11 @@ conditional_mapped = conditional_density(M, θ₂_range, fixed_θ₁) .* inverse
 #md save_docplot("conditional-bod.svg") do # hide
 conditional_fig, conditional_ax, plt = hist(
     conditional_samples; bins = 50, normalization = :pdf, color = (:steelblue, 0.5),
-    label = "Samples", axis = (; xlabel = L"B", ylabel = L"\pi(B \mid A = %$fixed_A)"),
+    label = "Samples", axis = (; xlabel = L"B", ylabel = L"\pi(B | A = %$fixed_A)"),
 )
 lines!(conditional_ax, B_range, conditional_reference; linewidth = 2, color = :orange, label = "Reference")
 lines!(conditional_ax, B_range, conditional_mapped; linewidth = 2, color = :seagreen, label = "Transport")
-xlims!(conditional_ax, 0.01, 0.31)
+xlims!(conditional_ax, 0.01, 0.51)
 axislegend(conditional_ax; position = :lt)
 #md     conditional_fig # hide
 #md end # hide

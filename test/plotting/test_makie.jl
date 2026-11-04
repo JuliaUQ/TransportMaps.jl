@@ -135,9 +135,10 @@ end
     ext = Base.get_extension(TransportMaps, :TransportMapsMakieExt)
     X = [0.1 0.2; 0.3 0.4; 0.5 0.6]
     P = PolynomialMap(2, 1)
-    M = ComposedMap(LinearMap([1.0, -1.0], [2.0, 3.0]), P)
-    for map in (P, M), direction in (:target, :reference)
+    L = LinearMap([1.0, -1.0], [2.0, 3.0])
+    for composed in (false, true), direction in (:target, :reference)
         P.forwarddirection = direction
+        map = composed ? ComposedMap(L, P) : P
         Y = evaluate(map, X)
         reference, target = ext.comparison_samples(map, X, :auto)
         @test reference ≈ (direction === :target ? X : Y)
@@ -264,13 +265,15 @@ end
     @test_throws ArgumentError referenceplot(zeros(1, 2))
     @test_throws ArgumentError referenceplot([NaN 1.0; 0.0 1.0])
     P = PolynomialMap(3, 1)
-    C = ComposedMap(LinearMap([1.0, -2.0, 0.5], [2.0, 3.0, 4.0]), P)
-    for M in (P, C)
-        X = inverse(M, Z)
+    L = LinearMap([1.0, -2.0, 0.5], [2.0, 3.0, 4.0])
+    for composed in (false, true)
         P.forwarddirection = :reference
+        M = composed ? ComposedMap(L, P) : P
+        X = inverse(M, Z)
         @test ext.diagnostic_samples(M, X, :target) == evaluate(M, X)
         @test ext.diagnostic_samples(M, X, :target) ≈ Z atol = 1.0e-5
         P.forwarddirection = :target
+        M = composed ? ComposedMap(L, P) : P
         X = evaluate(M, Z)
         @test ext.diagnostic_samples(M, X, :target) == inverse(M, X)
         @test ext.diagnostic_samples(M, X, :target) ≈ Z atol = 1.0e-5
@@ -312,9 +315,10 @@ end
     @test_throws ArgumentError plotmatrix(zeros(1, 3))
     @test_throws ArgumentError plotmatrix([Inf 1.0; 0.0 1.0])
     P = PolynomialMap(3, 1)
-    M = ComposedMap(LinearMap([1.0, 2.0, 3.0], [2.0, 3.0, 4.0]), P)
-    for direction in (:target, :reference), map in (P, M)
+    L = LinearMap([1.0, 2.0, 3.0], [2.0, 3.0, 4.0])
+    for direction in (:target, :reference), composed in (false, true)
         P.forwarddirection = direction
+        map = composed ? ComposedMap(L, P) : P
         forward_space = direction === :target ? :reference : :target
         output_space = direction
         Y = evaluate(map, X)
@@ -323,6 +327,7 @@ end
         @test ext.plotmatrix_samples(map, X, :target, :target) === X
         @test ext.plotmatrix_samples(map, X, :reference, :reference) === X
     end
+    M = ComposedMap(L, P)
     @test plotmatrix(M, X; input_space = :reference, dims = (3, 1)) isa Figure
     @test plotmatrix(M, X; space = :target) isa Figure
     @test_throws ArgumentError plotmatrix(M, X; space = :bad)

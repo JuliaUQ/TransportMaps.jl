@@ -9,7 +9,7 @@ function forward_model(t, parameters)
     return A * (1 - exp(-B * t))
 end
 
-prior_map = PriorMap([Uniform(0.4, 1.2), Uniform(0.01, 0.31)])
+prior_map = MarginalMap([Uniform(0.4, 1.2), Uniform(0.01, 0.31)])
 
 t = [1, 2, 3, 4, 5]
 D = [0.18, 0.32, 0.42, 0.49, 0.54]
@@ -88,14 +88,14 @@ conditional_normalizer = gaussquadrature(B -> pdf(physical_target, [fixed_A, B])
 reference_conditional(B) = pdf(physical_target, [fixed_A, B]) / conditional_normalizer
 conditional_reference = reference_conditional.(B_range)
 
-B_prior_map = PriorMap([prior_map.marginals[2]])
+B_prior_map = MarginalMap([prior_map.marginals[2]])
 B_points = reshape(collect(B_range), :, 1)
 θ₂_range = inverse(B_prior_map, B_points)[:, 1]
 conditional_mapped = conditional_density(M, θ₂_range, fixed_θ₁) .* inverse_jacobian(B_prior_map, B_points)
 
 conditional_fig, conditional_ax, plt = hist(
     conditional_samples; bins = 50, normalization = :pdf, color = (:steelblue, 0.5),
-    label = "Samples", axis = (; xlabel = L"B", ylabel = L"\pi(B \mid A = %$fixed_A)"),
+    label = "Samples", axis = (; xlabel = L"B", ylabel = L"\pi(B | A = %$fixed_A)"),
 )
 lines!(conditional_ax, B_range, conditional_reference; linewidth = 2, color = :orange, label = "Reference")
 lines!(conditional_ax, B_range, conditional_mapped; linewidth = 2, color = :seagreen, label = "Transport")

@@ -2,71 +2,63 @@
     ComposedMap(maps...; reference = nothing, forwarddirection = :auto)
     ComposedMap(maps::Union{Tuple, AbstractVector}; kwargs...)
 
-Compose maps in **evaluation order**: `ComposedMap(A, B, C)` evaluates
-`C(B(A(x)))`. Inversion applies the inverse layers in reverse order. Layers
-may be linear, polynomial, nested compositions, or custom maps implementing
-`numberdimensions`, `evaluate`,
-`inverse`, and `jacobian(map, x)` (the forward determinant). Evaluation and
-inversion accept vectors and matrices with observations in rows.
+Compose maps in evaluation order: `ComposedMap(A, B, C)` applies `C(B(A(x)))`.
+`inverse` applies inverse layers in reverse order. Inputs may be vectors or
+matrices with observations in rows.
 
-All layers must have the same dimension, except the dimension-free identity
-`LinearMap()`. An empty sequence is not allowed. Layers are stored in a tuple
-`C.layers` and are **not copied**; use `deepcopy` to freeze a fitted layer.
+Nested compositions are flattened into the vector `C.layers`. Layer objects are
+shared; use `deepcopy` to freeze their parameters. Supply at least one
+`AbstractTransportMap`, with matching dimensions (except `LinearMap()`) and
+compatible supports.
 
-`forwarddirection=:reference` means target → reference; `:target` means
-reference → target. By default, infer the direction from layers having that
-property (they must agree), or use `:reference` for linear-only compositions.
-An explicit direction overrides layer metadata without changing evaluation.
+`forwarddirection` is `:reference` (target → reference) or `:target`
+(reference → target). `:auto` infers a common direction from supplied maps,
+defaulting to `:reference` when none provide one.
 
-`reference` is the density at the reference endpoint of the **whole** map.
-By default, use the last layer with reference metadata for `:reference`, or
+`reference` defaults to the last supplied reference for `:reference`, or the
 first for `:target`, falling back to a product standard normal. A univariate
-distribution is interpreted as a product reference. Inferred metadata follows
-changes to the underlying layers. Matching dimensions alone does not guarantee
-compatible layer supports; the caller must ensure this.
-
-The existing `ComposedMap(L::AbstractLinearMap, M::PolynomialMap)` constructor
-and its `.linearmap` / `.polynomialmap` accessors remain supported. Density
-methods always use the direction of the whole composition.
-
-# Sequential updates
-```julia
-S = ComposedMap(S_previous, R; forwarddirection = :reference) # R ∘ S_previous
-T = ComposedMap(Q, T_previous; forwarddirection = :target)   # T_previous ∘ Q
-```
-This container composes fitted maps; it does not fit or freeze their parameters.
+distribution defines a product reference. Direction and reference are fixed
+at construction.
 """
-struct ComposedMap{L <: Tuple, R} <: AbstractComposedMap
-    layers::L
-    reference::R
+struct ComposedMap <: AbstractComposedMap
+    layers::Vector{AbstractTransportMap}
+    reference::Union{AbstractMapDensity, Distributions.Distribution}
     forwarddirection::Symbol
 
-    function ComposedMap(layers::Tuple; reference = nothing, forwarddirection::Symbol = :auto)
+    function ComposedMap(layers::Union{Tuple, AbstractVector}; reference = nothing, forwarddirection::Symbol = :auto)
+        Base.@nospecialize layers
         isempty(layers) && throw(ArgumentError("ComposedMap requires at least one layer"))
-        all(m -> applicable(numberdimensions, m), layers) ||
+        flat_layers = AbstractTransportMap[]
+        for layer in layers
+            layer isa AbstractTransportMap ||
+                throw(ArgumentError("Every layer must be an AbstractTransportMap"))
+            if layer isa ComposedMap
+                append!(flat_layers, layer.layers)
+            else
+                push!(flat_layers, layer)
+            end
+        end
+        all(m -> applicable(numberdimensions, m), flat_layers) ||
             throw(ArgumentError("Every layer must implement numberdimensions"))
-        dims = map(numberdimensions, layers)
+        dims = map(numberdimensions, flat_layers)
         all(d -> d isa Integer && d >= 0, dims) ||
             throw(ArgumentError("Layer dimensions must be nonnegative integers"))
         d = maximum(dims)
-        all(i -> dims[i] == d || (dims[i] == 0 && layers[i] isa LinearMap), eachindex(layers)) ||
+        all(i -> dims[i] == d || (dims[i] == 0 && flat_layers[i] isa LinearMap), eachindex(flat_layers)) ||
             throw(DimensionMismatch("All layers must have the same dimension"))
         forwarddirection in (:auto, :reference, :target) ||
             throw(ArgumentError("forwarddirection must be :auto, :reference, or :target"))
-        forwarddirection === :auto && _composition_direction(layers)
+        forwarddirection === :auto && (forwarddirection = _composition_direction(layers))
+        reference === nothing && (reference = _composition_reference(layers, forwarddirection))
         if reference isa Distributions.UnivariateDistribution
             reference = MapReferenceDensity(reference)
-        elseif reference !== nothing && !(reference isa Union{AbstractMapDensity, Distributions.Distribution})
+        elseif !(reference isa Union{AbstractMapDensity, Distributions.Distribution})
             throw(ArgumentError("reference must be a distribution or AbstractMapDensity"))
         end
-        if reference === nothing && !any(m -> hasproperty(m, :reference), layers)
-            reference = MapReferenceDensity()
-        end
-        return new{typeof(layers), typeof(reference)}(layers, reference, forwarddirection)
+        return new(flat_layers, reference, forwarddirection)
     end
 end
 
-ComposedMap(maps::AbstractVector; kwargs...) = ComposedMap(Tuple(maps); kwargs...)
 ComposedMap(maps...; kwargs...) = ComposedMap(maps; kwargs...)
 
 function _composition_direction(layers)
@@ -82,19 +74,19 @@ function _composition_direction(layers)
     return isnothing(direction) ? :reference : direction
 end
 
+function _composition_reference(layers, direction)
+    candidates = direction === :reference ? Iterators.reverse(layers) : layers
+    for layer in candidates
+        hasproperty(layer, :reference) && return layer.reference
+    end
+    return MapReferenceDensity()
+end
+
 _legacy_composition(C::ComposedMap) = length(C.layers) == 2 &&
     C.layers[1] isa AbstractLinearMap && C.layers[2] isa PolynomialMap
 
 function Base.getproperty(C::ComposedMap, name::Symbol)
-    if name === :forwarddirection
-        direction = getfield(C, :forwarddirection)
-        return direction === :auto ? _composition_direction(C.layers) : direction
-    elseif name === :reference
-        reference = getfield(C, :reference)
-        reference !== nothing && return reference
-        layers = C.forwarddirection === :reference ? reverse(C.layers) : C.layers
-        return first(m for m in layers if hasproperty(m, :reference)).reference
-    elseif name in (:linearmap, :polynomialmap) && _legacy_composition(C)
+    if name in (:linearmap, :polynomialmap) && _legacy_composition(C)
         return C.layers[name === :linearmap ? 1 : 2]
     end
     return getfield(C, name)
@@ -102,7 +94,8 @@ end
 
 function Base.propertynames(C::ComposedMap, private::Bool = false)
     names = (:layers, :reference, :forwarddirection)
-    return _legacy_composition(C) ? (names..., :linearmap, :polynomialmap) : names
+    _legacy_composition(C) && (names = (names..., :linearmap, :polynomialmap))
+    return names
 end
 
 numberdimensions(C::ComposedMap) = maximum(numberdimensions, C.layers)
@@ -122,7 +115,10 @@ Apply `C.layers` from first to last, to a vector or a matrix of row-wise points.
 function evaluate(C::ComposedMap, x::Union{AbstractVector{<:Real}, AbstractMatrix{<:Real}})
     _check_composed_input(C, x)
     isempty(x) && return copy(x)
-    return foldl((y, layer) -> evaluate(layer, y), C.layers; init = x)
+    for layer in C.layers
+        x = evaluate(layer, x)
+    end
+    return x
 end
 
 """
@@ -133,7 +129,10 @@ Apply inverse layers from last to first, to a vector or matrix of row-wise point
 function inverse(C::ComposedMap, z::Union{AbstractVector{<:Real}, AbstractMatrix{<:Real}})
     _check_composed_input(C, z)
     isempty(z) && return copy(z)
-    return foldr((layer, y) -> inverse(layer, y), C.layers; init = z)
+    for layer in Iterators.reverse(C.layers)
+        z = inverse(layer, z)
+    end
+    return z
 end
 
 """
@@ -155,12 +154,14 @@ at that layer's input. Matrix input returns one determinant per row.
 function jacobian(C::ComposedMap, x::AbstractVector{<:Real})
     _check_composed_input(C, x)
     value = one(eltype(x))
-    for (i, layer) in enumerate(C.layers)
+    layers = C.layers
+    for (i, layer) in enumerate(layers)
         value *= jacobian(layer, x)
-        i < length(C.layers) && (x = evaluate(layer, x))
+        i < length(layers) && (x = evaluate(layer, x))
     end
     return value
 end
+
 jacobian(C::ComposedMap, X::AbstractMatrix{<:Real}) = (_check_composed_input(C, X); [jacobian(C, x) for x in eachrow(X)])
 
 """
@@ -190,7 +191,9 @@ function _evaluate_logabsdet(C::ComposedMap, x)
     end
     return x, value
 end
+
 logabsdetjacobian(C::ComposedMap, x::AbstractVector{<:Real}) = last(_evaluate_logabsdet(C, x))
+
 function logabsdetjacobian(C::ComposedMap, X::AbstractMatrix{<:Real})
     _check_composed_input(C, X)
     return [logabsdetjacobian(C, x) for x in eachrow(X)]
@@ -210,10 +213,11 @@ function _inverse_logabsdet(M, x)
     z = inverse(M, x)
     return z, -logabsdetjacobian(M, z)
 end
+
 function _inverse_logabsdet(C::ComposedMap, x)
     _check_composed_input(C, x)
     logdet = zero(eltype(x))
-    for layer in reverse(C.layers)
+    for layer in Iterators.reverse(C.layers)
         x, contribution = _inverse_logabsdet(layer, x)
         x === nothing && return nothing, -Inf
         logdet += contribution
@@ -260,6 +264,7 @@ function pushforward(C::ComposedMap, target::AbstractMapDensity, z::AbstractVect
     x = inverse(C, z)
     return exp(logpdf(target, collect(x)) - logabsdetjacobian(C, x))
 end
+
 function pushforward(C::ComposedMap, target::AbstractMapDensity, Z::AbstractMatrix{<:Real})
     _check_composed_input(C, Z)
     return [pushforward(C, target, z) for z in eachrow(Z)]
@@ -273,6 +278,7 @@ function Base.show(io::IO, C::ComposedMap)
     print(io, "; forwarddirection=:", C.forwarddirection, ")")
     return nothing
 end
+
 function Base.show(io::IO, ::MIME"text/plain", C::ComposedMap)
     println(io, "ComposedMap with $(numberdimensions(C)) dimensions and $(length(C.layers)) layers (first applied first):")
     for (i, layer) in enumerate(C.layers)

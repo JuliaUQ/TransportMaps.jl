@@ -14,7 +14,7 @@ PolynomialMapComponent
 LinearMap
 LaplaceMap
 ComposedMap
-PriorMap
+MarginalMap
 ```
 
 ## Functions

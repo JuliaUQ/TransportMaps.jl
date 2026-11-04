@@ -1,8 +1,8 @@
-@testitem "PriorMap transformations and derivatives" begin
+@testitem "MarginalMap transformations and derivatives" begin
     using TransportMaps, Distributions, ForwardDiff, LinearAlgebra
 
     marginals = [Normal(2, 3), Uniform(-2, 4), LogNormal(0.2, 0.7), Beta(2, 3), Gamma(3, 2)]
-    P = PriorMap(marginals)
+    P = MarginalMap(marginals)
     z = [-0.4, 0.2, 0.7, -0.8, 0.3]
     x = evaluate(P, z)
     @test P.marginals isa Vector{<:ContinuousUnivariateDistribution}
@@ -40,20 +40,20 @@
 
     # Stable tails, including values where cdf(Normal(), z) rounds to one.
     tails = [-10.0 10.0; 10.0 -10.0]
-    tail_map = PriorMap([Normal(2, 3), LogNormal(0.2, 0.7)])
+    tail_map = MarginalMap([Normal(2, 3), LogNormal(0.2, 0.7)])
     @test evaluate(tail_map, tails) ≈ [2 .+ 3 .* tails[:, 1] exp.(0.2 .+ 0.7 .* tails[:, 2])]
     @test inverse(tail_map, evaluate(tail_map, tails)) ≈ tails
     @test isfinite(logabsdetjacobian(tail_map, [40.0, 10.0]))
 end
 
-@testitem "PriorMap validation and composition" begin
+@testitem "MarginalMap validation and composition" begin
     using TransportMaps, Distributions
-    @test_throws ArgumentError PriorMap(ContinuousUnivariateDistribution[])
-    @test_throws MethodError PriorMap([Bernoulli(0.5)])
-    @test_throws MethodError PriorMap([Normal(), Poisson(2)])
-    @test_throws MethodError PriorMap([MvNormal(zeros(2), ones(2))])
-    @test_throws MethodError PriorMap((Normal(),))
-    P = PriorMap([Uniform(-2, 4), LogNormal(0.2, 0.7)])
+    @test_throws ArgumentError MarginalMap(ContinuousUnivariateDistribution[])
+    @test_throws MethodError MarginalMap([Bernoulli(0.5)])
+    @test_throws MethodError MarginalMap([Normal(), Poisson(2)])
+    @test_throws MethodError MarginalMap([MvNormal(zeros(2), ones(2))])
+    @test_throws MethodError MarginalMap((Normal(),))
+    P = MarginalMap([Uniform(-2, 4), LogNormal(0.2, 0.7)])
     for operation in (evaluate, inverse, jacobian, logabsdetjacobian, logpdf)
         @test_throws DimensionMismatch operation(P, zeros(3))
         @test_throws DimensionMismatch operation(P, zeros(2, 3))
@@ -80,11 +80,11 @@ end
     @test logpdf(ComposedMap(P), x) ≈ logpdf(P, x)
 end
 
-@testitem "PriorMap Bayesian density fitting" begin
+@testitem "MarginalMap Bayesian density fitting" begin
     using TransportMaps, Distributions, ForwardDiff, Optim
     # A lognormal prior and observation of log(x) have an exact lognormal posterior.
     μ, σ, y, τ = 0.3, 0.7, 0.8, 0.4
-    P = PriorMap([LogNormal(μ, σ)])
+    P = MarginalMap([LogNormal(μ, σ)])
     reference = MapReferenceDensity()
     loglikelihood(x) = logpdf(Normal(log(x[1]), τ), y)
     target = MapTargetDensity(z -> loglikelihood(evaluate(P, z)) + logpdf(reference, z))
@@ -105,14 +105,14 @@ end
     end
 end
 
-@testitem "PriorMap configurable reference" begin
+@testitem "MarginalMap configurable reference" begin
     using TransportMaps, Distributions, ForwardDiff, LinearAlgebra
 
     marginals = [Normal(2, 3), Uniform(-2, 4), LogNormal(0.2, 0.7), Beta(2, 3)]
     probabilities = [0.2, 0.4, 0.7, 0.8]
     for reference in (Uniform(0, 1), Uniform(-1, 1), Normal(2, 3), Beta(2, 4))
-        P = PriorMap(marginals; reference)
-        @test P isa PriorMap{eltype(marginals), typeof(reference)}
+        P = MarginalMap(marginals; reference)
+        @test P isa MarginalMap{eltype(marginals), typeof(reference)}
         z = quantile.(reference, probabilities)
         x = evaluate(P, z)
         @test P.reference.densitytype == reference
@@ -120,7 +120,7 @@ end
         @test inverse(P, x) ≈ z atol = 1.0e-11
         Z = [z'; quantile.(reference, 1 .- probabilities)']
         @test inverse(P, evaluate(P, Z)) ≈ Z atol = 1.0e-11
-        @test PriorMap([marginals...]; reference).reference.densitytype == reference
+        @test MarginalMap([marginals...]; reference).reference.densitytype == reference
 
         expected = pdf.(reference, z) ./ [pdf(d, x[i]) for (i, d) in enumerate(marginals)]
         J = ForwardDiff.jacobian(u -> evaluate(P, u), z)
@@ -151,10 +151,10 @@ end
             @test_throws DomainError logabsdetjacobian(P, fill(maximum(reference) + 0.1, 4))
         end
     end
-    @test_throws ArgumentError PriorMap([Normal()]; reference = Bernoulli(0.5))
-    @test_throws ArgumentError PriorMap([Normal()]; reference = MvNormal(zeros(2), ones(2)))
+    @test_throws ArgumentError MarginalMap([Normal()]; reference = Bernoulli(0.5))
+    @test_throws ArgumentError MarginalMap([Normal()]; reference = MvNormal(zeros(2), ones(2)))
     # Uniform-to-uniform maps preserve finite boundaries and exact affine slopes.
-    P = PriorMap([Uniform(-2, 4)]; reference = Uniform(0, 1))
+    P = MarginalMap([Uniform(-2, 4)]; reference = Uniform(0, 1))
     @test evaluate(P, [0.0]) == [-2.0]
     @test evaluate(P, [1.0]) == [4.0]
     @test inverse(P, [-2.0]) == [0.0]
@@ -162,7 +162,7 @@ end
     @test logabsdetjacobian(P, [1.0]) ≈ log(6)
     @test logpdf(ComposedMap(P), [4.0]) ≈ -log(6)
     # Avoid reconstructing a rounded tail probability when differentiating the inverse.
-    normal_prior = PriorMap([Normal()]; reference = Uniform(0, 1))
+    normal_prior = MarginalMap([Normal()]; reference = Uniform(0, 1))
     @test inverse_jacobian(normal_prior, [10.0]) ≈ pdf(Normal(), 10.0)
     @test logpdf(ComposedMap(normal_prior), [10.0]) ≈ logpdf(Normal(), 10.0)
 end
