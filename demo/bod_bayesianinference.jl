@@ -9,7 +9,7 @@ function forward_model(t, parameters)
     return A * (1 - exp(-B * t))
 end
 
-prior_map = MarginalMap([Uniform(0.4, 1.2), Uniform(0.01, 0.31)])
+prior_map = MarginalMap([Uniform(0.4, 1.2), Uniform(0.01, 0.51)])
 
 t = [1, 2, 3, 4, 5]
 D = [0.18, 0.32, 0.42, 0.49, 0.54]
@@ -46,14 +46,14 @@ var_diag = variance_diagnostic(M, target, samples_z)
 println("Variance Diagnostic: ", var_diag)
 
 A_values = range(0.4, 1.2; length = 100)
-B_values = range(0.01, 0.31; length = 100)
+B_values = range(0.01, 0.51; length = 100)
 posterior_values = [pdf(physical_target, [A, B]) for A in A_values, B in B_values]
 
 samples_fig, samples_ax, plt = sampleplot(
     mapped_samples; color = (:steelblue, 0.5),
     axis = (; xlabel = L"A", ylabel = L"B"),
 )
-limits!(samples_ax, 0.4, 1.2, 0.01, 0.31)
+limits!(samples_ax, 0.4, 1.2, 0.01, 0.51)
 contour!(
     samples_ax, A_values, B_values, posterior_values ./ maximum(posterior_values);
     levels = [0.2, 0.4, 0.6, 0.8], colormap = :viridis
@@ -72,7 +72,7 @@ contour!(
     pullback_ax, A_values, B_values, posterior_pullback ./ maximum(posterior_pullback);
     levels, color = :orange, linestyle = :dash, label = "Transport approximation"
 )
-limits!(pullback_ax, 0.4, 1.2, 0.01, 0.31)
+limits!(pullback_ax, 0.4, 1.2, 0.01, 0.51)
 axislegend(
     pullback_ax, [LineElement(color = :steelblue), LineElement(color = :orange, linestyle = :dash)],
     ["Target", "Transport"]; position = :lb
@@ -83,8 +83,8 @@ fixed_θ₁ = inverse(prior_map, [fixed_A, mean(prior_map.marginals[2])])[1]
 conditional_θ₂ = conditional_sample(M, fixed_θ₁, randn(10_000))
 conditional_samples = evaluate(prior_map, hcat(fill(fixed_θ₁, length(conditional_θ₂)), conditional_θ₂))[:, 2]
 
-B_range = range(0.011, 0.309; length = 300)
-conditional_normalizer = gaussquadrature(B -> pdf(physical_target, [fixed_A, B]), 200, 0.01, 0.31)
+B_range = range(0.011, 0.509; length = 300)
+conditional_normalizer = gaussquadrature(B -> pdf(physical_target, [fixed_A, B]), 200, 0.01, 0.51)
 reference_conditional(B) = pdf(physical_target, [fixed_A, B]) / conditional_normalizer
 conditional_reference = reference_conditional.(B_range)
 
@@ -99,7 +99,7 @@ conditional_fig, conditional_ax, plt = hist(
 )
 lines!(conditional_ax, B_range, conditional_reference; linewidth = 2, color = :orange, label = "Reference")
 lines!(conditional_ax, B_range, conditional_mapped; linewidth = 2, color = :seagreen, label = "Transport")
-xlims!(conditional_ax, 0.01, 0.31)
+xlims!(conditional_ax, 0.01, 0.51)
 axislegend(conditional_ax; position = :lt)
 
 # This file was generated using Literate.jl, https://github.com/fredrikekre/Literate.jl
