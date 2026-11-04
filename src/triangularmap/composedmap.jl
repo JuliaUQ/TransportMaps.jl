@@ -26,7 +26,6 @@ struct ComposedMap <: AbstractComposedMap
     forwarddirection::Symbol
 
     function ComposedMap(layers::Union{Tuple, AbstractVector}; reference = nothing, forwarddirection::Symbol = :auto)
-        Base.@nospecialize layers
         isempty(layers) && throw(ArgumentError("ComposedMap requires at least one layer"))
         flat_layers = AbstractTransportMap[]
         for layer in layers

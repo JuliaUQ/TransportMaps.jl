@@ -121,7 +121,7 @@ laplace_chain = ComposedMap(density_whitening, correction; forwarddirection = :r
 #
 # ### MarginalMap
 #
-# `MarginalMap` accepts a vector of independent continuous marginals. For
+# [`MarginalMap`](@ref) accepts a vector of independent continuous marginals. For
 # their CDFs ``F_i`` and reference CDF ``G``, it evaluates
 # ``P_i(z_i)=F_i^{-1}(G(z_i))``. Its inverse transforms physical (prior)
 # coordinates to reference coordinates:
@@ -149,7 +149,7 @@ parameters = evaluate(physical_map, [0.0, 0.0])
 
 # The correction's output must lie within the marginal map's reference support.
 # In particular, a bounded reference requires a correction that preserves that
-# support. Out-of-support inputs to `PriorMap` throw `DomainError`.
+# support. Out-of-support inputs to `ComposedMap` throw `DomainError`.
 #
 # In Bayesian inference, transforming a physical posterior through an exact
 # marginal (prior) map absorbs the prior and its Jacobian into the reference density:
