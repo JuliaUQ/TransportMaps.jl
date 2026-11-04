@@ -75,11 +75,10 @@ function transportmap_theme(;
 end
 
 function comparison_samples(M, samples, input_space)
-    polynomial = M isa ComposedMap ? M.polynomialmap : M
-    numberdimensions(polynomial) == 2 && size(samples, 2) == 2 ||
+    numberdimensions(M) == 2 && size(samples, 2) == 2 ||
         throw(ArgumentError("reference_target_plot requires a two-dimensional map and sample matrix"))
     size(samples, 1) > 0 || throw(ArgumentError("samples must not be empty"))
-    forward_space = polynomial.forwarddirection === :target ? :reference : :target
+    forward_space = M.forwarddirection === :target ? :reference : :target
     space = input_space === :auto ? forward_space : input_space
     space in (:reference, :target) ||
         throw(ArgumentError("input_space must be :auto, :reference, or :target"))
@@ -136,22 +135,20 @@ end
 
 function diagnostic_samples(M, samples, input_space)
     size(samples, 1) >= 2 || throw(ArgumentError("at least two observations are required"))
-    polynomial = M isa ComposedMap ? M.polynomialmap : M
-    size(samples, 2) == numberdimensions(polynomial) ||
+    size(samples, 2) == numberdimensions(M) ||
         throw(ArgumentError("sample columns must match the map dimension"))
     all(isfinite, samples) || throw(ArgumentError("samples must be finite"))
     input_space === :reference && return samples
     input_space === :target || throw(ArgumentError("input_space must be :target or :reference"))
-    return polynomial.forwarddirection === :reference ? evaluate(M, samples) : inverse(M, samples)
+    return M.forwarddirection === :reference ? evaluate(M, samples) : inverse(M, samples)
 end
 
 function referenceplot(
         M::Union{PolynomialMap, ComposedMap}, samples::AbstractMatrix{<:Real};
         input_space = :target, kwargs...,
     )
-    polynomial = M isa ComposedMap ? M.polynomialmap : M
     Z = diagnostic_samples(M, samples, input_space)
-    return referenceplot(Z; reference = polynomial.reference, kwargs...)
+    return referenceplot(Z; reference = M.reference, kwargs...)
 end
 
 function diagnostic_values(Z, dims)
@@ -265,14 +262,13 @@ function referenceplot(
 end
 
 function plotmatrix_samples(M, samples, input_space, space)
-    polynomial = M isa ComposedMap ? M.polynomialmap : M
-    size(samples, 2) == numberdimensions(polynomial) ||
+    size(samples, 2) == numberdimensions(M) ||
         throw(ArgumentError("sample columns must match the map dimension"))
     input_space in (:target, :reference) && space in (:target, :reference) ||
         throw(ArgumentError("input_space and space must be :target or :reference"))
     diagnostic_values(samples, axes(samples, 2))
     input_space === space && return samples
-    forward_space = polynomial.forwarddirection === :target ? :reference : :target
+    forward_space = M.forwarddirection === :target ? :reference : :target
     return input_space === forward_space ? evaluate(M, samples) : inverse(M, samples)
 end
 
@@ -280,7 +276,7 @@ function plotmatrix(
         M::Union{PolynomialMap, ComposedMap}, samples::AbstractMatrix{<:Real};
         input_space = :target, space = :reference, dims = axes(samples, 2),
         reference = space === :reference ?
-            (M isa ComposedMap ? M.polynomialmap.reference : M.reference) : nothing,
+            M.reference : nothing,
         dimlabels = nothing, kwargs...,
     )
     values = plotmatrix_samples(M, samples, input_space, space)
@@ -412,7 +408,7 @@ end
 function mapping_positions(M, coordinates, direction, gridlines)
     transform = direction === :forward ? evaluate : direction === :inverse ? inverse :
         throw(ArgumentError("direction must be :forward or :inverse"))
-    d = M isa ComposedMap ? numberdimensions(M.polynomialmap) : numberdimensions(M)
+    d = numberdimensions(M)
     if coordinates isa AbstractVector{<:Real}
         d == 1 || throw(ArgumentError("a coordinate vector requires a 1D map"))
         values = vec(transform(M, reshape(collect(coordinates), :, 1)))

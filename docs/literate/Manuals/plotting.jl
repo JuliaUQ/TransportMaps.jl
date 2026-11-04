@@ -84,7 +84,7 @@ fig = transportplot(
 #
 # ### One dimension: CDF and inverse CDF
 #
-# See [CDF Estimation with a 1D Transport Map](@ref) for a comparison of logistic-to-uniform
+# See [CDF Estimation (1D)](@ref) for a comparison of logistic-to-uniform
 # and logistic-to-normal maps, their inverses, and their pullback densities.
 # `mappingplot!` uses `direction=:inverse` to map the target into reference space.
 # Dashed curves below show the exact maps.
@@ -273,7 +273,7 @@ pairwise_reference_fig = plotmatrix(fitted_map, validation_samples; style = :cor
 # ## Optimization results
 #
 # [`convergenceplot`](@ref) plots adaptive objectives by iteration. Using `res_best`
-# from [Banana: Adaptive Transport Map from Samples](../Examples/banana_adaptive.md):
+# from [Banana: Adaptive Map from Samples](@ref):
 #
 # ```julia
 # fig, ax, plt = convergenceplot(res_best; show_test=true)
