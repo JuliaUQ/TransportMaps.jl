@@ -394,15 +394,15 @@ function logabsdetjacobian(M::PolynomialMap, X::AbstractMatrix{<:Real})
     @assert size(X, 2) == numberdimensions(M) "Number of columns must match the dimension of the map"
     n_points = size(X, 1)
     n_dims = length(M.components)
-    
+
     # Preallocate result vector for type stability
     results = Vector{Float64}(undef, n_points)
-    
+
     # Use multithreading for better performance
     Threads.@threads for i in 1:n_points
         @inbounds results[i] = logabsdetjacobian(M, @view(X[i, :]))
     end
-    
+
     return results
 end
 

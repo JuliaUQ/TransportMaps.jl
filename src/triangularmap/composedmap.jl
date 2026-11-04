@@ -94,19 +94,19 @@ function logabsdetjacobian(C::ComposedMap, X::AbstractMatrix{<:Real})
     @assert size(X, 2) == numberdimensions(C) "Input dimension must match the map"
     n_points = size(X, 1)
     results = Vector{Float64}(undef, n_points)
-    
+
     # Transform all points through linear map first
     X_transformed = evaluate(C.linearmap, X)
-    
+
     # Compute linear map Jacobian (constant for all points)
     # For LinearMap and LaplaceMap, this is the same for all x
     logdet_linear = logabsdetjacobian(C.linearmap, X[1, :])
-    
+
     # Use multithreading for polynomial map Jacobians
     Threads.@threads for i in 1:n_points
         @inbounds results[i] = logdet_linear + logabsdetjacobian(C.polynomialmap, @view(X_transformed[i, :]))
     end
-    
+
     return results
 end
 
