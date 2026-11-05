@@ -22,7 +22,7 @@ Adaptively optimize a triangular transport map by greedily enriching the multi-i
 - `test_fraction::Float64=0.0`: Fraction of samples to use for testing (validation)
 
 # Returns
-- `C::ComposedMap{LinearMap, PolynomialMap}`: The optimized triangular transport map
+- `C::ComposedMap`: The optimized triangular transport map
 - `iteration_histories::Vector{OptimizationHistory}`: History of optimization for each component
 """
 function optimize_adaptive_transportmap(
@@ -89,7 +89,7 @@ select the number of terms per component.
 - `options::Optim.Options=Optim.Options()`: Optimizer options
 
 # Returns
-- `ComposedMap{LinearMap, PolynomialMap}`: The optimized triangular transport map trained on all samples
+- `ComposedMap`: The optimized triangular transport map trained on all samples
 - `fold_histories::Vector{Vector{OptimizationHistory}}`: Optimization history for each component and fold
 - `selected_terms::Vector{Int}`: Number of terms selected for each component
 - `selected_fold::Vector{Int}`: Index of the best fold for each component

@@ -1,4 +1,4 @@
-# # CDF Estimation with a 1D Transport Map
+# # CDF Estimation (1D)
 #
 # In this example, we show the use of transport maps to fit (inverse) CDFs [wu2025](@cite).
 # We fit a logistic density using uniform and standard-normal references, then

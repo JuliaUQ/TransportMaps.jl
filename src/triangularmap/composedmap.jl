@@ -1,157 +1,286 @@
 """
-    ComposedMap{T <: AbstractLinearMap} <: AbstractComposedMap
+    ComposedMap(maps...; reference = nothing, forwarddirection = :auto)
+    ComposedMap(maps::Union{Tuple, AbstractVector}; kwargs...)
 
-A composed transport map consisting of a linear map followed by a polynomial map.
+Compose maps in evaluation order: `ComposedMap(A, B, C)` applies `C(B(A(x)))`.
+`inverse` applies inverse layers in reverse order. Inputs may be vectors or
+matrices with observations in rows.
 
-The composition is ``S(x)=M(L(x))``, where `L` is a linear map of type `T` and
-`M` is the polynomial map. The linear map can be a `LinearMap` or `LaplaceMap`. The direction of the whole
-composition is inherited from the polynomial map: `:reference` means target to
-reference and `:target` means reference to target. Its reference distribution is
-the endpoint reference of the whole map, before both layers for `:target` and
-after both layers for `:reference`.
+Nested compositions are flattened into the vector `C.layers`. Layer objects are
+shared; use `deepcopy` to freeze their parameters. Supply at least one
+`AbstractTransportMap`, with matching dimensions (except `LinearMap()`) and
+compatible supports.
 
-# Fields
-- `linearmap<:T`: The linear map component
-- `polynomialmap::PolynomialMap`: The polynomial map component
+`forwarddirection` is `:reference` (target -> reference) or `:target`
+(reference -> target). `:auto` infers a common direction from supplied maps,
+defaulting to `:reference` when none provide one.
 
-# Constructors
-- `ComposedMap(lm::AbstractLinearMap, pm::PolynomialMap)`
+`reference` defaults to the last supplied reference for `:reference`, or the
+first for `:target`, falling back to a product standard normal. A univariate
+distribution defines a product reference. Direction and reference are fixed
+at construction.
 """
-struct ComposedMap{T <: AbstractLinearMap} <: AbstractComposedMap
-    linearmap::T
-    polynomialmap::PolynomialMap
+struct ComposedMap <: AbstractComposedMap
+    layers::Vector{AbstractTransportMap}
+    reference::Union{AbstractMapDensity, Distributions.Distribution}
+    forwarddirection::Symbol
 
-    function ComposedMap(lm::AbstractLinearMap, pm::PolynomialMap)
-        if numberdimensions(lm) == 0
-            T = typeof(lm)
-            return new{T}(lm, pm)
-        else
-            @assert numberdimensions(lm) == numberdimensions(pm) "Linear map and polynomial map must have the same number of dimensions"
-            T = typeof(lm)
-            return new{T}(lm, pm)
+    function ComposedMap(layers::Union{Tuple, AbstractVector}; reference = nothing, forwarddirection::Symbol = :auto)
+        isempty(layers) && throw(ArgumentError("ComposedMap requires at least one layer"))
+        flat_layers = AbstractTransportMap[]
+        for layer in layers
+            layer isa AbstractTransportMap ||
+                throw(ArgumentError("Every layer must be an AbstractTransportMap"))
+            if layer isa ComposedMap
+                append!(flat_layers, layer.layers)
+            else
+                push!(flat_layers, layer)
+            end
         end
+        all(m -> applicable(numberdimensions, m), flat_layers) ||
+            throw(ArgumentError("Every layer must implement numberdimensions"))
+        dims = map(numberdimensions, flat_layers)
+        all(d -> d isa Integer && d >= 0, dims) ||
+            throw(ArgumentError("Layer dimensions must be nonnegative integers"))
+        d = maximum(dims)
+        all(i -> dims[i] == d || (dims[i] == 0 && flat_layers[i] isa LinearMap), eachindex(flat_layers)) ||
+            throw(DimensionMismatch("All layers must have the same dimension"))
+        forwarddirection in (:auto, :reference, :target) ||
+            throw(ArgumentError("forwarddirection must be :auto, :reference, or :target"))
+        forwarddirection === :auto && (forwarddirection = _composition_direction(layers))
+        reference === nothing && (reference = _composition_reference(layers, forwarddirection))
+        if reference isa Distributions.UnivariateDistribution
+            reference = MapReferenceDensity(reference)
+        elseif !(reference isa Union{AbstractMapDensity, Distributions.Distribution})
+            throw(ArgumentError("reference must be a distribution or AbstractMapDensity"))
+        end
+        return new(flat_layers, reference, forwarddirection)
     end
 end
 
-"""
-    evaluate(C::ComposedMap, x::AbstractVector{<:Real})
+ComposedMap(maps...; kwargs...) = ComposedMap(maps; kwargs...)
 
-Evaluate the composed map, ``S(x)=M(L(x))``.
-"""
-function evaluate(C::ComposedMap{T}, x::AbstractVector{<:Real}) where {T <: AbstractLinearMap}
-    y = evaluate(C.linearmap, x)
-    return evaluate(C.polynomialmap, y)
-end
-
-"""
-    evaluate(C::ComposedMap, X::AbstractMatrix{<:Real})
-
-Evaluate the composed map for multiple points (row-wise).
-"""
-function evaluate(C::ComposedMap{T}, X::AbstractMatrix{<:Real}) where {T <: AbstractLinearMap}
-    Y = evaluate(C.linearmap, X)
-    return evaluate(C.polynomialmap, Y)
-end
-
-"""
-    inverse(C::ComposedMap, z::AbstractVector{<:Real})
-
-Invert the composed map, ``S^{-1}(z)=L^{-1}(M^{-1}(z))``.
-"""
-function inverse(C::ComposedMap{T}, z::AbstractVector{<:Real}) where {T <: AbstractLinearMap}
-    y = inverse(C.polynomialmap, z)
-    return inverse(C.linearmap, y)
-end
-
-"""
-    inverse(C::ComposedMap, Z::AbstractMatrix{<:Real})
-
-Invert the composed map for multiple points (row-wise).
-"""
-function inverse(C::ComposedMap{T}, Z::AbstractMatrix{<:Real}) where {T <: AbstractLinearMap}
-    Y = inverse(C.polynomialmap, Z)
-    return inverse(C.linearmap, Y)
-end
-
-# Keep composition metadata behind accessors so distribution operations do not
-# depend on this two-layer container's fields. The whole map is M ∘ L, matching
-# the evaluation-order and direction conventions of the map-chains branch.
-_reference_marginal(C::ComposedMap) = _reference_marginal(C.polynomialmap)
-_map_direction(C::ComposedMap) = _map_direction(C.polynomialmap)
-
-function logabsdetjacobian(C::ComposedMap, x::AbstractVector{<:Real})
-    # For ComposedMap, log|det J| = log|det J_linear| + log|det J_poly|
-    # The linear map's Jacobian is constant, and the polynomial map's Jacobian
-    # depends on the transformed point
-    logdet_linear = logabsdetjacobian(C.linearmap, x)
-    # Transform x through linear map and compute polynomial Jacobian at that point
-    x_transformed = evaluate(C.linearmap, x)
-    logdet_poly = logabsdetjacobian(C.polynomialmap, x_transformed)
-    return logdet_linear + logdet_poly
-end
-
-function logabsdetjacobian(C::ComposedMap, X::AbstractMatrix{<:Real})
-    @assert size(X, 2) == numberdimensions(C) "Input dimension must match the map"
-    n_points = size(X, 1)
-    results = Vector{Float64}(undef, n_points)
-
-    # Transform all points through linear map first
-    X_transformed = evaluate(C.linearmap, X)
-
-    # Compute linear map Jacobian (constant for all points)
-    # For LinearMap and LaplaceMap, this is the same for all x
-    logdet_linear = logabsdetjacobian(C.linearmap, X[1, :])
-
-    # Use multithreading for polynomial map Jacobians
-    Threads.@threads for i in 1:n_points
-        @inbounds results[i] = logdet_linear + logabsdetjacobian(C.polynomialmap, @view(X_transformed[i, :]))
+function _composition_direction(layers)
+    direction = nothing
+    for layer in layers
+        hasproperty(layer, :forwarddirection) || continue
+        next = layer.forwarddirection
+        next in (:reference, :target) || throw(ArgumentError("Invalid layer forwarddirection"))
+        direction === nothing || direction === next ||
+            throw(ArgumentError("Layers have mixed directions; specify the composition's forwarddirection explicitly"))
+        direction = next
     end
-
-    return results
+    return isnothing(direction) ? :reference : direction
 end
 
-function jacobian(C::ComposedMap, x::AbstractVector{<:Real})
-    return jacobian(C.linearmap, x) * jacobian(C.polynomialmap, evaluate(C.linearmap, x))
+function _composition_reference(layers, direction)
+    candidates = direction === :reference ? Iterators.reverse(layers) : layers
+    for layer in candidates
+        hasproperty(layer, :reference) && return layer.reference
+    end
+    return MapReferenceDensity()
 end
 
-function jacobian(C::ComposedMap, X::AbstractMatrix{<:Real})
-    @assert size(X, 2) == numberdimensions(C) "Input dimension must match the map"
-    return [jacobian(C, x) for x in eachrow(X)]
+_legacy_composition(C::ComposedMap) = length(C.layers) == 2 &&
+    C.layers[1] isa AbstractLinearMap && C.layers[2] isa PolynomialMap
+
+function Base.getproperty(C::ComposedMap, name::Symbol)
+    if name in (:linearmap, :polynomialmap) && _legacy_composition(C)
+        return C.layers[name === :linearmap ? 1 : 2]
+    end
+    return getfield(C, name)
 end
 
-function _inverse_coordinate_functions(C::ComposedMap, previous, target, k)
-    transformed, slope = _linear_prefix(C.linearmap, previous, k)
-    fun, derivative = _inverse_coordinate_functions(
-        C.polynomialmap, view(transformed, 1:(k - 1)), target, k,
-    )
-    # The input to polynomial component k is affine in the original coordinate.
-    # Orient the residual upwards even for a signed linear scale, so guarded
-    # bracketing always uses the reference interval of the whole composition.
-    orientation = sign(slope)
-    coordinate(t) = muladd(slope, t, transformed[k])
-    residual(t) = orientation * fun(coordinate(t))
-    gradient(t) = abs(slope) * derivative(coordinate(t))
-    return residual, gradient
+function Base.propertynames(C::ComposedMap, private::Bool = false)
+    names = (:layers, :reference, :forwarddirection)
+    _legacy_composition(C) && (names = (names..., :linearmap, :polynomialmap))
+    return names
 end
 
-"""
-    numberdimensions(C::ComposedMap)
+numberdimensions(C::ComposedMap) = maximum(numberdimensions, C.layers)
 
-Return the number of dimensions of the composed map.
-"""
-numberdimensions(C::ComposedMap{T}) where {T <: AbstractLinearMap} = numberdimensions(C.polynomialmap)
-
-function Base.show(io::IO, C::ComposedMap{T}) where {T <: AbstractLinearMap}
-    print(io, "ComposedMap{$(T)}(")
-    print(io, "linearmap=$(C.linearmap), ")
-    print(io, "polynomialmap=$(C.polynomialmap)")
-    print(io, ")")
+function _check_composed_input(C, x)
+    d = numberdimensions(C)
+    n = x isa AbstractVector ? length(x) : size(x, 2)
+    d == 0 || n == d || throw(DimensionMismatch("Input dimension $n does not match map dimension $d"))
     return nothing
 end
 
-function Base.show(io::IO, ::MIME"text/plain", C::ComposedMap{T}) where {T <: AbstractLinearMap}
-    println(io, "ComposedMap{$(T)} with $(numberdimensions(C)) dimensions:")
-    println(io, " linearmap: ", C.linearmap)
-    println(io, " polynomialmap: ", C.polynomialmap)
+"""
+    evaluate(C::ComposedMap, x)
+
+Apply `C.layers` from first to last, to a vector or a matrix of row-wise points.
+"""
+function evaluate(C::ComposedMap, x::Union{AbstractVector{<:Real}, AbstractMatrix{<:Real}})
+    _check_composed_input(C, x)
+    isempty(x) && return copy(x)
+    for layer in C.layers
+        x = evaluate(layer, x)
+    end
+    return x
+end
+
+"""
+    inverse(C::ComposedMap, z)
+
+Apply inverse layers from last to first, to a vector or matrix of row-wise points.
+"""
+function inverse(C::ComposedMap, z::Union{AbstractVector{<:Real}, AbstractMatrix{<:Real}})
+    _check_composed_input(C, z)
+    isempty(z) && return copy(z)
+    for layer in Iterators.reverse(C.layers)
+        z = inverse(layer, z)
+    end
+    return z
+end
+
+"""
+    jacobian(L::Union{LinearMap, LaplaceMap}, x)
+
+Forward determinant of the linear standardization at a point (or each matrix\nrow). Unlike the legacy zero-argument `jacobian(L)` scale determinant, this\nis `1 / jacobian(L)`.
+"""
+jacobian(L::Union{LinearMap, LaplaceMap}, x::AbstractVector{<:Real}) = inv(jacobian(L))
+jacobian(L::Union{LinearMap, LaplaceMap}, X::AbstractMatrix{<:Real}) = fill(inv(jacobian(L)), size(X, 1))
+
+"""
+    jacobian(C::ComposedMap, x)
+
+Forward determinant from the chain rule, evaluating each layer's determinant
+at that layer's input. Matrix input returns one determinant per row.
+"""
+function jacobian(C::ComposedMap, x::AbstractVector{<:Real})
+    _check_composed_input(C, x)
+    value = one(eltype(x))
+    layers = C.layers
+    for (i, layer) in enumerate(layers)
+        value *= jacobian(layer, x)
+        i < length(layers) && (x = evaluate(layer, x))
+    end
+    return value
+end
+
+jacobian(C::ComposedMap, X::AbstractMatrix{<:Real}) = (_check_composed_input(C, X); [jacobian(C, x) for x in eachrow(X)])
+
+"""
+    logabsdetjacobian(map, x)
+
+Log absolute forward determinant, or one value per matrix row. Compositions
+sum layer log-determinants; polynomial maps sum component
+log-derivatives. Custom maps can specialize this for numerical stability.
+"""
+logabsdetjacobian(M, x::AbstractVector{<:Real}) = log(abs(jacobian(M, x)))
+logabsdetjacobian(M::PolynomialMap, x::AbstractVector{<:Real}) = sum(log ∘ abs, gradient_zk(M, x))
+logabsdetjacobian(L::LinearMap, x::AbstractVector{<:Real}) = -sum(log ∘ abs, L.σ)
+logabsdetjacobian(L::LaplaceMap, x::AbstractVector{<:Real}) = -sum(log ∘ abs, diag(L.chol))
+logabsdetjacobian(M, X::AbstractMatrix{<:Real}) = [logabsdetjacobian(M, x) for x in eachrow(X)]
+
+function _evaluate_logabsdet(M, x)
+    logdet = logabsdetjacobian(M, x)
+    return evaluate(M, x), logdet
+end
+
+function _evaluate_logabsdet(C::ComposedMap, x)
+    _check_composed_input(C, x)
+    value = zero(eltype(x))
+    for layer in C.layers
+        x, logdet = _evaluate_logabsdet(layer, x)
+        value += logdet
+    end
+    return x, value
+end
+
+logabsdetjacobian(C::ComposedMap, x::AbstractVector{<:Real}) = last(_evaluate_logabsdet(C, x))
+
+function logabsdetjacobian(C::ComposedMap, X::AbstractMatrix{<:Real})
+    _check_composed_input(C, X)
+    return [logabsdetjacobian(C, x) for x in eachrow(X)]
+end
+
+"""
+    inverse_jacobian(C::ComposedMap, x)
+
+Determinant of the inverse map at `x`, or each row of a matrix.
+"""
+inverse_jacobian(C::ComposedMap, x::AbstractVector{<:Real}) = inv(jacobian(C, inverse(C, x)))
+inverse_jacobian(C::ComposedMap, X::AbstractMatrix{<:Real}) = (_check_composed_input(C, X); [inverse_jacobian(C, x) for x in eachrow(X)])
+
+# Accumulate inverse determinants as we walk backwards through a chain. A
+# support-limited layer may return `nothing` for points outside its image.
+function _inverse_logabsdet(M, x)
+    z = inverse(M, x)
+    return z, -logabsdetjacobian(M, z)
+end
+
+function _inverse_logabsdet(C::ComposedMap, x)
+    _check_composed_input(C, x)
+    logdet = zero(eltype(x))
+    for layer in Iterators.reverse(C.layers)
+        x, contribution = _inverse_logabsdet(layer, x)
+        x === nothing && return nothing, -Inf
+        logdet += contribution
+    end
+    return x, logdet
+end
+
+"""
+    logpdf(C::ComposedMap, x)
+    pdf(C::ComposedMap, x)
+    pullback(C::ComposedMap, x)
+
+Evaluate the target-density approximation of the **whole** composition.
+For `:reference`, this is `ρ(C(x)) * abs(det(DC(x)))`; for `:target`, it is
+`ρ(inv(C)(x)) * abs(det(Dinv(C)(x)))`. `logpdf` accumulates determinants in
+log space. `pullback` is an alias for `pdf`, following the package convention.
+Matrix input returns one value per row.
+"""
+function logpdf(C::ComposedMap, x::AbstractVector{<:Real})
+    if C.forwarddirection === :reference
+        z, logdet = _evaluate_logabsdet(C, x)
+        return logpdf(C.reference, collect(z)) + logdet
+    end
+    z, logdet = _inverse_logabsdet(C, x)
+    z === nothing && return -Inf
+    return logpdf(C.reference, collect(z)) + logdet
+end
+logpdf(C::ComposedMap, X::AbstractMatrix{<:Real}) = (_check_composed_input(C, X); [logpdf(C, x) for x in eachrow(X)])
+pdf(C::ComposedMap, x::Union{AbstractVector{<:Real}, AbstractMatrix{<:Real}}) = exp.(logpdf(C, x))
+pullback(C::ComposedMap, x::Union{AbstractVector{<:Real}, AbstractMatrix{<:Real}}) = pdf(C, x)
+
+"""
+    pushforward(C::ComposedMap, target::AbstractMapDensity, z)
+
+Evaluate `target` represented in reference coordinates (the package convention
+for `pushforward`). For `:target` maps, return `target(C(z)) * abs(det(DC(z)))`.
+For `:reference` maps, use the inverse composition and its determinant.
+"""
+function pushforward(C::ComposedMap, target::AbstractMapDensity, z::AbstractVector{<:Real})
+    if C.forwarddirection === :target
+        x, logdet = _evaluate_logabsdet(C, z)
+        return exp(logpdf(target, collect(x)) + logdet)
+    end
+    x = inverse(C, z)
+    return exp(logpdf(target, collect(x)) - logabsdetjacobian(C, x))
+end
+
+function pushforward(C::ComposedMap, target::AbstractMapDensity, Z::AbstractMatrix{<:Real})
+    _check_composed_input(C, Z)
+    return [pushforward(C, target, z) for z in eachrow(Z)]
+end
+
+(C::ComposedMap)(x::Union{AbstractVector{<:Real}, AbstractMatrix{<:Real}}) = evaluate(C, x)
+
+function Base.show(io::IO, C::ComposedMap)
+    print(io, "ComposedMap(")
+    join(io, C.layers, ", ")
+    print(io, "; forwarddirection=:", C.forwarddirection, ")")
+    return nothing
+end
+
+function Base.show(io::IO, ::MIME"text/plain", C::ComposedMap)
+    println(io, "ComposedMap with $(numberdimensions(C)) dimensions and $(length(C.layers)) layers (first applied first):")
+    for (i, layer) in enumerate(C.layers)
+        println(io, "  ", i, ": ", layer)
+    end
+    print(io, "  forwarddirection: :", C.forwarddirection)
     return nothing
 end

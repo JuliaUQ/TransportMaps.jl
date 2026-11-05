@@ -98,7 +98,7 @@
 # - `selected_folds`: Which fold had the best performance for each component
 
 # !!! example "Example from Samples"
-#     The usage is demonstrated in the example [Banana: Adaptive Transport Map from Samples](@ref).
+#     The usage is demonstrated in the example [Banana: Adaptive Map from Samples](@ref).
 
 # ### Adaptive Maps from Density
 #
@@ -128,7 +128,7 @@
 # - `gradients`: Gradient metrics for all candidates at each iteration
 
 # !!! example "Example from Density"
-#     The usage is demonstrated in the example [Cubic: Adaptive Transport Map from Density](@ref).
+#     The usage is demonstrated in the example [Cubic: Adaptive Map from Density](@ref).
 
 # ## References
 #

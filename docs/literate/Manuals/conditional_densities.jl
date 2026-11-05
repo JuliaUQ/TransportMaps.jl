@@ -163,4 +163,4 @@ Legend(fig[2, 1], ax; orientation = :horizontal, nbanks = 4) # hide
 
 # !!! note "Note"
 #     For a more comprehensive example with real-world applications,
-#     see the [Bayesian Inference: Biochemical Oxygen Demand (BOD) Example](@ref).
+#     see the [BOD: Bayesian Inference](@ref).
