@@ -5,7 +5,10 @@ Represent a fitted `PolynomialMap`, `ComposedMap`, `LinearMap`, or `LaplaceMap`
 as a [`Distributions.ContinuousMultivariateDistribution`](https://juliastats.org/Distributions.jl/stable/multivariate/).
 Standalone linear and Laplace maps use a product standard-normal reference and map target to
 reference, so their inverse generates the corresponding Gaussian samples. Compositions
-inherit the polynomial layer's reference and the direction of the whole map.
+use their own reference and direction, fixed when the composition is constructed.
+Any number of invertible layers is supported, including `MarginalMap` and custom
+layers implementing `evaluate`, `inverse`, and `logabsdetjacobian` (or `jacobian`).
+The reference must be a continuous univariate product or multivariate distribution.
 
 ### Example
 ```julia
@@ -59,10 +62,32 @@ function _validate_distribution_map(map::LaplaceMap)
 end
 
 function _validate_distribution_map(map::ComposedMap)
-    _validate_distribution_map(map.linearmap)
-    _validate_distribution_map(map.polynomialmap)
-    numberdimensions(map.linearmap) in (0, numberdimensions(map.polynomialmap)) ||
-        throw(DimensionMismatch("Composed map dimensions must agree"))
+    reference = map.reference
+    if reference isa MapReferenceDensity
+        reference.densitytype isa Distributions.ContinuousUnivariateDistribution ||
+            throw(ArgumentError("TransportMapDistribution requires a continuous reference"))
+    elseif reference isa Distributions.ContinuousMultivariateDistribution
+        length(reference) == numberdimensions(map) ||
+            throw(DimensionMismatch("Reference and map dimensions must agree"))
+    else
+        throw(ArgumentError("TransportMapDistribution requires a sampleable continuous product or multivariate reference"))
+    end
+    for layer in map.layers
+        numberdimensions(layer) == numberdimensions(map) ||
+            (layer isa LinearMap && numberdimensions(layer) == 0) ||
+            throw(DimensionMismatch("Composed map dimensions must agree"))
+        _validate_distribution_layer(layer, numberdimensions(map))
+    end
+    return nothing
+end
+
+_validate_distribution_layer(map::Union{PolynomialMap, LinearMap, LaplaceMap}, dim) =
+    _validate_distribution_map(map)
+
+function _validate_distribution_layer(map::AbstractTransportMap, dim)
+    point = zeros(dim)
+    applicable(evaluate, map, point) && applicable(inverse, map, point) ||
+        throw(ArgumentError("Distribution layers must implement evaluate and inverse"))
     return nothing
 end
 
@@ -84,6 +109,11 @@ Base.eltype(::Type{<:TransportMapDistribution}) = Float64
 ## Helper functions
 function _reference_distribution(tm::AbstractTransportMap)
     return product_distribution(fill(_reference_marginal(tm), numberdimensions(tm)))
+end
+
+function _reference_distribution(tm::ComposedMap)
+    tm.reference isa MapReferenceDensity || return tm.reference
+    return product_distribution(fill(tm.reference.densitytype, numberdimensions(tm)))
 end
 
 function _from_reference(tm::AbstractTransportMap, x::AbstractVecOrMat{<:Real})

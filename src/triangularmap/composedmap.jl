@@ -98,6 +98,12 @@ function Base.propertynames(C::ComposedMap, private::Bool = false)
 end
 
 numberdimensions(C::ComposedMap) = maximum(numberdimensions, C.layers)
+_map_direction(C::ComposedMap) = C.forwarddirection
+
+function _reference_marginal(C::ComposedMap)
+    C.reference isa MapReferenceDensity && return C.reference.densitytype
+    throw(ArgumentError("This composition has no common univariate reference; supply reference-space quadrature explicitly"))
+end
 
 function _check_composed_input(C, x)
     d = numberdimensions(C)
@@ -199,6 +205,15 @@ function _inverse_logabsdet(M, x)
     return z, -logabsdetjacobian(M, z)
 end
 
+function _inverse_logabsdet(M::PolynomialMap, x)
+    # A polynomial layer's image can be bounded even with an unbounded input
+    # domain. Guard the solve without imposing the layer's reference support:
+    # the reference belongs to the whole composition.
+    z = _inverse_point_in_bounds(M, x, -Inf, Inf)
+    z === nothing && return nothing, -Inf
+    return z, -logabsdetjacobian(M, z)
+end
+
 function _inverse_logabsdet(C::ComposedMap, x)
     _check_composed_input(C, x)
     logdet = zero(eltype(x))
@@ -209,6 +224,50 @@ function _inverse_logabsdet(C::ComposedMap, x)
     end
     return x, logdet
 end
+
+function _composition_reference_point(reference::MapReferenceDensity, z)
+    marginal = reference.densitytype
+    all(value -> _reference_insupport(marginal, value), z) || return nothing
+    lower, upper = extrema(marginal)
+    return clamp.(z, lower, upper)
+end
+
+_composition_reference_point(reference::Distributions.Distribution, z) =
+    insupport(reference, z) ? z : nothing
+_composition_reference_point(reference::AbstractMapDensity, z) =
+    logpdf(reference, z) > -Inf ? z : nothing
+
+function _composed_reference_logabsdet(C::ComposedMap, x)
+    (numberdimensions(C) == 0 || length(x) == numberdimensions(C)) && all(isfinite, x) || return nothing, -Inf
+    logdet = zero(eltype(x))
+    layers = C.forwarddirection === :reference ? C.layers : Iterators.reverse(C.layers)
+    for layer in layers
+        result = try
+            C.forwarddirection === :reference ? _evaluate_logabsdet(layer, x) : _inverse_logabsdet(layer, x)
+        catch error
+            # Support-limited layers reject points outside their source domain.
+            error isa DomainError || rethrow()
+            return nothing, -Inf
+        end
+        x, contribution = result
+        x === nothing && return nothing, -Inf
+        all(isfinite, x) || return nothing, -Inf
+        logdet += contribution
+    end
+    return _composition_reference_point(C.reference, x), logdet
+end
+
+_reference_point_in_support(C::ComposedMap, x::AbstractVector{<:Real}) =
+    first(_composed_reference_logabsdet(C, x))
+
+function logpullback(C::ComposedMap, x::AbstractVector{<:Real})
+    _check_composed_input(C, x)
+    z, logdet = _composed_reference_logabsdet(C, x)
+    z === nothing && return -Inf
+    return logpdf(C.reference, collect(z)) + logdet
+end
+
+logpullback(C::ComposedMap, X::AbstractMatrix{<:Real}) = (_check_composed_input(C, X); [logpullback(C, x) for x in eachrow(X)])
 
 """
     logpdf(C::ComposedMap, x)
@@ -221,18 +280,11 @@ For `:reference`, this is `ρ(C(x)) * abs(det(DC(x)))`; for `:target`, it is
 log space. `pullback` is an alias for `pdf`, following the package convention.
 Matrix input returns one value per row.
 """
-function logpdf(C::ComposedMap, x::AbstractVector{<:Real})
-    if C.forwarddirection === :reference
-        z, logdet = _evaluate_logabsdet(C, x)
-        return logpdf(C.reference, collect(z)) + logdet
-    end
-    z, logdet = _inverse_logabsdet(C, x)
-    z === nothing && return -Inf
-    return logpdf(C.reference, collect(z)) + logdet
-end
-logpdf(C::ComposedMap, X::AbstractMatrix{<:Real}) = (_check_composed_input(C, X); [logpdf(C, x) for x in eachrow(X)])
+logpdf(C::ComposedMap, x::AbstractVector{<:Real}) = logpullback(C, x)
+logpdf(C::ComposedMap, X::AbstractMatrix{<:Real}) = logpullback(C, X)
 pdf(C::ComposedMap, x::Union{AbstractVector{<:Real}, AbstractMatrix{<:Real}}) = exp.(logpdf(C, x))
-pullback(C::ComposedMap, x::Union{AbstractVector{<:Real}, AbstractMatrix{<:Real}}) = pdf(C, x)
+
+_pushforward_target_point(C::ComposedMap, z) = first(_inverse_logabsdet(C, z))
 
 """
     pushforward(C::ComposedMap, target::AbstractMapDensity, z)
@@ -254,6 +306,9 @@ function pushforward(C::ComposedMap, target::AbstractMapDensity, Z::AbstractMatr
     _check_composed_input(C, Z)
     return [pushforward(C, target, z) for z in eachrow(Z)]
 end
+
+pushforward(C::ComposedMap, target::MapTargetDensity, z::AbstractVector{<:Real}) = exp(logpushforward(C, target, z))
+pushforward(C::ComposedMap, target::MapTargetDensity, Z::AbstractMatrix{<:Real}) = exp.(logpushforward(C, target, Z))
 
 (C::ComposedMap)(x::Union{AbstractVector{<:Real}, AbstractMatrix{<:Real}}) = evaluate(C, x)
 

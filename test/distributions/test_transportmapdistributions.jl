@@ -190,7 +190,6 @@ end
         pm = PolynomialMap(2, 1, reference, IdentityRectifier(), HermiteBasis())
         setcoefficients!(pm[1], [b[1], A[1, 1]])
         setcoefficients!(pm[2], [b[2], A[2, 1], A[2, 2]])
-        C = ComposedMap(L, pm)
         B = L isa LaplaceMap ? inv(L.chol) :
             (numberdimensions(L) == 0 ? Matrix{Float64}(I, 2, 2) : Matrix(Diagonal(inv.(L.σ))))
         location = L isa LaplaceMap ? L.mode : (numberdimensions(L) == 0 ? zeros(2) : L.μ)
@@ -198,6 +197,7 @@ end
         shift = b - W * location
         for direction in (:target, :reference)
             TransportMaps.setforwarddirection!(pm, direction)
+            C = ComposedMap(L, pm)
             d = TransportMapDistribution(C)
             μ = direction == :target ? W * fill(0.4, 2) + shift : W \ (fill(0.4, 2) - shift)
             transform = direction == :target ? W : inv(W)
@@ -242,9 +242,9 @@ end
         pm = PolynomialMap(2, 1, Uniform(0.0, 1.0), IdentityRectifier())
         setcoefficients!(pm[1], [0.5, 0.5])
         setcoefficients!(pm[2], [0.5, 0.0, 0.5])
-        C = ComposedMap(L, pm)
         for direction in (:target, :reference)
             TransportMaps.setforwarddirection!(pm, direction)
+            C = ComposedMap(L, pm)
             d = TransportMapDistribution(C)
             transform(z) = direction == :target ? evaluate(C, z) : inverse(C, z)
             logdet = logabsdetjacobian(C, zeros(2))
@@ -284,9 +284,9 @@ end
         coefficients[findfirst(==([2, 0]), terms)] = 2 / 3
         coefficients[findfirst(==([0, 1]), terms)] = 1.0
         setcoefficients!(pm[2], coefficients)
-        C = ComposedMap(L, pm)
         for direction in (:target, :reference)
             TransportMaps.setforwarddirection!(pm, direction)
+            C = ComposedMap(L, pm)
             d = TransportMapDistribution(C)
             transform(z) = direction == :target ? evaluate(C, z) : inverse(C, z)
             logdet = logabsdetjacobian(C, zeros(2))
@@ -306,6 +306,153 @@ end
             @test var(d) ≈ diag(cov(d)) atol = 1.0e-10
         end
     end
+end
+
+@testitem "General ComposedMap distributions and joint references" setup = [TransportMapDistributionSetup] begin
+    L = LinearMap([0.5, -1.0], [-2.0, 3.0])
+    D = LinearMap([-0.2, 0.7], [0.5, 1.5])
+    E = LinearMap([0.4, 0.3], [1.2, -0.8])
+    references = (Normal(0.4, 1.7), MvNormal([0.3, -0.7], [1.4 0.3; 0.3 0.8]))
+    X = [0.2 -0.3; -1.0 0.5; 0.0 0.0]'
+    for layers in ((L,), (LinearMap(), L, D, E)), reference in references,
+            direction in (:reference, :target)
+        C = ComposedMap(ComposedMap(layers); reference = reference, forwarddirection = direction)
+        d = TransportMapDistribution(C)
+        # Compose the affine transformations independently of map evaluation.
+        W, b = Matrix{Float64}(I, 2, 2), zeros(2)
+        for layer in layers
+            numberdimensions(layer) == 0 && continue
+            W = Diagonal(inv.(layer.σ)) * W
+            b = (b - layer.μ) ./ layer.σ
+        end
+        joint = reference isa Normal ? product_distribution(fill(reference, 2)) : reference
+        μ = direction === :target ? W * mean(joint) + b : W \ (mean(joint) - b)
+        A = direction === :target ? W : inv(W)
+        expected = MvNormal(μ, A * cov(joint) * A')
+        for statistic in (mean, var, std, cov, cor, entropy)
+            @test statistic(d) ≈ statistic(expected) atol = 1.0e-10
+            @test statistic(d; quad = TensorProductWeights(2, C)) ≈ statistic(expected) atol = 1.0e-10
+        end
+        @test mean(d; quad = GaussHermiteWeights(2, C)) ≈ μ
+        @test pdf(d, X) ≈ pdf(expected, X)
+        @test logpdf(d, X) ≈ logpdf(expected, X)
+        @test loglikelihood(d, X) ≈ loglikelihood(expected, X)
+        @test logpdf(d, X) ≈ logpullback(C, X')
+        @test all(insupport(d, X))
+        @test !insupport(d, [NaN, 0.0])
+        @test !insupport(d, zeros(3))
+        @test logpdf(d, [Inf, 0.0]) == -Inf
+        @test_throws DimensionMismatch logpdf(d, zeros(3))
+        Z = rand(MersenneTwister(37), joint, 5)
+        samples = direction === :target ? W * Z .+ b : W \ (Z .- b)
+        @test rand(MersenneTwister(37), d, 5) ≈ samples
+        @test rand(MersenneTwister(37), d) ≈ samples[:, 1]
+        buffer = fill(NaN, 2, 7)
+        @test rand!(MersenneTwister(37), d, view(buffer, :, 2:6)) ≈ samples
+        @test all(isnan, buffer[:, [1, 7]])
+        @test size(rand(MersenneTwister(37), d, 0)) == (2, 0)
+        mc = MonteCarloWeights(20, C)
+        @test size(mc.points) == (20, 2)
+        @test all(z -> insupport(joint, z), eachrow(mc.points))
+    end
+end
+
+@testitem "ComposedMap distribution settings stay fixed" setup = [TransportMapDistributionSetup] begin
+    P = PolynomialMap(1, 1, Normal(), IdentityRectifier(), HermiteBasis())
+    Q = PolynomialMap(1, 1, Normal(), IdentityRectifier(), HermiteBasis())
+    setcoefficients!(P, [1.0, 2.0])
+    setcoefficients!(Q, [-0.5, 1.5])
+    reference = Normal(0.4, 1.7)
+    C = ComposedMap(P, Q, LinearMap(1); reference = reference, forwarddirection = :target)
+    d = TransportMapDistribution(C)
+    expected = Normal(3mean(reference) + 1, 3std(reference))
+    for statistic in (mean, var, std)
+        @test only(statistic(d)) ≈ statistic(expected)
+    end
+    @test entropy(d) ≈ entropy(expected)
+    TransportMaps.setforwarddirection!(P, :reference)
+    TransportMaps.setforwarddirection!(Q, :reference)
+    @test C.forwarddirection === :target
+    @test C.reference.densitytype === reference
+    @test only(mean(d)) ≈ mean(expected)
+    @test logpdf(d, [0.7]) ≈ logpdf(expected, 0.7)
+    setcoefficients!(P, [2.0, 2.0])
+    @test only(mean(d)) ≈ mean(expected) + 1.5
+end
+
+@testitem "ComposedMap distribution with custom nonlinear layers" setup = [TransportMapDistributionSetup, ComposedCustomLayer] begin
+    for direction in (:reference, :target)
+        C = ComposedMap(LinearMap(), CubicLayer(), LinearMap(2); forwarddirection = direction)
+        d = TransportMapDistribution(C)
+        reference = product_distribution(fill(Normal(), 2))
+        z = [0.3, -0.2]
+        x = direction === :target ? evaluate(C, z) : inverse(C, z)
+        expected = logpdf(reference, z) + (direction === :target ? -1 : 1) * logabsdetjacobian(C, direction === :target ? z : x)
+        @test logpdf(d, x) ≈ expected
+        @test logpdf(d, x) ≈ logpdf(C, x) ≈ logpullback(C, x)
+        @test insupport(d, x)
+        @test all(insupport(d, rand(MersenneTwister(38), d, 4)))
+        if direction === :target
+            @test mean(d) ≈ [0.0, 0.2] atol = 1.0e-10
+            @test cov(d) ≈ [22.0 0.0; 0.0 1.08] atol = 1.0e-10
+        end
+    end
+end
+
+@testitem "ComposedMap distribution with marginal transformations" setup = [TransportMapDistributionSetup] begin
+    P = MarginalMap([Uniform(-2.0, 4.0), LogNormal(0.2, 0.7)])
+    C = ComposedMap(LinearMap(2), P, LinearMap([1.0, 0.0], [2.0, 3.0]); forwarddirection = :target)
+    d = TransportMapDistribution(C)
+    expected = product_distribution([Uniform(-1.5, 1.5), LogNormal(0.2 - log(3), 0.7)])
+    X = [0.0 0.2; 0.5 1.0; -1.0 2.0]'
+    @test logpdf(d, X) ≈ logpdf(expected, X)
+    @test all(insupport(d, X))
+    @test mean(d) ≈ mean(expected) atol = 1.0e-5
+    @test cov(d; quad = GaussHermiteWeights(4, C)) ≈ cov(expected) atol = 1.0e-5
+    @test entropy(d) ≈ entropy(expected) atol = 1.0e-5
+    for x in ([-2.0, 1.0], [2.0, 1.0], [0.0, -1.0], [0.0, 0.0], [NaN, 1.0])
+        @test !insupport(d, x)
+        @test logpdf(d, x) == -Inf
+        @test pdf(d, x) == 0.0
+    end
+    @test all(insupport(d, rand(MersenneTwister(39), d, 10)))
+
+    # A source-domain restriction must also be handled when traversing forwards.
+    bounded = MarginalMap([Uniform(-2.0, 4.0)]; reference = Uniform(0.0, 1.0))
+    reverse = TransportMapDistribution(ComposedMap(bounded; forwarddirection = :reference, reference = Uniform(-2.0, 4.0)))
+    @test logpdf(reverse, [0.4]) ≈ 0.0
+    @test logpdf(reverse, [-0.1]) == -Inf
+    @test !insupport(reverse, [1.1])
+end
+
+@testitem "ComposedMap distribution validates layers and references" setup = [TransportMapDistributionSetup] begin
+    @test logpdf(ComposedMap(LinearMap()), zeros(2)) ≈ -log(2π)
+    @test_throws ArgumentError TransportMapDistribution(ComposedMap(LinearMap()))
+    @test_throws ArgumentError TransportMapDistribution(ComposedMap(LinearMap([0.0], [0.0])))
+    @test_throws DimensionMismatch TransportMapDistribution(ComposedMap(LinearMap(2); reference = MvNormal(zeros(3), I)))
+    @test_throws ArgumentError TransportMapDistribution(ComposedMap(LinearMap(2); reference = Poisson()))
+    @test_throws ArgumentError TransportMapDistribution(ComposedMap(LinearMap(2); reference = product_distribution(fill(Poisson(), 2))))
+    @test_throws ArgumentError TransportMapDistribution(ComposedMap(LinearMap(2); reference = MapTargetDensity(x -> -sum(abs2, x))))
+
+    joint = product_distribution([Uniform(0.0, 1.0), Uniform(2.0, 4.0)])
+    C = ComposedMap(LinearMap(2); reference = joint)
+    d = TransportMapDistribution(C)
+    @test logpdf(d, [0.5, 3.0]) ≈ logpdf(joint, [0.5, 3.0])
+    @test !insupport(d, [-0.1, 3.0])
+    @test all(insupport(d, rand(MersenneTwister(40), d, 5)))
+    @test_throws ArgumentError mean(d)
+    quad = MonteCarloWeights([0.0 2.0; 1.0 4.0], [0.5, 0.5])
+    @test mean(d; quad = quad) ≈ [0.5, 3.0]
+    @test entropy(d; quad = quad) ≈ log(2)
+    @test size(MonteCarloWeights(10, C).points) == (10, 2)
+
+    # An inverse must terminate for a point outside a polynomial layer's image.
+    bounded = PolynomialMap(1, 3, Normal(), ExpRectifier(), HermiteBasis())
+    setcoefficients!(bounded, [0.0, -1.0, 0.0, -1 / 3])
+    d = TransportMapDistribution(ComposedMap(LinearMap(1), bounded; forwarddirection = :target))
+    @test insupport(d, [0.25])
+    @test !insupport(d, [10.0])
+    @test logpdf(d, [10.0]) == -Inf
 end
 
 @testitem "Distributions interface uses column batches" setup = [TransportMapDistributionSetup] begin

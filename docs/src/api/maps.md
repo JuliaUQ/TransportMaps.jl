@@ -27,7 +27,6 @@ logpushforward
 logpullback
 pushforward
 pullback
-logabsdetjacobian
 setcoefficients!
 getcoefficients
 setparameters!
