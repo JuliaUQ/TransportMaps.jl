@@ -135,14 +135,6 @@ function inverse(C::ComposedMap, z::Union{AbstractVector{<:Real}, AbstractMatrix
 end
 
 """
-    jacobian(L::Union{LinearMap, LaplaceMap}, x)
-
-Forward determinant of the linear standardization at a point (or each matrix\nrow). Unlike the legacy zero-argument `jacobian(L)` scale determinant, this\nis `1 / jacobian(L)`.
-"""
-jacobian(L::Union{LinearMap, LaplaceMap}, x::AbstractVector{<:Real}) = inv(jacobian(L))
-jacobian(L::Union{LinearMap, LaplaceMap}, X::AbstractMatrix{<:Real}) = fill(inv(jacobian(L)), size(X, 1))
-
-"""
     jacobian(C::ComposedMap, x)
 
 Forward determinant from the chain rule, evaluating each layer's determinant
@@ -165,13 +157,9 @@ jacobian(C::ComposedMap, X::AbstractMatrix{<:Real}) = (_check_composed_input(C, 
     logabsdetjacobian(map, x)
 
 Log absolute forward determinant, or one value per matrix row. Compositions
-sum layer log-determinants; polynomial maps sum component
-log-derivatives. Custom maps can specialize this for numerical stability.
+sum layer log-determinants. Custom maps can specialize this for numerical stability.
 """
 logabsdetjacobian(M, x::AbstractVector{<:Real}) = log(abs(jacobian(M, x)))
-logabsdetjacobian(M::PolynomialMap, x::AbstractVector{<:Real}) = sum(log ∘ abs, gradient_zk(M, x))
-logabsdetjacobian(L::LinearMap, x::AbstractVector{<:Real}) = -sum(log ∘ abs, L.σ)
-logabsdetjacobian(L::LaplaceMap, x::AbstractVector{<:Real}) = -sum(log ∘ abs, diag(L.chol))
 logabsdetjacobian(M, X::AbstractMatrix{<:Real}) = [logabsdetjacobian(M, x) for x in eachrow(X)]
 
 function _evaluate_logabsdet(M, x)
