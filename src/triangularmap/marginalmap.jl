@@ -37,6 +37,7 @@ struct MarginalMap{D <: Distributions.ContinuousUnivariateDistribution, R <: Dis
 end
 
 numberdimensions(P::MarginalMap) = length(P.marginals)
+_reference_marginal(P::MarginalMap) = P.reference.densitytype
 
 function _check_prior_input(P::MarginalMap, x)
     n = x isa AbstractVector ? length(x) : size(x, 2)
@@ -143,7 +144,8 @@ function logpdf(P::MarginalMap, X::AbstractMatrix{<:Real})
 end
 
 pdf(P::MarginalMap, x::Union{AbstractVector{<:Real}, AbstractMatrix{<:Real}}) = exp.(logpdf(P, x))
-pullback(P::MarginalMap, x::Union{AbstractVector{<:Real}, AbstractMatrix{<:Real}}) = pdf(P, x)
+pullback(P::MarginalMap, x::AbstractVector{<:Real}) = pdf(P, x)
+pullback(P::MarginalMap, X::AbstractMatrix{<:Real}) = pdf(P, X)
 (P::MarginalMap)(z::Union{AbstractVector{<:Real}, AbstractMatrix{<:Real}}) = evaluate(P, z)
 
 function Base.show(io::IO, P::MarginalMap)

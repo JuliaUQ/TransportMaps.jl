@@ -56,7 +56,7 @@ t_values = range(0, 5; length = 100)
 for A in [0.6, 0.8, 1.0], B in [0.1, 0.16, 0.22]
     lines!(
         realizations_ax, t_values, [forward_model(ti, [A, B]) for ti in t_values];
-        label = L"(A = %$A,\; B = %$B)", linestyle = :dash
+        label = L"(A = %$A,\, B = %$B)", linestyle = :dash
     )
 end
 Legend(realizations_fig[2, 1], realizations_ax; orientation = :horizontal, nbanks = 5)
