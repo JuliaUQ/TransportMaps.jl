@@ -161,7 +161,7 @@ export logpdf
 export grad_logpdf
 
 export TransportMapDistribution
-
+export AdaptiveTransportMapDistribution
 # Include files
 include("util/mapdensity.jl")
 include("plotting/plotting.jl")

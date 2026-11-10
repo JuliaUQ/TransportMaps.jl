@@ -32,6 +32,68 @@ struct TransportMapDistribution{M <: AbstractTransportMap} <: Distributions.Cont
         _validate_distribution_map(map)
         return new{M}(map)
     end
+
+    # basic map from samples
+    function TransportMapDistribution(samples::Matrix{Float64}, order=2; reference=Normal(), rectifier=Softplus(), use_linear_map=true)
+        
+        ndim = size(samples, 2) #!TODO: Check which dimension
+
+        if use_linear_map
+            lmap = LinearMap(samples)
+            normal_map = PolynomialMap(ndim, order, reference, rectifier)
+            normal_result = optimize!(normal_map, samples, lmap)
+            normal_composed_map = ComposedMap(lmap, normal_map)
+        else
+            normal_map = PolynomialMap(ndim, order, reference, rectifier)
+            normal_result = optimize!(normal_map, samples)
+            normal_composed_map = normal_map
+        end
+
+        #!TODO: normal_composed_map is not initialized outside of if-else, does that matter?
+        return TransportMapDistribution(normal_composed_map)
+    end
+
+    # basic map from target
+    function TransportMapDistribution(target::Function, quadrature::AbstractQuadratureWeights, order=2; reference=Normal(), rectifier=Softplus())
+
+        ndim = size(quadrature.points,2)
+
+        maptarget = MapTargetDensity(target)
+        normal_map = PolynomialMap(ndim, order, reference, rectifier)
+        normal_result = optimize!(normal_map, maptarget, quadrature)
+
+        return TransportMapDistribution(normal_map)
+    end
+end
+
+# adaptive map from samples
+function AdaptiveTransportMapDistribution(samples::Matrix{Float64}, max_order::Vector{Int}; reference=Normal(), rectifier=Softplus(), k_folds=5,use_linear_map=true)
+
+    if use_linear_map
+        lmap = LinearMap(samples)
+        M, results, selected_terms, selected_folds = optimize_adaptive_transportmap(
+            samples, max_order, k_folds, lmap, rectifier
+        )
+    else
+        lmap = LinearMap(size(samples, 2)) #!TODO: Check which dimension
+        M, results, selected_terms, selected_folds = optimize_adaptive_transportmap(
+            samples, max_order, k_folds, lmap, rectifier
+        )
+    end
+
+    return TransportMapDistribution(M)
+end
+
+function AdaptiveTransportMapDistribution(target::Function, quadrature::AbstractQuadratureWeights, n_terms::Int=10; reference=Normal(), rectifier=Softplus(), validation::AbstractQuadratureWeights=LatinHypercubeWeights(100, 2))
+
+    maptarget = MapTargetDensity(target)
+
+    T, hist = optimize_adaptive_transportmap(
+        maptarget, quadrature, n_terms;
+        validation = validation
+    )
+
+    return TransportMapDistribution(T)
 end
 
 function _validate_distribution_map(map::AbstractTransportMap)
