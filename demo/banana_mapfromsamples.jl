@@ -19,7 +19,7 @@ linear_map = LinearMap(target_samples)
 
 normal_map = PolynomialMap(2, 2, Normal(), Softplus())
 normal_result = optimize!(normal_map, target_samples, linear_map)
-normal_composed_map = ComposedMap(linear_map, normal_map)
+normal_composed_map = normal_map ∘ linear_map
 
 validation_samples = generate_banana_samples(1_000)
 normal_validation_samples = evaluate(normal_composed_map, validation_samples)
@@ -47,7 +47,7 @@ uniform_result = optimize!(
     linear_map;
     options = Optim.Options(iterations = 120, x_abstol = 1.0e-7),
 )
-uniform_composed_map = ComposedMap(linear_map, uniform_map)
+uniform_composed_map = uniform_map ∘ linear_map
 
 uniform_validation_samples = evaluate(uniform_composed_map, validation_samples)
 

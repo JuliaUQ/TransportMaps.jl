@@ -156,7 +156,7 @@ validation_samples = diagnostic_target_samples(1000) # hide
 linear_map = LinearMap(training_samples) # hide
 polynomial_map = PolynomialMap(4, 2, Normal(), Softplus(), HermiteBasis()) # hide
 optimize!(polynomial_map, training_samples, linear_map) # hide
-fitted_map = ComposedMap(linear_map, polynomial_map) # hide
+fitted_map = polynomial_map ∘ linear_map # hide
 #md nothing # hide
 
 # Pass target samples directly: the helper chooses `evaluate` or `inverse`

@@ -20,6 +20,7 @@ MarginalMap
 ## Functions
 
 ```@docs
+Base.:∘(::AbstractTransportMap, ::AbstractTransportMap)
 evaluate
 inverse
 pushforward
