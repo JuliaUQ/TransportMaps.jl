@@ -4,7 +4,7 @@
 
 <div align="center">
 
-[![Build Status](https://github.com/JuliaUQ/TransportMaps.jl/actions/workflows/juliaci.yml/badge.svg?branch=main)](https://github.com/JuliaUQ/TransportMaps.jl/actions/workflows/juliaci.yml?query=branch:main)
+[![Build Status](https://github.com/JuliaUQ/TransportMaps.jl/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/JuliaUQ/TransportMaps.jl/actions/workflows/ci.yml?query=branch:main)
 [![doc](https://img.shields.io/badge/docs-dev-blue.svg)](https://juliauq.github.io/TransportMaps.jl/dev/)
 [![doc-stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://juliauq.github.io/TransportMaps.jl/stable/)
 [![DOI](https://zenodo.org/badge/885372338.svg)](https://doi.org/10.5281/zenodo.18309940)
