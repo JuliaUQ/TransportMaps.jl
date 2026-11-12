@@ -37,20 +37,32 @@
 #
 # ## Constructing and Evaluating a Composition
 #
-# Constructor arguments follow **evaluation order**: the first map is applied
-# first. Construct the layers separately, then combine them:
+# Use Julia's composition operator `∘` to combine maps in mathematical order:
+# `A ∘ B` applies `B` first, then `A`. Enter `∘` by typing `\circ` followed by
+# Tab in the Julia REPL or an editor with Julia completions.
+#
+# Construct the layers separately, then combine them. This example represents
+# a target-to-reference map, so set the polynomial layer's direction before
+# composing:
 
 #md using TransportMaps, Distributions # hide
 
 linear = LinearMap([1.0, -1.0], [2.0, 3.0])
 correction = PolynomialMap(2, 2)
-C = ComposedMap(linear, correction; forwarddirection = :reference)
+correction.forwarddirection = :reference
+C = correction ∘ linear
 
 x = [0.2, -0.4]
 z = evaluate(C, x)          # correction(linear(x))
 x_recovered = inverse(C, z) # inverse layers in reverse order
 #md nothing # hide
 
+# The equivalent constructor is `ComposedMap(linear, correction)`: constructor
+# arguments follow **evaluation order**, with the first map applied first.
+# More generally, `A ∘ B ∘ C` is equivalent to `ComposedMap(C, B, A)`.
+# The operator infers direction and reference from the supplied maps; use
+# `ComposedMap` to set these keywords explicitly, as shown below.
+#
 # These constructors initialize the maps. Fit the polynomial layer separately
 # using the procedures in [Optimization](@ref "Optimization of the Map Coefficients"). `ComposedMap` uses
 # the supplied layers and their current parameters.
@@ -91,7 +103,7 @@ X_recovered = inverse(C, Z)
 samples = [0.5 1.0; 1.5 -0.5; 2.0 0.5; 3.0 1.5; 2.5 -1.0]
 standardization = LinearMap(samples)
 whitening = LaplaceMap(samples)
-whitened_map = ComposedMap(whitening, correction; forwarddirection = :reference)
+whitened_map = correction ∘ whitening
 #md nothing # hide
 
 # `LaplaceMap(target, initial_point)` instead finds the mode of a
@@ -112,7 +124,7 @@ whitened_map = ComposedMap(whitening, correction; forwarddirection = :reference)
 
 target = MapTargetDensity(x -> -(x[1] - 1)^2 / 2 - (x[2] + 0.5)^2 / 8)
 density_whitening = LaplaceMap(target, [0.0, 0.0])
-laplace_chain = ComposedMap(density_whitening, correction; forwarddirection = :reference)
+laplace_chain = correction ∘ density_whitening
 #md nothing # hide
 
 # Both maps standardize in their forward direction; `inverse` returns to the
@@ -141,9 +153,12 @@ uniform_prior = MarginalMap(
 #md nothing # hide
 
 # To combine a reference-space correction ``T`` with the marginal map
-# ``P``, apply the correction first, then the marginal transformation:
+# ``P``, apply the correction first, then the marginal transformation.
+# Here a separate correction uses `:target`, the default direction of a new
+# `PolynomialMap`, to agree with the prior map:
 
-physical_map = ComposedMap(correction, prior; forwarddirection = :target)
+target_correction = PolynomialMap(2, 2)
+physical_map = prior ∘ target_correction
 parameters = evaluate(physical_map, [0.0, 0.0])
 #md nothing # hide
 
@@ -171,6 +186,8 @@ parameters = evaluate(physical_map, [0.0, 0.0])
 #
 # The keyword does not reverse any layer. If omitted, directions are inferred
 # from layer metadata and must agree; linear-only chains default to `:reference`.
+# This also applies to `∘`; composing maps with conflicting directions requires
+# an explicit `ComposedMap` constructor with a `forwarddirection` keyword.
 #
 # The reference density is taken from the last layer with reference metadata
 # for `:reference`, or the first such layer for `:target`. Linear-only chains
@@ -179,7 +196,7 @@ parameters = evaluate(physical_map, [0.0, 0.0])
 # Set the reference explicitly when needed:
 
 C_with_reference = ComposedMap(
-    linear, correction;
+    correction ∘ linear;
     forwarddirection = :reference, reference = Normal()
 )
 #md nothing # hide
@@ -203,20 +220,21 @@ log_determinant = logabsdetjacobian(C, x)
 #
 # For an existing reference-to-target map ``T``, a new reference-space
 # correction ``Q`` acts before the old map: ``T_{\mathrm{new}}=T\circ Q``.
-# In evaluation order, prepend it:
+# With both maps directed toward the target, write:
 #
 # ```julia
-# T_new = ComposedMap(Q, T; forwarddirection = :target)
+# T_new = T ∘ Q
 # ```
 #
 # This stores `Q` followed by the individual layers of `T`; evaluation does not
 # recurse through the previous compositions. The maps themselves are shared,
 # so changing a fitted layer's parameters affects every composition using it.
 #
-# For a target-to-reference map ``S``, append a correction ``R``:
+# For a target-to-reference map ``S``, apply a reference-directed correction
+# ``R`` after it:
 #
 # ```julia
-# S_new = ComposedMap(S, R; forwarddirection = :reference)
+# S_new = R ∘ S
 # ```
 #
 # The [Beam: Sequential Inference with Composed Maps](@ref)

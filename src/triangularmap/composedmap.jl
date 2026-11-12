@@ -286,3 +286,16 @@ function Base.show(io::IO, ::MIME"text/plain", C::ComposedMap)
     print(io, "  forwarddirection: :", C.forwarddirection)
     return nothing
 end
+
+"""
+    ∘(A::AbstractTransportMap, B::AbstractTransportMap)
+    A ∘ B
+
+Compose transport maps by applying `B` first, then `A`, so that
+`evaluate(A ∘ B, x) = evaluate(A, evaluate(B, x))`.
+
+Return `ComposedMap(B, A)`, since [`ComposedMap`](@ref) takes layers in
+evaluation order. Thus `A ∘ B ∘ C` is equivalent to `ComposedMap(C, B, A)`.
+Use `ComposedMap` directly to specify `reference` or `forwarddirection`.
+"""
+Base.:∘(A::AbstractTransportMap, B::AbstractTransportMap) = ComposedMap(B, A)
