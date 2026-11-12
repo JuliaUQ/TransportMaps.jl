@@ -34,8 +34,8 @@ struct TransportMapDistribution{M <: AbstractTransportMap} <: Distributions.Cont
     end
 
     # basic map from samples
-    function TransportMapDistribution(samples::Matrix{Float64}, order=2; reference=Normal(), rectifier=Softplus(), use_linear_map=true)
-        
+    function TransportMapDistribution(samples::Matrix{Float64}, order = 2; reference = Normal(), rectifier = Softplus(), use_linear_map = true)
+
         ndim = size(samples, 2) #!TODO: Check which dimension
 
         if use_linear_map
@@ -54,9 +54,9 @@ struct TransportMapDistribution{M <: AbstractTransportMap} <: Distributions.Cont
     end
 
     # basic map from target
-    function TransportMapDistribution(target::Function, quadrature::AbstractQuadratureWeights, order=2; reference=Normal(), rectifier=Softplus())
+    function TransportMapDistribution(target::Function, quadrature::AbstractQuadratureWeights, order = 2; reference = Normal(), rectifier = Softplus())
 
-        ndim = size(quadrature.points,2)
+        ndim = size(quadrature.points, 2)
 
         maptarget = MapTargetDensity(target)
         normal_map = PolynomialMap(ndim, order, reference, rectifier)
@@ -67,7 +67,7 @@ struct TransportMapDistribution{M <: AbstractTransportMap} <: Distributions.Cont
 end
 
 # adaptive map from samples
-function AdaptiveTransportMapDistribution(samples::Matrix{Float64}, max_order::Vector{Int}; reference=Normal(), rectifier=Softplus(), k_folds=5,use_linear_map=true)
+function AdaptiveTransportMapDistribution(samples::Matrix{Float64}, max_order::Vector{Int}; reference = Normal(), rectifier = Softplus(), k_folds = 5, use_linear_map = true)
 
     if use_linear_map
         lmap = LinearMap(samples)
@@ -84,7 +84,7 @@ function AdaptiveTransportMapDistribution(samples::Matrix{Float64}, max_order::V
     return TransportMapDistribution(M)
 end
 
-function AdaptiveTransportMapDistribution(target::Function, quadrature::AbstractQuadratureWeights, n_terms::Int=10; reference=Normal(), rectifier=Softplus(), validation::AbstractQuadratureWeights=LatinHypercubeWeights(100, 2))
+function AdaptiveTransportMapDistribution(target::Function, quadrature::AbstractQuadratureWeights, n_terms::Int = 10; reference = Normal(), rectifier = Softplus(), validation::AbstractQuadratureWeights = LatinHypercubeWeights(100, 2))
 
     maptarget = MapTargetDensity(target)
 
