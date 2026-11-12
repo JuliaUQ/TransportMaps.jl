@@ -102,10 +102,10 @@ to match the empirical distribution of the samples.
 ```julia
 # Fit a fixed-order map to samples
 samples = randn(1000, 2)
-tmd = TransportMapDistribution(samples, 5, false; k_folds=5)
+tmd = TransportMapDistribution(samples, 5, false; k_folds = 5)
 
 # Fit an adaptive map with dimension-specific orders
-tmd_adaptive = TransportMapDistribution(samples, [10, 10], true; use_linear_map=true)
+tmd_adaptive = TransportMapDistribution(samples, [10, 10], true; use_linear_map = true)
 ```
 
 # Returns
