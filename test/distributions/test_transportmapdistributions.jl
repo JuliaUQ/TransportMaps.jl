@@ -389,7 +389,7 @@ end
         x = direction === :target ? evaluate(C, z) : inverse(C, z)
         expected = logpdf(reference, z) + (direction === :target ? -1 : 1) * logabsdetjacobian(C, direction === :target ? z : x)
         @test logpdf(d, x) ≈ expected
-        @test logpdf(d, x) ≈ logpdf(C, x) ≈ logpullback(C, x)
+        @test logpdf(d, x) ≈ logpullback(C, x)
         @test insupport(d, x)
         @test all(insupport(d, rand(MersenneTwister(38), d, 4)))
         if direction === :target
@@ -426,7 +426,7 @@ end
 end
 
 @testitem "ComposedMap distribution validates layers and references" setup = [TransportMapDistributionSetup] begin
-    @test logpdf(ComposedMap(LinearMap()), zeros(2)) ≈ -log(2π)
+    @test logpdf(TransportMapDistribution(ComposedMap(LinearMap(2))), zeros(2)) ≈ -log(2π)
     @test_throws ArgumentError TransportMapDistribution(ComposedMap(LinearMap()))
     @test_throws ArgumentError TransportMapDistribution(ComposedMap(LinearMap([0.0], [0.0])))
     @test_throws DimensionMismatch TransportMapDistribution(ComposedMap(LinearMap(2); reference = MvNormal(zeros(3), I)))
@@ -737,4 +737,279 @@ end
         @test mean(generated) ≈ mean(expected) atol = 0.15
         @test std(generated) ≈ std(expected) atol = 0.15
     end
+end
+
+@testitem "Constructor 1: from fitted map" setup = [TransportMapDistributionSetup] begin
+    # Test the basic constructor from a pre-fitted map
+
+    # Test with PolynomialMap
+    pmap = PolynomialMap(2, 2, Normal(), Softplus())
+    d = TransportMapDistribution(pmap)
+    @test d isa TransportMapDistribution
+    @test length(d) == 2
+    @test numberdimensions(d.map) == 2
+
+    # Test with LinearMap
+    lmap = LinearMap([1.0, 2.0], [0.5, 1.5])
+    d_linear = TransportMapDistribution(lmap)
+    @test d_linear isa TransportMapDistribution
+    @test length(d_linear) == 2
+
+    # Test with ComposedMap
+    poly = PolynomialMap(2, 2)
+    composed = ComposedMap(lmap, poly)
+    d_composed = TransportMapDistribution(composed)
+    @test d_composed isa TransportMapDistribution
+    @test length(d_composed) == 2
+
+    # Test error for zero-dimensional map
+    @test_throws ArgumentError TransportMapDistribution(LinearMap())
+    @test_throws ArgumentError TransportMapDistribution(LinearMap([0.0], [0.0]))
+end
+
+@testitem "Constructor 2: from samples (fixed-order)" setup = [TransportMapDistributionSetup] begin
+    # Test fixed-order map construction from samples
+    Random.seed!(42)
+
+    # Simple 2D samples
+    samples = randn(100, 2)
+
+    # Test fixed-order construction (adaptive=false requires Integer order)
+    d = TransportMapDistribution(samples, 3, false)
+    @test d isa TransportMapDistribution
+    @test length(d) == 2
+
+    # Should be able to sample and evaluate densities
+    new_samples = rand(d, 10)
+    @test size(new_samples) == (2, 10)
+
+    # Test with different orders
+    d2 = TransportMapDistribution(samples, 5, false)
+    @test d2 isa TransportMapDistribution
+    @test length(d2) == 2
+
+    # Test with use_linear_map=false
+    d_no_linear = TransportMapDistribution(samples, 3, false; use_linear_map = false)
+    @test d_no_linear isa TransportMapDistribution
+    @test length(d_no_linear) == 2
+
+    # Test with different reference distribution
+    d_uniform = TransportMapDistribution(samples, 3, false; reference = Uniform(0, 1))
+    @test d_uniform isa TransportMapDistribution
+end
+
+@testitem "Constructor 3: from samples (adaptive)" setup = [TransportMapDistributionSetup] begin
+    # Test adaptive map construction from samples
+    Random.seed!(43)
+
+    samples = randn(100, 2)
+
+    # Test adaptive construction with vector order
+    d = TransportMapDistribution(samples, [5, 5], true; k_folds = 3)
+    @test d isa TransportMapDistribution
+    @test length(d) == 2
+
+    # Should be able to sample and evaluate densities
+    new_samples = rand(d, 10)
+    @test size(new_samples) == (2, 10)
+
+    test_point = [0.5, -0.3]
+    logdens = logpdf(d, test_point)
+    @test isfinite(logdens)
+
+    # Test with use_linear_map=false
+    d_no_linear = TransportMapDistribution(samples, [5, 5], true; use_linear_map = false, k_folds = 3)
+    @test d_no_linear isa TransportMapDistribution
+    @test length(d_no_linear) == 2
+
+    # Test with different k_folds
+    d_kfold = TransportMapDistribution(samples, [5, 5], true; k_folds = 5)
+    @test d_kfold isa TransportMapDistribution
+
+    # Test with 1D samples (adaptive)
+    samples_1d = randn(100, 1)
+    d_1d = TransportMapDistribution(samples_1d, 5, true; k_folds = 3)
+    @test d_1d isa TransportMapDistribution
+    @test length(d_1d) == 1
+end
+
+@testitem "Constructor 4: from target density (fixed-order)" setup = [TransportMapDistributionSetup] begin
+    # Test fixed-order map construction from target density
+
+    # Simple target density: standard normal in 2D
+    logtarget(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2])
+
+    # Create quadrature rule
+    quadr = GaussHermiteWeights(3, 2)
+
+    # Test fixed-order construction
+    d = TransportMapDistribution(logtarget, quadr, 3, false)
+    @test d isa TransportMapDistribution
+    @test length(d) == 2
+
+    # Should be able to sample and evaluate densities
+    new_samples = rand(d, 10)
+    @test size(new_samples) == (2, 10)
+
+    # Test density evaluation
+    test_point = [0.5, -0.3]
+    logdens = logpdf(d, test_point)
+    @test isfinite(logdens)
+    dens = pdf(d, test_point)
+    @test isfinite(dens) && dens >= 0
+
+    # Test moments computation
+    μ = mean(d)
+    @test length(μ) == 2
+    @test all(isfinite, μ)
+
+    σ = std(d)
+    @test length(σ) == 2
+    @test all(isfinite, σ) && all(>(0), σ)
+
+    # Test with different quadrature
+    quadr_smolyak = SparseSmolyakWeights(3, 2)
+    d_smolyak = TransportMapDistribution(logtarget, quadr_smolyak, 3, false)
+    @test d_smolyak isa TransportMapDistribution
+end
+
+@testitem "Constructor 5: from target density (adaptive)" setup = [TransportMapDistributionSetup] begin
+    # Test adaptive map construction from target density
+
+    # Target density: banana-like shape
+    logtarget(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2] - x[1]^2)
+
+    # Create quadrature rule
+    quadr = SparseSmolyakWeights(3, 2)
+
+    # Test adaptive construction
+    d = TransportMapDistribution(logtarget, quadr, 15, true)
+    @test d isa TransportMapDistribution
+    @test length(d) == 2
+
+    # Should be able to sample and evaluate densities
+    new_samples = rand(d, 10)
+    @test size(new_samples) == (2, 10)
+
+    # Test density evaluation
+    test_point = [0.5, -0.3]
+    logdens = logpdf(d, test_point)
+    @test isfinite(logdens)
+
+    # Test moments
+    μ = mean(d)
+    @test length(μ) == 2
+    @test all(isfinite, μ)
+
+    # Test support
+    @test insupport(d, test_point)
+    @test !insupport(d, [Inf, 0.0])
+
+    # Test with validation quadrature different from optimization quadrature
+    validation_quad = GaussHermiteWeights(2, 2)
+    d_validation = TransportMapDistribution(
+        logtarget, quadr, 12, true;
+        validation = validation_quad
+    )
+    @test d_validation isa TransportMapDistribution
+    @test length(d_validation) == 2
+end
+
+@testitem "Constructor consistency checks" setup = [TransportMapDistributionSetup] begin
+    # Verify that different constructors work together correctly
+    Random.seed!(44)
+
+    samples = randn(200, 2)
+
+    # Constructor 2: from samples (fixed)
+    d_samples_fixed = TransportMapDistribution(samples, 4, false)
+
+    # Constructor 3: from samples (adaptive)
+    d_samples_adaptive = TransportMapDistribution(samples, [4, 4], true; k_folds = 3)
+
+    # All should produce valid distributions
+    for d in [d_samples_fixed, d_samples_adaptive]
+        # Test sampling works
+        samps = rand(d, 5)
+        @test size(samps) == (2, 5)
+
+        # Test density evaluation works
+        logdens = logpdf(d, [0.5, -0.3])
+        @test isfinite(logdens)
+
+        # Test moments work
+        m = mean(d)
+        @test length(m) == 2 && all(isfinite, m)
+    end
+
+    # Constructor 4 & 5: from target density
+    logtarget(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2])
+    quadr = GaussHermiteWeights(3, 2)
+
+    d_target_fixed = TransportMapDistribution(logtarget, quadr, 4, false)
+    d_target_adaptive = TransportMapDistribution(logtarget, quadr, 12, true)
+
+    for d in [d_target_fixed, d_target_adaptive]
+        samps = rand(d, 5)
+        @test size(samps) == (2, 5)
+
+        logdens = logpdf(d, [0.5, -0.3])
+        @test isfinite(logdens)
+
+        m = mean(d)
+        @test length(m) == 2 && all(isfinite, m)
+    end
+end
+
+@testitem "Constructor 2: edge cases for samples" setup = [TransportMapDistributionSetup] begin
+    # Test edge cases and error conditions
+    Random.seed!(45)
+
+    samples_2d = randn(50, 2)
+    samples_1d = randn(50, 1)
+
+    # Test 1D samples with fixed order
+    d_1d_fixed = TransportMapDistribution(samples_1d, 3, false)
+    @test length(d_1d_fixed) == 1
+
+    # Test 1D samples with adaptive (should convert int to vector)
+    d_1d_adaptive = TransportMapDistribution(samples_1d, 5, true; k_folds = 2)
+    @test length(d_1d_adaptive) == 1
+
+    # Test with minimal samples
+    small_samples = randn(10, 2)
+    d_small = TransportMapDistribution(small_samples, 2, false)
+    @test length(d_small) == 2
+
+    # Test different rectifier functions
+    d_softplus = TransportMapDistribution(samples_2d, 3, false; rectifier = Softplus())
+    @test d_softplus isa TransportMapDistribution
+end
+
+@testitem "Constructor 4: edge cases for target density" setup = [TransportMapDistributionSetup] begin
+    # Test edge cases for target-based constructors
+
+    # Test with 1D target
+    logtarget_1d(x) = logpdf(Normal(), x[1])
+    quadr_1d = GaussHermiteWeights(3, 1)
+
+    d_1d_fixed = TransportMapDistribution(logtarget_1d, quadr_1d, 3, false)
+    @test length(d_1d_fixed) == 1
+
+    d_1d_adaptive = TransportMapDistribution(logtarget_1d, quadr_1d, 8, true)
+    @test length(d_1d_adaptive) == 1
+
+    # Test with higher dimensions (3D)
+    logtarget_3d(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2]) + logpdf(Normal(), x[3])
+    quadr_3d = GaussHermiteWeights(3, 3)
+
+    d_3d = TransportMapDistribution(logtarget_3d, quadr_3d, 2, false)
+    @test length(d_3d) == 3
+
+    # Test with non-standard target (uniform components)
+    logtarget_mixed(x) = logpdf(Normal(), x[1]) + logpdf(Uniform(-1, 1), x[2])
+    quadr_mixed = GaussHermiteWeights(3, 2)
+
+    d_mixed = TransportMapDistribution(logtarget_mixed, quadr_mixed, 3, false)
+    @test d_mixed isa TransportMapDistribution
 end

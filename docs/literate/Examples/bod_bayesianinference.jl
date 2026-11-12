@@ -138,9 +138,10 @@ contour!(
 # ![BOD posterior samples and target contours in physical parameters A and B](samples-bod.svg)
 
 # The composition's density includes both layers' Jacobians. Compare contours
-# at the same fractions of each density's peak:
+# at the same fractions of each density's peak. For this we need to create a density from the map first, then evaluate it at the physical coordinates:
 
-posterior_pullback = [pdf(posterior_map, [A, B]) for A in A_values, B in B_values]
+posterior_map_density = TransportMapDistribution(posterior_map)
+posterior_pullback = [pdf(posterior_map_density, [A, B]) for A in A_values, B in B_values]
 
 #md save_docplot("pullback-bod.svg") do # hide
 pullback_fig = Figure(size = (600, 420))

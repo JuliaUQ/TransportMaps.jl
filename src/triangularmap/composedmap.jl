@@ -269,20 +269,20 @@ end
 
 logpullback(C::ComposedMap, X::AbstractMatrix{<:Real}) = (_check_composed_input(C, X); [logpullback(C, x) for x in eachrow(X)])
 
-"""
-    logpdf(C::ComposedMap, x)
-    pdf(C::ComposedMap, x)
-    pullback(C::ComposedMap, x)
+# """
+#     logpdf(C::ComposedMap, x)
+#     pdf(C::ComposedMap, x)
+#     pullback(C::ComposedMap, x)
 
-Evaluate the target-density approximation of the **whole** composition.
-For `:reference`, this is `ρ(C(x)) * abs(det(DC(x)))`; for `:target`, it is
-`ρ(inv(C)(x)) * abs(det(Dinv(C)(x)))`. `logpdf` accumulates determinants in
-log space. `pullback` is an alias for `pdf`, following the package convention.
-Matrix input returns one value per row.
-"""
-logpdf(C::ComposedMap, x::AbstractVector{<:Real}) = logpullback(C, x)
-logpdf(C::ComposedMap, X::AbstractMatrix{<:Real}) = logpullback(C, X)
-pdf(C::ComposedMap, x::Union{AbstractVector{<:Real}, AbstractMatrix{<:Real}}) = exp.(logpdf(C, x))
+# Evaluate the target-density approximation of the **whole** composition.
+# For `:reference`, this is `ρ(C(x)) * abs(det(DC(x)))`; for `:target`, it is
+# `ρ(inv(C)(x)) * abs(det(Dinv(C)(x)))`. `logpdf` accumulates determinants in
+# log space. `pullback` is an alias for `pdf`, following the package convention.
+# Matrix input returns one value per row.
+# """
+# logpdf(C::ComposedMap, x::AbstractVector{<:Real}) = logpullback(C, x)
+# logpdf(C::ComposedMap, X::AbstractMatrix{<:Real}) = logpullback(C, X)
+# pdf(C::ComposedMap, x::Union{AbstractVector{<:Real}, AbstractMatrix{<:Real}}) = exp.(logpdf(C, x))
 
 _pushforward_target_point(C::ComposedMap, z) = first(_inverse_logabsdet(C, z))
 

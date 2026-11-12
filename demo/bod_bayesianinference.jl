@@ -59,7 +59,8 @@ contour!(
     levels = [0.2, 0.4, 0.6, 0.8], colormap = :viridis
 )
 
-posterior_pullback = [pdf(posterior_map, [A, B]) for A in A_values, B in B_values]
+posterior_map_density = TransportMapDistribution(posterior_map)
+posterior_pullback = [pdf(posterior_map_density, [A, B]) for A in A_values, B in B_values]
 
 pullback_fig = Figure(size = (600, 420))
 pullback_ax = Axis(pullback_fig[1, 1]; xlabel = L"A", ylabel = L"B")

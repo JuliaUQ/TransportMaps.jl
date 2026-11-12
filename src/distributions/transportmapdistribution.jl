@@ -1,28 +1,65 @@
 """
     TransportMapDistribution(map::M) where {M <: AbstractTransportMap}
 
-Represent a fitted `PolynomialMap`, `ComposedMap`, `LinearMap`, or `LaplaceMap`
-as a [`Distributions.ContinuousMultivariateDistribution`](https://juliastats.org/Distributions.jl/stable/multivariate/).
-Standalone linear and Laplace maps use a product standard-normal reference and map target to
-reference, so their inverse generates the corresponding Gaussian samples. Compositions
-use their own reference and direction, fixed when the composition is constructed.
-Any number of invertible layers is supported, including `MarginalMap` and custom
-layers implementing `evaluate`, `inverse`, and `logabsdetjacobian` (or `jacobian`).
-The reference must be a continuous univariate product or multivariate distribution.
+Represent a fitted transport map as a [`Distributions.ContinuousMultivariateDistribution`](https://juliastats.org/Distributions.jl/stable/multivariate/).
 
-### Example
+A `TransportMapDistribution` wraps a trained transport map (`PolynomialMap`, `ComposedMap`,
+`LinearMap`, or `LaplaceMap`) to create a probability distribution that can be sampled from,
+evaluated, and analyzed. The distribution represents the pushforward of a reference distribution
+through the transport map.
+
+## Map Types
+
+- **`PolynomialMap`**: A polynomial transport map with adjustable reference distribution and direction.
+- **`ComposedMap`**: A composition of layers (polynomial, linear, Laplace, or custom invertible layers),
+  each with optional `MarginalMap` wrappers for dimension-by-dimension flexibility.
+- **`LinearMap`** (standalone): Uses a product standard-normal reference and maps target to reference,
+  so its inverse generates Gaussian samples with empirical mean/covariance.
+- **`LaplaceMap`** (standalone): Similar to `LinearMap`, but based on the Laplace approximation with
+  a lower-triangular Cholesky factor.
+
+## Key Features
+
+- **Sampling**: Generate samples from the approximated target distribution via `rand(d)`.
+- **Density evaluation**: Compute log-density with `logpdf(d, x)` and density with `pdf(d, x)`.
+- **Moments**: Compute mean, standard deviation, covariance matrix, correlation matrix, and entropy
+  via numerical quadrature (default: level-3 sparse Smolyak), with exact computation for linear and
+  Laplace maps.
+- **Flexibility**: Standalone maps use a product standard-normal reference; composed maps can specify
+  their own reference and direction.
+
+## Construction
+
+Use one of the three main constructors:
+1. From samples: `TransportMapDistribution(samples, order, adaptive)`
+2. From target density: `TransportMapDistribution(target, quadrature, order, adaptive)`
+3. From a pre-fitted map: `TransportMapDistribution(map)`
+
+# Arguments
+- `map::M`: A fitted transport map implementing `evaluate`, `inverse`, and `logabsdetjacobian` methods.
+  The map must have positive dimensionality.
+
+# Example
 ```julia
-map = PolynomialMap(2, 2) # initialize and fit map, optimize!() etc..
+# Create distribution from a fitted map
+map = PolynomialMap(2, 2)  # initialize and fit map, then optimize!() etc.
 d = TransportMapDistribution(map)
+
 # Sampling
 samples = rand(d, 10)
+
 # Moments
 μ = mean(d)
 σ = std(d)
 Σ = cov(d)
+
 # Density
 dens = pdf(d, [1.0, -1.0])
 ```
+
+# Exceptions
+- `ArgumentError`: Raised if the map is zero-dimensional or not a supported type.
+- `DimensionMismatch`: Raised if composed map layers have inconsistent dimensions.
 """
 struct TransportMapDistribution{M <: AbstractTransportMap} <: Distributions.ContinuousMultivariateDistribution
     map::M
@@ -32,64 +69,179 @@ struct TransportMapDistribution{M <: AbstractTransportMap} <: Distributions.Cont
         _validate_distribution_map(map)
         return new{M}(map)
     end
+end
 
-    # basic map from samples
-    function TransportMapDistribution(samples::Matrix{Float64}, order=2; reference=Normal(), rectifier=Softplus(), use_linear_map=true)
-        
-        ndim = size(samples, 2) #!TODO: Check which dimension
+"""
+    TransportMapDistribution(samples::Matrix{Float64}, order::Union{Int, Vector{Int}}, adaptive::Bool = true; reference::UnivariateDistribution = Normal(), rectifier::AbstractRectifierFunction = Softplus(), use_linear_map::Bool = true, k_folds::Int = 5)
 
-        if use_linear_map
-            lmap = LinearMap(samples)
-            normal_map = PolynomialMap(ndim, order, reference, rectifier)
-            normal_result = optimize!(normal_map, samples, lmap)
-            normal_composed_map = ComposedMap(lmap, normal_map)
-        else
-            normal_map = PolynomialMap(ndim, order, reference, rectifier)
-            normal_result = optimize!(normal_map, samples)
-            normal_composed_map = normal_map
+Construct a `TransportMapDistribution` by learning a transport map from sample data.
+
+This constructor fits a transport map to approximate the target distribution represented by
+the provided samples. It automatically constructs and optimizes a `PolynomialMap` (optionally
+composed with a `LinearMap`) to map from a reference distribution (default: standard normal)
+to match the empirical distribution of the samples.
+
+# Arguments
+- `samples::Matrix{Float64}`: Sample data where each row is a sample and each column is a
+  dimension. Shape: (n_samples, n_dimensions).
+- `order::Union{Int, Vector{Int}}`: Maximum polynomial order for each dimension. For adaptive
+  maps, provide a vector of orders (one per dimension); for fixed maps, provide a single integer.
+- `adaptive::Bool = true`: If `true`, use adaptive map construction with cross-validation to
+  select optimal polynomial terms. If `false`, construct a fixed-order map.
+
+# Keyword Arguments
+- `reference::UnivariateDistribution = Normal()`: Reference distribution for the map. Must be
+  a continuous univariate distribution.
+- `rectifier::AbstractRectifierFunction = Softplus()`: Rectifier function for nonlinear components.
+- `use_linear_map::Bool = true`: If `true`, first apply a linear transformation (computed from
+  sample statistics) before polynomial refinement.
+- `k_folds::Int = 5`: Number of cross-validation folds for adaptive map selection (only used
+  if `adaptive=true`).
+
+# Example
+```julia
+# Fit a fixed-order map to samples
+samples = randn(1000, 2)
+tmd = TransportMapDistribution(samples, 5, false; k_folds=5)
+
+# Fit an adaptive map with dimension-specific orders
+tmd_adaptive = TransportMapDistribution(samples, [10, 10], true; use_linear_map=true)
+```
+
+# Returns
+A fitted `TransportMapDistribution` that can be used for sampling, density evaluation, and
+computing moments (mean, covariance, entropy, etc.).
+
+See also: [`TransportMapDistribution(::Function, ::AbstractQuadratureWeights, ::Int, ::Bool)`](@ref)
+"""
+function TransportMapDistribution(samples::Matrix{Float64}, order::Union{Int, Vector{Int}}, adaptive::Bool = true; reference::UnivariateDistribution = Normal(), rectifier::AbstractRectifierFunction = Softplus(), use_linear_map::Bool = true, k_folds::Int = 5)
+
+    @assert adaptive || isa(order, Int) "Fixed map construction requires a single integer for `order`."
+
+    ndim = size(samples, 2) #!TODO: Check which dimension
+
+    if adaptive
+        if isa(order, Int) && ndim > 1
+            order = fill(order, size(samples, 2))
+            @warn "Adaptive map construction requires a vector of maximum components for each dimension; using $order for all dimensions."
+        elseif isa(order, Int) && ndim == 1
+            order = [order]
         end
+        return _adaptive_distribution_from_samples(samples, order, rectifier, k_folds, use_linear_map)
+    else
+        return _basic_distribution_from_samples(samples, order, reference, rectifier, use_linear_map)
+    end
+end
 
-        #!TODO: normal_composed_map is not initialized outside of if-else, does that matter?
-        return TransportMapDistribution(normal_composed_map)
+"""
+    TransportMapDistribution(target::Function, quadrature::AbstractQuadratureWeights, order::Int, adaptive::Bool = true; basis::AbstractPolynomialBasis = LinearizedHermiteBasis(), rectifier::AbstractRectifierFunction = Softplus(), validation::AbstractQuadratureWeights = quadrature)
+
+Construct a `TransportMapDistribution` by learning a transport map from a target density function.
+
+This constructor fits a transport map to approximate a target probability density by optimizing
+the map parameters to match the target through numerical quadrature. The map is constructed
+as a `PolynomialMap` (optionally with adaptive term selection) that maps from a reference
+distribution (standard normal) to the target.
+
+# Arguments
+- `target::Function`: A function computing `log(π(x))` where π is the target density. Must accept
+  a vector and return a real value (the log-density).
+- `quadrature::AbstractQuadratureWeights`: Quadrature rule for numerical integration during
+  optimization (e.g., `SparseSmolyakWeights(3, 2)` for 3D with level 3).
+- `order::Int`: Maximum polynomial order for the transport map.
+- `adaptive::Bool = true`: If `true`, use adaptive map construction with cross-validation to
+  select optimal polynomial terms. If `false`, construct a fixed-order map.
+
+# Keyword Arguments
+- `rectifier::AbstractRectifierFunction = Softplus()`: Rectifier function for nonlinear components.
+- `validation::AbstractQuadratureWeights = quadrature`: Quadrature rule for validation during
+  adaptive optimization. Defaults to the same rule as `quadrature`.
+
+# Example
+```julia
+# Define target log-density
+logtarget(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2] - x[1]^3)
+
+# Create quadrature rule
+quadr = SparseSmolyakWeights(3, 2)
+
+# Fit a fixed-order map
+tmd = TransportMapDistribution(logtarget, quadr, 5, false)
+
+# Fit an adaptive map
+tmd_adaptive = TransportMapDistribution(logtarget, quadr, 27, true)
+```
+
+# Returns
+A fitted `TransportMapDistribution` that can be used for sampling, density evaluation, and
+computing moments (mean, covariance, entropy, etc.).
+
+See also: [`TransportMapDistribution(::Matrix{Float64}, ::Union{Int, Vector{Int}}, ::Bool)`](@ref)
+"""
+function TransportMapDistribution(target::Function, quadrature::AbstractQuadratureWeights, order::Int, adaptive::Bool = true; rectifier::AbstractRectifierFunction = Softplus(), validation::AbstractQuadratureWeights = quadrature, reference::UnivariateDistribution = Normal())
+
+    if adaptive
+        return _adaptive_distribution_from_target(target, quadrature, order, rectifier, validation)
+    else
+        return _basic_distribution_from_target(target, quadrature, order, reference, rectifier)
     end
 
-    # basic map from target
-    function TransportMapDistribution(target::Function, quadrature::AbstractQuadratureWeights, order=2; reference=Normal(), rectifier=Softplus())
+end
 
-        ndim = size(quadrature.points,2)
+# basic map from samples
+function _basic_distribution_from_samples(samples::Matrix{Float64}, order::Int, reference::UnivariateDistribution, rectifier::AbstractRectifierFunction, use_linear_map::Bool)
 
-        maptarget = MapTargetDensity(target)
+    ndim = size(samples, 2) #!TODO: Check which dimension
+
+    if use_linear_map
+        lmap = LinearMap(samples)
         normal_map = PolynomialMap(ndim, order, reference, rectifier)
-        normal_result = optimize!(normal_map, maptarget, quadrature)
-
+        normal_result = optimize!(normal_map, samples, lmap)
+        return TransportMapDistribution(ComposedMap(lmap, normal_map))
+    else
+        normal_map = PolynomialMap(ndim, order, reference, rectifier)
+        normal_result = optimize!(normal_map, samples)
         return TransportMapDistribution(normal_map)
     end
 end
 
+# basic map from target
+function _basic_distribution_from_target(target::Function, quadrature::AbstractQuadratureWeights, order::Int, reference::UnivariateDistribution, rectifier::AbstractRectifierFunction)
+
+    ndim = size(quadrature.points, 2)
+
+    maptarget = MapTargetDensity(target)
+    normal_map = PolynomialMap(ndim, order, reference, rectifier)
+    normal_result = optimize!(normal_map, maptarget, quadrature)
+
+    return TransportMapDistribution(normal_map)
+end
+
 # adaptive map from samples
-function AdaptiveTransportMapDistribution(samples::Matrix{Float64}, max_order::Vector{Int}; reference=Normal(), rectifier=Softplus(), k_folds=5,use_linear_map=true)
+function _adaptive_distribution_from_samples(samples::Matrix{Float64}, max_components::Vector{Int}, rectifier::AbstractRectifierFunction, k_folds::Int, use_linear_map::Bool)
 
     if use_linear_map
         lmap = LinearMap(samples)
         M, results, selected_terms, selected_folds = optimize_adaptive_transportmap(
-            samples, max_order, k_folds, lmap, rectifier
+            samples, max_components, k_folds, lmap, rectifier
         )
+        return TransportMapDistribution(M)
     else
         lmap = LinearMap(size(samples, 2)) #!TODO: Check which dimension
         M, results, selected_terms, selected_folds = optimize_adaptive_transportmap(
-            samples, max_order, k_folds, lmap, rectifier
+            samples, max_components, k_folds, lmap, rectifier
         )
+        return TransportMapDistribution(M)
     end
-
-    return TransportMapDistribution(M)
 end
 
-function AdaptiveTransportMapDistribution(target::Function, quadrature::AbstractQuadratureWeights, n_terms::Int=10; reference=Normal(), rectifier=Softplus(), validation::AbstractQuadratureWeights=LatinHypercubeWeights(100, 2))
+function _adaptive_distribution_from_target(target::Function, quadrature::AbstractQuadratureWeights, n_terms::Int, rectifier::AbstractRectifierFunction, validation::AbstractQuadratureWeights)
 
     maptarget = MapTargetDensity(target)
 
     T, hist = optimize_adaptive_transportmap(
         maptarget, quadrature, n_terms;
+        rectifier = rectifier,
         validation = validation
     )
 
