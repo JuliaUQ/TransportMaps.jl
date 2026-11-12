@@ -35,36 +35,47 @@ function hybridrootfinder(
         ftol::Real = 1.0e-6,
         maxiter::Int = 10_000
     )
-    x = (lower + upper) / 2
+    x = lower + (upper - lower) / 2
+    isfinite(x) || (x = lower / 2 + upper / 2)
     fx, dfx = f(x), ∂f(x)
     # A midpoint may already satisfy the tolerance (including a zero derivative
     # at an exact root). Avoid another residual/derivative pair in that case.
-    abs(fx) < ftol && return x, fx, dfx
+    abs(fx) <= ftol && return x, fx, dfx
     newton_step = fx / dfx
-    abs(newton_step) < xtol && return x, fx, dfx
+    isfinite(dfx) && !iszero(dfx) && abs(newton_step) <= xtol && return x, fx, dfx
+    previous_step = upper - lower
 
     for _ in 1:maxiter
-        # Decide between bisection and Newton step
-        use_bisect = (x - upper) * dfx - fx * (x - lower) * dfx > 0.0 ||
-            (abs(2 * fx) > abs(upper - lower) * abs(dfx) && abs(fx) > ftol)
-        if use_bisect
-            x = lower + 0.5 * (upper - lower)
-        else
-            x -= newton_step
-        end
-
-        fx, dfx = f(x), ∂f(x)
-        abs(fx) < ftol && return x, fx, dfx
-        newton_step = fx / dfx
-
-        if abs(newton_step) < xtol
-            return x, fx, dfx
-        end
-
+        # The transport-map residual is increasing. Incorporate the current
+        # point before testing whether a Newton step stays inside its bracket.
         if fx < 0.0
             lower = x
         else
             upper = x
+        end
+
+        midpoint = lower + (upper - lower) / 2
+        # A residual may stop improving at round-off accuracy. Once the bracket
+        # is sufficiently narrow, or has no representable interior point, more
+        # iterations cannot improve the root's positional accuracy.
+        (upper - lower <= xtol || midpoint == lower || midpoint == upper) &&
+            return x, fx, dfx
+
+        # Keep endpoint roots reachable, but bisect if Newton leaves the
+        # bracket, stalls, or fails to halve the preceding step's magnitude.
+        candidate = x - newton_step
+        if !isfinite(dfx) || iszero(dfx) || !(lower <= candidate <= upper) ||
+                candidate == x || abs(newton_step) > abs(previous_step) / 2
+            candidate = midpoint
+        end
+        previous_step = candidate - x
+        x = candidate
+        fx, dfx = f(x), ∂f(x)
+        abs(fx) <= ftol && return x, fx, dfx
+        newton_step = fx / dfx
+
+        if isfinite(dfx) && !iszero(dfx) && abs(newton_step) <= xtol
+            return x, fx, dfx
         end
     end
 

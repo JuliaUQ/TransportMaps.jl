@@ -109,6 +109,35 @@ println(
     vec(std(uniform_validation_samples; dims = 1)),
 )
 
+# ## Use the fitted distributions
+#
+# Wrap the complete [`ComposedMap`](@ref) so the fitted distribution includes the
+# linear standardization. [`TransportMapDistribution`](@ref) handles the inverse
+# sampling direction of maps fitted from observations:
+
+normal_approximation = TransportMapDistribution(normal_composed_map)
+uniform_approximation = TransportMapDistribution(uniform_composed_map)
+new_target_samples = rand(normal_approximation, 1_000)
+#md nothing # hide
+
+# `new_target_samples` contains samples in columns, following Distributions.jl.
+# The existing `validation_samples` has samples in rows, so transpose its layout
+# when evaluating the fitted log-densities in a batch:
+
+normal_logdensities = logpdf(normal_approximation, permutedims(validation_samples))
+uniform_logdensities = logpdf(uniform_approximation, permutedims(validation_samples))
+#md nothing # hide
+
+# Summarize the fitted target distribution directly, rather than the mapped
+# reference samples used for validation above:
+
+println("Fitted target mean: ", mean(normal_approximation))
+println("Fitted target covariance: ", cov(normal_approximation))
+
+# Polynomial and composed maps compute these moments by quadrature. The
+# [distribution API](../api/distributions.md) describes the `quad` keyword and
+# the other available statistics.
+
 # ## Target/reference comparison
 
 #==

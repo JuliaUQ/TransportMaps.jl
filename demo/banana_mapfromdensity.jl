@@ -1,5 +1,6 @@
 using TransportMaps
 using Distributions
+using Statistics
 using CairoMakie
 using LaTeXStrings
 set_theme!(transportmap_theme())
@@ -13,7 +14,6 @@ normal_result = optimize!(normal_map, target, normal_quadrature)
 println(normal_result)
 
 normal_ref_samples = randn(2000, 2)
-normal_target_samples = evaluate(normal_map, normal_ref_samples)
 var_diag = variance_diagnostic(normal_map, target, normal_ref_samples)
 
 println("Normal-reference KL divergence: ", normal_result.minimum)
@@ -32,11 +32,21 @@ uniform_result = optimize!(uniform_map, target, uniform_quadrature)
 println(uniform_result)
 
 uniform_ref_samples = rand(uniform_distribution, 2000, 2)
-uniform_target_samples = evaluate(uniform_map, uniform_ref_samples)
 var_diag_uniform = variance_diagnostic(uniform_map, target, uniform_ref_samples)
 
 println("Uniform-reference KL divergence: ", uniform_result.minimum)
 println("Uniform-reference variance diag: ", var_diag_uniform)
+
+normal_approximation = TransportMapDistribution(normal_map)
+uniform_approximation = TransportMapDistribution(uniform_map)
+normal_target_samples = rand(normal_approximation, 2000)
+uniform_target_samples = rand(uniform_approximation, 2000)
+
+pdf(uniform_approximation, [0.0, 1.0])
+normal_logdensities = logpdf(normal_approximation, normal_target_samples)
+
+println("Fitted banana mean: ", mean(normal_approximation))
+println("Fitted banana covariance: ", cov(normal_approximation))
 
 x₁ = range(-4, 4, length = 120)
 x₂ = range(-3, 7, length = 120)

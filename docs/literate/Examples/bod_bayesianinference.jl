@@ -56,7 +56,7 @@ t_values = range(0, 5; length = 100)
 for A in [0.6, 0.8, 1.0], B in [0.1, 0.16, 0.22]
     lines!(
         realizations_ax, t_values, [forward_model(ti, [A, B]) for ti in t_values];
-        label = L"(A = %$A,\; B = %$B)", linestyle = :dash
+        label = L"(A = %$A,\, B = %$B)", linestyle = :dash
     )
 end
 Legend(realizations_fig[2, 1], realizations_ax; orientation = :horizontal, nbanks = 5)
@@ -138,9 +138,10 @@ contour!(
 # ![BOD posterior samples and target contours in physical parameters A and B](samples-bod.svg)
 
 # The composition's density includes both layers' Jacobians. Compare contours
-# at the same fractions of each density's peak:
+# at the same fractions of each density's peak. For this we need to create a density from the map first, then evaluate it at the physical coordinates:
 
-posterior_pullback = [pdf(posterior_map, [A, B]) for A in A_values, B in B_values]
+posterior_map_density = TransportMapDistribution(posterior_map)
+posterior_pullback = [pdf(posterior_map_density, [A, B]) for A in A_values, B in B_values]
 
 #md save_docplot("pullback-bod.svg") do # hide
 pullback_fig = Figure(size = (600, 420))

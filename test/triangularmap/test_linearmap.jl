@@ -6,6 +6,26 @@
 
 end
 
+@testitem "LinearMap density transformations" setup = [LinearMapSetup] begin
+    using Distributions
+    L = LinearMap([1.0, -2.0], [2.0, 3.0])
+    expected = MvNormal(L.μ, Diagonal(L.σ .^ 2))
+    X = [0.0 0.0; 1.0 -2.0; -0.5 0.3]
+    target = MapTargetDensity(x -> logpdf(expected, x))
+    standard = MvNormal(zeros(2), I)
+    @test logpushforward(L, target, X) ≈ logpdf(standard, X')
+    @test pushforward(L, target, X) ≈ pdf(standard, X')
+    @test logpushforward(L, target, X[1, :]) ≈ logpdf(standard, X[1, :])
+    @test isempty(pushforward(L, target, zeros(0, 2)))
+    @test_throws AssertionError logpushforward(L, target, zeros(3))
+    @test logpullback(L, X) ≈ logpdf(expected, permutedims(X))
+    @test logabsdetjacobian(L, X) ≈ fill(-log(6), 3)
+    @test jacobian(L, X) ≈ fill(1 / 6, 3)
+    @test MonteCarloWeights(4, L).distribution == Normal()
+    @test LatinHypercubeWeights(4, L).distribution == Normal()
+    @test_throws ErrorException GaussLegendreWeights(2, L)
+end
+
 @testitem "LinearMap" setup = [LinearMapSetup] begin
     rng = MersenneTwister(1234)
 

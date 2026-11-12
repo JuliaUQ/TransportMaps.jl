@@ -33,14 +33,14 @@ features:
     details: Construct a map from an unnormalized log-density using quadrature and numerical optimization.
     link: /Examples/banana_mapfromdensity
     linkText: Fit a map from a density
+  - title: Distributions.jl interface
+    details: Sample, evaluate densities, and compute moments through the standard Distributions.jl interface.
+    link: /api/distributions
+    linkText: Use a fitted distribution
   - title: Adapt the approximation
     details: Select polynomial terms adaptively and use validation data to choose the map's complexity.
     link: /Manuals/adaptive_transport_map
     linkText: Explore adaptive maps
-  - title: Condition on observations
-    details: Evaluate conditional densities and generate samples while keeping observed coordinates fixed.
-    link: /Manuals/conditional_densities
-    linkText: Work with conditional distributions
   - title: Choose your basis and quadrature
     details: Combine polynomial bases, monotone rectifiers, and tensor-product or sparse-grid integration rules.
     link: /Manuals/map_parameterization
@@ -100,6 +100,14 @@ for applications in structural health monitoring and Bayesian inference, see [gr
 The manuals cover [polynomial bases](Manuals/basis_functions.md),
 [quadrature rules](Manuals/quadrature_methods.md), and [optimization](Manuals/optimization.md),
 including automatic differentiation through `DifferentiationInterface.jl` and multithreaded map evaluation.
+
+[`TransportMapDistribution`](@ref) wraps a fitted map as a continuous multivariate
+distribution. Use the same interface whether the map was fitted from a density or
+from samples, including compositions with linear or Laplace maps.
+The distribution represents the fitted approximation to the target.
+The [getting-started guide](Manuals/getting_started.md) demonstrates fitting and
+using a distribution; the [distribution API](api/distributions.md) documents
+sampling, density evaluation, support checks, moments, and entropy.
 
 ## Related implementations
 

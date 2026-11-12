@@ -184,12 +184,15 @@ C_with_reference = ComposedMap(
 )
 #md nothing # hide
 
-# `pdf` and `logpdf` always evaluate the target-density approximation at target
-# coordinates. `jacobian` returns the forward determinant, and
+# To calculate the density or log-density of a map, create a [`TransportMapDistribution`](@ref) from the composition. Its `pdf` and `logpdf` evaluate the target-density approximation at target coordinates. The Jacobian determinant is included automatically.
+
+map_distribution = TransportMapDistribution(C)
+density = pdf(map_distribution, x)
+log_density = logpdf(map_distribution, x)
+
+# `jacobian` returns the forward determinant, and
 # `logabsdetjacobian` accumulates layer log-determinants:
 
-density = pdf(C, x)
-log_density = logpdf(C, x)
 determinant = jacobian(C, x)
 log_determinant = logabsdetjacobian(C, x)
 #md nothing # hide

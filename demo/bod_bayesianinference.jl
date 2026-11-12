@@ -22,7 +22,7 @@ t_values = range(0, 5; length = 100)
 for A in [0.6, 0.8, 1.0], B in [0.1, 0.16, 0.22]
     lines!(
         realizations_ax, t_values, [forward_model(ti, [A, B]) for ti in t_values];
-        label = L"(A = %$A,\; B = %$B)", linestyle = :dash
+        label = L"(A = %$A,\, B = %$B)", linestyle = :dash
     )
 end
 Legend(realizations_fig[2, 1], realizations_ax; orientation = :horizontal, nbanks = 5)
@@ -59,7 +59,8 @@ contour!(
     levels = [0.2, 0.4, 0.6, 0.8], colormap = :viridis
 )
 
-posterior_pullback = [pdf(posterior_map, [A, B]) for A in A_values, B in B_values]
+posterior_map_density = TransportMapDistribution(posterior_map)
+posterior_pullback = [pdf(posterior_map_density, [A, B]) for A in A_values, B in B_values]
 
 pullback_fig = Figure(size = (600, 420))
 pullback_ax = Axis(pullback_fig[1, 1]; xlabel = L"A", ylabel = L"B")

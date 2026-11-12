@@ -388,11 +388,7 @@ function inverse(
 end
 
 function _inverse_component(bases, coefficients, rectifier, z_previous, x_k, k)
-    conditioned = _conditioning_factors(bases, z_previous, k)
-    conditioned .*= coefficients
-    f₀ = _conditioned_value(bases, conditioned, k, zero(eltype(conditioned)))
-    fun(z_k) = f₀ + _component_integral(bases, conditioned, rectifier, k, z_k) - x_k
-    ∂fun(z_k) = rectifier(_conditioned_derivative(bases, conditioned, k, z_k))
+    fun, ∂fun = _inverse_component_functions(bases, coefficients, rectifier, z_previous, x_k, k)
 
     # Define bounds for the root-finding
     lower, upper = _inverse_bound(fun)
@@ -401,6 +397,16 @@ function _inverse_component(bases, coefficients, rectifier, z_previous, x_k, k)
     z⁺, _ = hybridrootfinder(fun, ∂fun, lower, upper)
 
     return z⁺
+end
+
+function _inverse_component_functions(bases, coefficients, rectifier, z_previous, x_k, k)
+    conditioned = _conditioning_factors(bases, z_previous, k)
+    conditioned .*= coefficients
+    f₀ = _conditioned_value(bases, conditioned, k, zero(eltype(conditioned)))
+    fun(z_k) = f₀ + _component_integral(bases, conditioned, rectifier, k, z_k) - x_k
+    ∂fun(z_k) = rectifier(_conditioned_derivative(bases, conditioned, k, z_k))
+
+    return fun, ∂fun
 end
 
 """
