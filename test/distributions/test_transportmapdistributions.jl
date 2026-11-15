@@ -1013,3 +1013,17 @@ end
     d_mixed = TransportMapDistribution(logtarget_mixed, quadr_mixed, 3, false)
     @test d_mixed isa TransportMapDistribution
 end
+
+@testitem "MarginalMap densities" setup = [TransportMapDistributionSetup] begin
+
+    marginal = Normal(2.0, 3.0)
+    P = MarginalMap([marginal])  # standard normal reference
+    target = MapTargetDensity(x -> logpdf(marginal, x[1]))
+    x = [2.0]
+    @test logpullback(P, x) ≈ logpdf(marginal, x[1])
+
+    z = [0.5]
+    # The target mapped back to reference coordinates is standard normal.
+    @test logpushforward(P, target, z) ≈ logpdf(Normal(), z[1])
+
+end

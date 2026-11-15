@@ -62,7 +62,7 @@ end
 function logabsdetjacobian(L::LinearMap, X::AbstractMatrix{<:Real})
     @assert size(X, 2) == numberdimensions(L) || numberdimensions(L) == 0 "Input dimension must match the map"
     # The logabsdetjacobian is constant for LinearMap (doesn't depend on x)
-    return fill(logabsdetjacobian(L, X[1, :]), size(X, 1))
+    return fill(logabsdetjacobian(L, L.μ), size(X, 1))
 end
 
 # Point-dependent Jacobians follow the forward transformation convention.

@@ -97,7 +97,7 @@ end
 function logabsdetjacobian(L::LaplaceMap, X::AbstractMatrix{<:Real})
     @assert size(X, 2) == numberdimensions(L) "Input dimension must match the map"
     # The logabsdetjacobian is constant for LaplaceMap (doesn't depend on x)
-    return fill(logabsdetjacobian(L, X[1, :]), size(X, 1))
+    return fill(logabsdetjacobian(L, L.mode), size(X, 1))
 end
 
 function _linear_prefix(L::LaplaceMap, previous, k)

@@ -38,6 +38,9 @@ end
 
 numberdimensions(P::MarginalMap) = length(P.marginals)
 _reference_marginal(P::MarginalMap) = P.reference.densitytype
+_map_direction(::MarginalMap) = :target
+logpullback(P::MarginalMap, x::AbstractVector{<:Real}) = logpdf(P, x)
+logpullback(P::MarginalMap, X::AbstractMatrix{<:Real}) = logpdf(P, X)
 
 function _check_prior_input(P::MarginalMap, x)
     n = x isa AbstractVector ? length(x) : size(x, 2)
