@@ -15,7 +15,7 @@
 # Pkg.add(["TransportMaps", "Distributions"])
 # ```
 
-using TransportMaps, Distributions
+using TransportMaps, Distributions, Statistics
 using Random # hide
 Random.seed!(1234) # hide
 #md using Main.DocPlots: save_docplot # hide
@@ -47,23 +47,49 @@ result = optimize!(M, target, quadrature)
 # [`optimize!`](@ref) updates `M` in place. The returned `result` contains the solver's
 # convergence information. You can reuse the fitted map to generate new samples.
 
-# ## 3. Generate Samples
+# ## 3. Use the Fitted Distribution
 #
-# Draw from the reference and transform the draws with [`evaluate`](@ref):
+# Wrap the fitted map in [`TransportMapDistribution`](@ref), then use the standard
+# Distributions.jl interface to generate samples:
 
-reference_samples = randn(1_000, 2)
-target_samples = evaluate(M, reference_samples)
+fitted = TransportMapDistribution(M)
+target_samples = rand(fitted, 1_000)
 #md nothing # hide
 
-# Each row is one sample; each column is one coordinate. `target_samples` contains
-# independent draws from the fitted approximation to the target.
+# `target_samples` is a ``2 \times 1000`` matrix: each column is one sample.
+# These are independent draws from the fitted approximation to the target.
+# The wrapper uses the map's configured reference distribution and fitting direction.
+#
+# !!! note "Sample orientation"
+#     Distributions.jl uses samples in columns. Map-level batch operations such as
+#     `evaluate` and the map plotting functions use samples in rows.
+#
 # In the figure above, the circular reference cloud becomes a tilted target cloud;
 # the contours show the known Gaussian target density.
 
 # ## 4. Check the Result
 #
-# Evaluate the variance diagnostic on the reference samples:
+# Evaluate the fitted log-density at a point:
 
+logpdf(fitted, [0.0, 0.0])
+
+# Compare its mean and covariance with the Gaussian target defined in step 1:
+
+mean(fitted)
+
+# The mean should be close to `[0.0, 0.0]`.
+
+cov(fitted)
+
+# The covariance should be close to `[1.0 0.8; 0.8 1.0]`. Polynomial and composed
+# maps compute statistics by reference-space quadrature. To choose a rule, pass
+# `quad`, for example `cov(fitted; quad = quadrature)`. See the
+# [distribution API](../api/distributions.md) for the full interface.
+#
+# For a map-specific diagnostic, draw reference samples and evaluate the variance
+# diagnostic. Here each row is one reference sample:
+
+reference_samples = randn(1_000, 2)
 variance_diagnostic(M, target, reference_samples)
 
 # A value close to zero indicates little variation in the log-density mismatch at
@@ -108,6 +134,7 @@ fig, ax, plt = mappingplot(
 # |:--|:--|
 # | Learn from observations instead of a density | [Banana: Map from Samples](../Examples/banana_mapfromsamples.md) |
 # | Fit a nonlinear target density | [Banana: Map from Density](../Examples/banana_mapfromdensity.md) |
+# | Sample, evaluate densities, or compute statistics of a fitted map | [Transport Maps as Distributions](../api/distributions.md) |
 # | Infer parameters from measurements | [Bayesian inference with BOD data](../Examples/bod_bayesianinference.md) |
 # | Choose bases, rectifiers, and map structure | [Basis Functions](basis_functions.md) and [Map Parameterization](map_parameterization.md) |
 # | Tune integration or solver settings | [Quadrature Methods](quadrature_methods.md) and [Optimization](optimization.md) |

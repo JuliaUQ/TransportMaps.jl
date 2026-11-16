@@ -1,7 +1,70 @@
 @testsnippet HybridRootFinderSetup begin
     using TransportMaps
     using Test
+    using Logging
 
+end
+
+@testitem "Hybrid root finder at floating-point precision" setup = [HybridRootFinderSetup] begin
+    @testset "Inclusive residual tolerance" begin
+        calls = Ref(0)
+        f(x) = (calls[] += 1; x - 1.0)
+        tolerance = 2eps(Float64)
+        root, residual, _ = @test_logs min_level = Logging.Warn hybridrootfinder(
+            f, x -> 1.0, 1.0, 1.0 + 4eps(Float64);
+            xtol = 0.0, ftol = tolerance,
+        )
+        @test abs(residual) <= tolerance
+        @test abs(root - 1.0) <= tolerance
+        @test calls[] == 1
+    end
+
+    @testset "Exact root with zero derivative and zero tolerances" begin
+        result = @test_logs min_level = Logging.Warn hybridrootfinder(
+            x -> x^3, x -> 3x^2, -1.0, 1.0; xtol = 0.0, ftol = 0.0,
+        )
+        @test result == (0.0, 0.0, 0.0)
+    end
+
+    @testset "Newton step reaches an endpoint root" begin
+        calls = Ref(0)
+        f(x) = (calls[] += 1; x - 1.0)
+        root, residual, _ = @test_logs min_level = Logging.Warn hybridrootfinder(
+            f, x -> 1.0, -1.0, 1.0,
+        )
+        @test root == 1.0
+        @test residual == 0.0
+        @test calls[] == 2
+    end
+
+    @testset "Bracket exhausted at adjacent floats" begin
+        calls = Ref(0)
+        f(x) = (calls[] += 1; x^2 - 2.0)
+        root, residual, derivative = @test_logs min_level = Logging.Warn hybridrootfinder(
+            f, x -> 2x, 1.0, 2.0; xtol = 0.0, ftol = 0.0,
+        )
+        @test abs(root - sqrt(2.0)) <= eps(sqrt(2.0))
+        @test abs(residual) <= 2eps(2.0)
+        @test derivative == 2root
+        @test calls[] < 100
+    end
+
+    @testset "Unsafe Newton steps fall back to bisection" begin
+        calls = Ref(0)
+        function f(x)
+            -1000.0 <= x <= 2500.0 || error("Root iteration left its bracket")
+            calls[] += 1
+            return expm1(x)
+        end
+        # The initial residual and derivative overflow. Subsequent Newton steps
+        # can leave the bracket or make very little progress in its steep tail.
+        root, residual, _ = @test_logs min_level = Logging.Warn hybridrootfinder(
+            f, exp, -1000.0, 2500.0; xtol = 1.0e-12, ftol = 1.0e-12, maxiter = 100,
+        )
+        @test abs(root) <= 1.0e-12
+        @test abs(residual) <= 1.0e-12
+        @test calls[] < 100
+    end
 end
 
 @testitem "Hybrid Root Finder" setup = [HybridRootFinderSetup] begin
@@ -103,7 +166,7 @@ end
     end
 
     @testset "Warning" begin
-        # Test that a warning is issued when derivative is zero at initial guess
+        # An insufficient iteration budget must still produce a warning.
         f_flat(x) = x^3 - 3x + 2  # Has root at x = 1
         ∂f_flat(x) = 3x^2 - 3
 

@@ -23,9 +23,11 @@ MarginalMap
 Base.:∘(::AbstractTransportMap, ::AbstractTransportMap)
 evaluate
 inverse
+logabsdetjacobian
+logpushforward
+logpullback
 pushforward
 pullback
-logabsdetjacobian
 setcoefficients!
 getcoefficients
 setparameters!

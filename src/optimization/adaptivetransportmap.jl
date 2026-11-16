@@ -5,18 +5,18 @@
 #   https://doi.org/10.1007/s10208-023-09630-x
 
 """
-    optimize_adaptive_transportmap(samples, maxterms; kwargs...)
+    optimize_adaptive_transportmap(samples, maxterms, lm, rectifier, basis; kwargs...)
 
 Adaptively optimize a triangular transport map by greedily enriching the multi-index set.
 
 # Arguments
 - `samples::Matrix{Float64}`: Sample data where rows are samples and columns are dimensions
 - `maxterms::Vector{Int64}`: Maximum number of terms for each component
-
-# Keyword Arguments
 - `lm::AbstractLinearMap=LinearMap(samples)`: Linear map to standardize samples
 - `rectifier::AbstractRectifierFunction=Softplus()`: Rectifier function to use
 - `basis::AbstractPolynomialBasis=LinearizedHermiteBasis()`: Polynomial basis
+
+# Keyword Arguments
 - `optimizer::Optim.AbstractOptimizer=LBFGS()`: Optimization algorithm
 - `options::Optim.Options=Optim.Options()`: Optimizer options
 - `test_fraction::Float64=0.0`: Fraction of samples to use for testing (validation)

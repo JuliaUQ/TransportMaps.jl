@@ -60,6 +60,16 @@ println(
     vec(std(uniform_validation_samples; dims = 1)),
 )
 
+normal_approximation = TransportMapDistribution(normal_composed_map)
+uniform_approximation = TransportMapDistribution(uniform_composed_map)
+new_target_samples = rand(normal_approximation, 1_000)
+
+normal_logdensities = logpdf(normal_approximation, permutedims(validation_samples))
+uniform_logdensities = logpdf(uniform_approximation, permutedims(validation_samples))
+
+println("Fitted target mean: ", mean(normal_approximation))
+println("Fitted target covariance: ", cov(normal_approximation))
+
 x₁ = range(-4, 4, length = 120)
 x₂ = range(-3.5, 7, length = 120)
 

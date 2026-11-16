@@ -72,12 +72,12 @@ end
     @test C.forwarddirection == :target
     @test inverse(C, x) ≈ z
     @test x ≈ evaluate(P, evaluate(T, z))
-    @test logpdf(C, x) ≈ logpdf(MapReferenceDensity(), z) - logabsdetjacobian(C, z)
-    @test logpdf(C, [-3.0, 1.0]) == -Inf
-    @test pdf(C, [0.0, -1.0]) == 0
-    @test logpdf(C, [-2.0, 1.0]) == -Inf
-    @test logpdf(ComposedMap(ComposedMap(T, P; forwarddirection = :target)), [-3.0, 1.0]) == -Inf
-    @test logpdf(ComposedMap(P), x) ≈ logpdf(P, x)
+    @test logpullback(C, x) ≈ logpdf(MapReferenceDensity(), z) - logabsdetjacobian(C, z)
+    @test logpullback(C, [-3.0, 1.0]) == -Inf
+    @test pullback(C, [0.0, -1.0]) == 0
+    @test logpullback(C, [-2.0, 1.0]) == -Inf
+    @test logpullback(ComposedMap(ComposedMap(T, P; forwarddirection = :target)), [-3.0, 1.0]) == -Inf
+    @test logpullback(ComposedMap(P), x) ≈ logpdf(P, x)
 end
 
 @testitem "MarginalMap Bayesian density fitting" begin
@@ -101,7 +101,7 @@ end
     for u in (-1.0, 0.0, 1.0)
         x = evaluate(C, [u])
         @test x[1] ≈ exp(posterior_mean + sqrt(posterior_variance) * u) rtol = 1.0e-6
-        @test logpdf(C, x) ≈ logpdf(posterior, x[1]) atol = 1.0e-6
+        @test logpullback(C, x) ≈ logpdf(posterior, x[1]) atol = 1.0e-6
     end
 end
 
@@ -134,8 +134,8 @@ end
 
         C = ComposedMap(LinearMap(4), P; forwarddirection = :target)
         @test C.reference === P.reference
-        @test logpdf(C, x) ≈ logpdf(P, x)
-        @test logpdf(C, x) ≈ logpdf(P.reference, z) - logabsdetjacobian(P, z)
+        @test logpullback(C, x) ≈ logpdf(P, x)
+        @test logpullback(C, x) ≈ logpdf(P.reference, z) - logabsdetjacobian(P, z)
         target = MapTargetDensity(u -> -sum(abs2, evaluate(P, u)) / 2 + logpdf(P.reference, u))
         expected_score = -x .* expected + [Distributions.gradlogpdf(reference, zi) for zi in z]
         @test grad_logpdf(target, z) ≈ expected_score
@@ -160,9 +160,9 @@ end
     @test inverse(P, [-2.0]) == [0.0]
     @test inverse(P, [4.0]) == [1.0]
     @test logabsdetjacobian(P, [1.0]) ≈ log(6)
-    @test logpdf(ComposedMap(P), [4.0]) ≈ -log(6)
+    @test logpullback(ComposedMap(P), [4.0]) ≈ -log(6)
     # Avoid reconstructing a rounded tail probability when differentiating the inverse.
     normal_prior = MarginalMap([Normal()]; reference = Uniform(0, 1))
     @test inverse_jacobian(normal_prior, [10.0]) ≈ pdf(Normal(), 10.0)
-    @test logpdf(ComposedMap(normal_prior), [10.0]) ≈ logpdf(Normal(), 10.0)
+    @test logpullback(ComposedMap(normal_prior), [10.0]) ≈ logpdf(Normal(), 10.0)
 end

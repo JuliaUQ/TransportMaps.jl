@@ -277,6 +277,10 @@ function optimize!(
     @assert l1_eps > 0.0 "l1_eps must be strictly positive."
     @assert δ >= 0.0 "δ must be non-negative."
 
+    # Density fitting learns the reference-to-target map, including when M was
+    # previously fitted from samples in the opposite direction.
+    setforwarddirection!(M, :target)
+
     pen = _nonlinear_penalty_mask(M; interactions_only = interactions_only)
 
     work = _density_workspace(M, precomp)

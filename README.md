@@ -4,7 +4,7 @@
 
 <div align="center">
 
-[![Build Status](https://github.com/JuliaUQ/TransportMaps.jl/actions/workflows/juliaci.yml/badge.svg?branch=main)](https://github.com/JuliaUQ/TransportMaps.jl/actions/workflows/juliaci.yml?query=branch:main)
+[![Build Status](https://github.com/JuliaUQ/TransportMaps.jl/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/JuliaUQ/TransportMaps.jl/actions/workflows/ci.yml?query=branch:main)
 [![doc](https://img.shields.io/badge/docs-dev-blue.svg)](https://juliauq.github.io/TransportMaps.jl/dev/)
 [![doc-stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://juliauq.github.io/TransportMaps.jl/stable/)
 [![DOI](https://zenodo.org/badge/885372338.svg)](https://doi.org/10.5281/zenodo.18309940)
@@ -33,12 +33,13 @@ Here's a simple example showing how to construct a transport map for a "banana" 
 ```julia
 using TransportMaps
 using Distributions
+using Statistics
 
 # Create a 2D polynomial map with degree 2 and Softplus rectifier
 M = PolynomialMap(2, 2, Normal(), Softplus())
 
 # Set up quadrature for optimization
-quadrature = GaussHermiteWeights(3, 2)
+quadrature = GaussHermiteWeights(3, M)
 
 # Define target density (banana distribution)
 target_density(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2] - x[1]^2)
@@ -47,15 +48,24 @@ target = MapTargetDensity(target_density)
 # Optimize the map coefficients
 result = optimize!(M, target, quadrature)
 
-# Generate samples by mapping standard Gaussian samples
+# Use the fitted map as a continuous multivariate distribution
+d = TransportMapDistribution(M)
+samples = rand(d, 1000)  # 2 × 1000: each column is one sample
+
+# Evaluate the fitted density and compute its moments
+logpdf(d, [0.0, 1.0])
+μ = mean(d)
+Σ = cov(d)
+
+# Draw reference samples for map-specific diagnostics and plots
 samples_z = randn(1000, 2)
-
-# Matrix input automatically uses multithreading for better performance
-mapped_samples = evaluate(M, samples_z)
-
-# Evaluate map quality
 variance_diag = variance_diagnostic(M, target, samples_z)
 ```
+
+`TransportMapDistribution` handles the map's fitting direction and reference
+distribution automatically. Distribution methods use samples in columns;
+map-level batch operations such as `evaluate` use rows. For details, see
+[Transport maps as distributions](https://juliauq.github.io/TransportMaps.jl/dev/api/distributions.html).
 
 ### Visualization
 
@@ -77,6 +87,7 @@ fig = reference_target_plot(M, samples_z)
 - **Multiple rectifier functions**: Softplus, ShiftedELU, Identity
 - **Quadrature integration schemes**: Gauss-Hermite, Monte Carlo, Latin Hypercube
 - **Automatic optimization** of map coefficients via KL divergence minimization
+- **Distributions.jl interface** for sampling, density evaluation, moments, covariance, and entropy of fitted maps
 - **Multithreaded evaluation** for processing multiple points efficiently
 - **Matrix input support** for all core functions (evaluate, inverse, jacobian, etc.)
 
