@@ -49,6 +49,22 @@ end
         @test calls[] < 100
     end
 
+    @testset "Relative positional tolerance follows the root scale" begin
+        for expected in (-1.0e-200, 1.0e-200, -1.0e200, 1.0e200)
+            calls = Ref(0)
+            # The residual stays nonzero even when the bracket reaches the
+            # root's floating-point scale, exercising positional convergence.
+            f(x) = (calls[] += 1; x < expected ? -1.0 : 1.0)
+            bound = max(1.0, 2abs(expected))
+            root, _, _ = @test_logs min_level = Logging.Warn hybridrootfinder(
+                f, x -> 0.0, -bound, bound;
+                xtol = 0.0, xrtol = 8eps(Float64), ftol = 0.0, maxiter = 1000,
+            )
+            @test root ≈ expected rtol = 1.0e-14 atol = 0.0
+            @test calls[] < 1000
+        end
+    end
+
     @testset "Unsafe Newton steps fall back to bisection" begin
         calls = Ref(0)
         function f(x)

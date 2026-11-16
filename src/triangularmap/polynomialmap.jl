@@ -563,9 +563,10 @@ function _inverse_point_in_bounds(pm::AbstractTransportMap, x, lower, upper)
         z[k] = if a == b
             a
         else
-            xtol = eps(Float64) * max(1.0, abs(a), abs(b))
-            ftol = eps(Float64) * max(1.0, abs(x[k]))
-            first(hybridrootfinder(fun, ∂fun, a, b; xtol = xtol, ftol = ftol))
+            # Unit-scale absolute tolerances can discard small residuals or
+            # Newton steps that are still significant on the reference scale.
+            ftol = eps(Float64) * abs(x[k])
+            first(hybridrootfinder(fun, ∂fun, a, b; xtol = 0.0, xrtol = eps(Float64), ftol = ftol))
         end
         isfinite(z[k]) || return nothing
         z[k] = clamp(z[k], lower, upper)
@@ -595,8 +596,10 @@ function _support_inverse_bounds(fun, lower, upper, target)
     a = isfinite(lower) ? lower : -1.0
     b = isfinite(upper) ? upper : 1.0
     fa, fb = fun(a), fun(b)
-    scale = max(abs(target), isfinite(fa) ? abs(fa) : 0.0, isfinite(fb) ? abs(fb) : 0.0)
-    atol = 16 * eps(Float64) * scale
+    # A large residual at one endpoint must not relax the other endpoint's
+    # root check. Retain roundoff tolerance relative to the local output scale.
+    atol_a = 16 * eps(Float64) * max(abs(target), isfinite(fa) ? abs(fa) : 0.0)
+    atol_b = 16 * eps(Float64) * max(abs(target), isfinite(fb) ? abs(fb) : 0.0)
     # Finite reference endpoints delimit the conditional target support. For
     # unbounded references, expand only finite brackets and cap the search so a
     # point outside the map's image cannot leave support checks looping forever.
@@ -607,8 +610,8 @@ function _support_inverse_bounds(fun, lower, upper, target)
         (isnan(fa) || isnan(fb)) && return nothing
         iszero(fa) && return (a, a)
         iszero(fb) && return (b, b)
-        isfinite(lower) && abs(fa) <= atol && return (a, a)
-        isfinite(upper) && abs(fb) <= atol && return (b, b)
+        isfinite(lower) && abs(fa) <= atol_a && return (a, a)
+        isfinite(upper) && abs(fb) <= atol_b && return (b, b)
         fa < 0 < fb && return (a, b)
         if fa > 0 && !isfinite(lower)
             a *= 2
