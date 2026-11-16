@@ -97,7 +97,7 @@ end
     @test evaluate(ComposedMap((A, B, D)), x) ≈ y
     @test evaluate(ComposedMap([A, B, D]), x) ≈ y
     @test evaluate(ComposedMap(ComposedMap(A, B), D), x) ≈ y
-    @test logpdf(ComposedMap(ComposedMap(A, B), D), x) ≈ logpdf(C, x)
+    @test logpullback(ComposedMap(ComposedMap(A, B), D), x) ≈ logpullback(C, x)
     @test logabsdetjacobian(ComposedMap(A, ComposedMap(B, D)), x) ≈ log(determinant)
     @test inverse(C, y) ≈ x
     @test inverse(C, evaluate(C, X)) ≈ X
@@ -112,21 +112,21 @@ end
     h = 1.0e-5
     J = hcat([(C(x + h * I(2)[:, j]) - C(x - h * I(2)[:, j])) / (2h) for j in 1:2]...)
     @test jacobian(C, x) ≈ det(J) rtol = 1.0e-8
-    @test pdf(C, x) ≈ prod(pdf.(Normal(), y)) * determinant
-    @test logpdf(C, x) ≈ sum(logpdf.(Normal(), y)) + log(determinant)
-    @test pullback(C, X) ≈ exp.(logpdf(C, X))
-    target = MapTargetDensity(x -> logpdf(C, x))
+    @test pullback(C, x) ≈ prod(pdf.(Normal(), y)) * determinant
+    @test logpullback(C, x) ≈ sum(logpdf.(Normal(), y)) + log(determinant)
+    @test pullback(C, X) ≈ exp.(logpullback(C, X))
+    target = MapTargetDensity(x -> logpullback(C, x))
     @test pushforward(C, target, y) ≈ prod(pdf.(Normal(), y))
     @test pushforward(C, target, X) ≈ [prod(pdf.(Normal(), r)) for r in eachrow(X)]
 
     T = ComposedMap(A, B, D; forwarddirection = :target, reference = Normal(0.3, 1.2))
     @test evaluate(T, x) ≈ y # Metadata never changes evaluation order.
     @test pullback(T, y) ≈ prod(pdf.(Normal(0.3, 1.2), x)) / determinant
-    target = MapTargetDensity(x -> logpdf(T, x))
+    target = MapTargetDensity(x -> logpullback(T, x))
     @test pushforward(T, target, x) ≈ prod(pdf.(Normal(0.3, 1.2), x))
     @test pushforward(T, target, X) ≈ [prod(pdf.(Normal(0.3, 1.2), r)) for r in eachrow(X)]
     mvref = MvNormal([0.1, -0.2], [1.0 0.2; 0.2 2.0])
-    @test pdf(ComposedMap(A, B, D; reference = mvref), x) ≈ pdf(mvref, y) * determinant
+    @test pullback(ComposedMap(A, B, D; reference = mvref), x) ≈ pdf(mvref, y) * determinant
 
     # Density fitting direction is respected even with a non-identity polynomial.
     P = PolynomialMap(2, 1)
@@ -151,20 +151,20 @@ end
 
     # Log densities remain usable when forming determinants would underflow.
     large = ComposedMap(LinearMap(zeros(2), fill(1.0e200, 2)))
-    @test isfinite(logpdf(large, zeros(2)))
-    @test logpdf(large, zeros(2)) ≈ -log(2π) - 400log(10)
+    @test isfinite(logpullback(large, zeros(2)))
+    @test logpullback(large, zeros(2)) ≈ -log(2π) - 400log(10)
     @test logabsdetjacobian(large, zeros(2)) ≈ -400log(10)
     signed = ComposedMap(LinearMap(zeros(2), [-2.0, 3.0]))
     @test jacobian(signed, x) ≈ -1 / 6
     @test logabsdetjacobian(signed, x) ≈ -log(6)
-    @test pdf(signed, x) ≈ prod(pdf.(Normal(), [-x[1] / 2, x[2] / 3])) / 6
+    @test pullback(signed, x) ≈ prod(pdf.(Normal(), [-x[1] / 2, x[2] / 3])) / 6
 
     for f in (evaluate, inverse)
         @test size(f(C, zeros(0, 2))) == (0, 2)
         @test_throws DimensionMismatch f(C, zeros(0, 3))
         @test_throws DimensionMismatch f(C, zeros(3))
     end
-    for f in (jacobian, inverse_jacobian, logabsdetjacobian, pdf, logpdf, pullback)
+    for f in (jacobian, inverse_jacobian, logabsdetjacobian, logpullback, pullback)
         @test isempty(f(C, zeros(0, 2)))
         @test_throws DimensionMismatch f(C, zeros(0, 3))
         @test_throws DimensionMismatch f(C, zeros(3))
@@ -225,7 +225,7 @@ end
     @test inverse(C, C(x)) ≈ x
     @test jacobian(C, x) ≈ inv(det(L.chol))
     @test logabsdetjacobian(C, x) ≈ -log(det(L.chol))
-    @test pdf(C, x) ≈ pdf(MvNormal(L), x)
+    @test pullback(C, x) ≈ pdf(MvNormal(L), x)
 end
 
 @testitem "ComposedMap flattens nested execution in evaluation order" setup = [ComposedCustomLayer] begin
@@ -251,8 +251,8 @@ end
             @test jacobian(C, points) ≈ jacobian(flat, points)
             @test logabsdetjacobian(C, points) ≈ logabsdetjacobian(flat, points)
             @test inverse_jacobian(C, evaluate(C, points)) ≈ inverse_jacobian(flat, evaluate(flat, points))
-            @test logpdf(C, points) ≈ logpdf(flat, points)
-            @test pdf(C, points) ≈ pdf(flat, points)
+            @test logpullback(C, points) ≈ logpullback(flat, points)
+            @test pullback(C, points) ≈ pullback(flat, points)
         end
     end
 
@@ -263,7 +263,7 @@ end
     @test ForwardDiff.jacobian(z -> evaluate(nested, z), x) ≈ expected_jacobian
     expected_score = -expected_jacobian' * evaluate(nested, x) +
         [6u[1] / ((1 + 3u[1]^2) * A.σ[1]), 0.0]
-    @test ForwardDiff.gradient(z -> logpdf(nested, z), x) ≈ expected_score
+    @test ForwardDiff.gradient(z -> logpullback(nested, z), x) ≈ expected_score
 
     # Changing the caller's container cannot change an already-built chain.
     supplied_layers = Any[ComposedMap(A), B, D]
@@ -272,7 +272,7 @@ end
     empty!(supplied_layers)
     @test from_vector.layers == [A, B, D]
     @test evaluate(from_vector, x) ≈ evaluate(flat, x)
-    @test logpdf(from_vector, x) ≈ logpdf(flat, x)
+    @test logpullback(from_vector, x) ≈ logpullback(flat, x)
 
     # A nested dimension-free identity must remain compatible with fixed-size
     # leaves once its wrapper has been flattened.
@@ -328,7 +328,7 @@ end
     # The inner :target map supplies its first reference even when the outer
     # direction would select the last leaf of an entirely flat composition.
     @test outer.reference === P.reference
-    @test logpdf(outer, x) ≈ logpdf(P.reference, evaluate(outer, x)) + logabsdetjacobian(outer, x)
+    @test logpullback(outer, x) ≈ logpdf(P.reference, evaluate(outer, x)) + logabsdetjacobian(outer, x)
     original_reference = P.reference
     P.reference = MapReferenceDensity(Normal(0.7, 1.1))
     @test inner.reference === original_reference
@@ -355,7 +355,7 @@ end
     @test wrapped.layers == [P, Q]
     @test wrapped.forwarddirection === :target
     @test wrapped.reference === explicit_reference
-    @test logpdf(wrapped, x) ≈ logpdf(overridden, x)
+    @test logpullback(wrapped, x) ≈ logpullback(overridden, x)
     @test_throws ArgumentError ComposedMap(P, Q)
     @test inherited.forwarddirection === :target
 

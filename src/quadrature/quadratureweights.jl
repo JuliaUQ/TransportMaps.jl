@@ -35,6 +35,7 @@ struct TensorProductWeights{T <: AbstractQuadratureKnots} <: AbstractQuadratureW
         T = typeof(knots)
 
         points, weights = full_tensor_points(dim, level, knots)
+        points = _reference_quadrature_points(map, points)
         return new{T}(points, weights, knots)
     end
 end
@@ -57,17 +58,21 @@ end
 
 Tensor-product Gauss-Hermite weights for integration with respect to the normal
 reference density configured on `map`, including its mean and standard deviation.
+Composed maps also support correlated multivariate normal references.
 Returns a [`TensorProductWeights`](@ref) object.
 """
 function GaussHermiteWeights(level::Int64, map::AbstractTransportMap)
-    if !(map.reference.densitytype isa Normal)
-        error("GaussHermiteWeights requires Normal reference distribution, got $(typeof(map.reference.densitytype))")
+    if map isa ComposedMap && map.reference isa Distributions.AbstractMvNormal
+        return TensorProductWeights(level, map)
+    end
+    if !(_reference_marginal(map) isa Normal)
+        error("GaussHermiteWeights requires Normal reference distribution, got $(typeof(_reference_marginal(map)))")
     end
 
     return TensorProductWeights(
         level,
         numberdimensions(map),
-        GaussHermiteKnots(map.reference.densitytype),
+        GaussHermiteKnots(_reference_marginal(map)),
     )
 end
 
@@ -90,8 +95,8 @@ Returns a [`TensorProductWeights`](@ref) object.
 """
 function GaussLegendreWeights(level::Int64, map::AbstractTransportMap)
 
-    if !(map.reference.densitytype isa Uniform)
-        error("GaussLegendreWeights requires Uniform reference distribution, got $(typeof(map.reference.densitytype))")
+    if !(_reference_marginal(map) isa Uniform)
+        error("GaussLegendreWeights requires Uniform reference distribution, got $(typeof(_reference_marginal(map)))")
     end
 
     return TensorProductWeights(level, numberdimensions(map), _determine_knots_from_reference(map))
@@ -130,6 +135,7 @@ struct SparseSmolyakWeights{T <: AbstractQuadratureKnots} <: AbstractQuadratureW
         knots = _determine_knots_from_reference(map)
         T = typeof(knots)
         points, weights = smolyak_points(dim, level, knots, sparse)
+        points = _reference_quadrature_points(map, points)
 
         return new{T}(points, weights, knots)
     end
@@ -138,12 +144,24 @@ end
 Base.eltype(::Type{SparseSmolyakWeights{T}}) where {T <: AbstractQuadratureKnots} = T
 
 function _determine_knots_from_reference(map::AbstractTransportMap)
-    ref = map.reference.densitytype
+    if map isa ComposedMap && map.reference isa Distributions.AbstractMvNormal
+        return GaussHermiteKnots()
+    end
+    ref = _reference_marginal(map)
     if ref isa Normal
         return GaussHermiteKnots(ref)
     elseif ref isa Uniform
         return GaussLegendreKnots(support(ref))
     end
+    throw(ArgumentError("Automatic quadrature requires a Normal, Uniform, or multivariate normal reference; supply quad explicitly"))
+end
+
+_reference_quadrature_points(map::AbstractTransportMap, points) = points
+
+function _reference_quadrature_points(map::ComposedMap, points)
+    reference = map.reference
+    reference isa Distributions.AbstractMvNormal || return points
+    return points * cholesky(cov(reference)).L' .+ mean(reference)'
 end
 
 """
@@ -155,7 +173,7 @@ All points receive uniform weights ``w_i=1/N``, where ``N`` is `numberpoints`.
 # Fields
 - `points::Matrix{Float64}`: Quadrature points (random samples)
 - `weights::Vector{Float64}`: Quadrature weights (uniform)
-- `distribution::Distributions.UnivariateDistribution`: Reference distribution
+- `distribution::Union{Distributions.Distribution, Nothing}`: Reference distribution, or `nothing` for custom points and weights
 
 # Constructors
 - `MonteCarloWeights(numberpoints::Int64, dimension::Int64, distr::Distributions.UnivariateDistribution=Normal())`: Construct weights with random sampling from `distr` (defaults to `Normal()`).
@@ -165,7 +183,7 @@ All points receive uniform weights ``w_i=1/N``, where ``N`` is `numberpoints`.
 struct MonteCarloWeights <: AbstractQuadratureWeights
     points::Matrix{Float64}
     weights::Vector{Float64}
-    distribution::Union{Distributions.UnivariateDistribution, Nothing}
+    distribution::Union{Distributions.Distribution, Nothing}
 
     function MonteCarloWeights(numberpoints::Int64, dimension::Int64, dist::Distributions.UnivariateDistribution = Normal())
         points, weights = montecarlo_weights(numberpoints, dimension, dist)
@@ -174,9 +192,17 @@ struct MonteCarloWeights <: AbstractQuadratureWeights
 
     function MonteCarloWeights(numberpoints::Int64, map::AbstractTransportMap)
         # Generate random points in the reference space
-        points, weights = montecarlo_weights(numberpoints, numberdimensions(map), map.reference.densitytype)
+        points, weights = montecarlo_weights(numberpoints, numberdimensions(map), _reference_marginal(map))
 
-        return new(points, weights, map.reference.densitytype)
+        return new(points, weights, _reference_marginal(map))
+    end
+
+    function MonteCarloWeights(numberpoints::Int64, map::ComposedMap)
+        reference = map.reference isa MapReferenceDensity ? map.reference.densitytype : map.reference
+        reference isa Distributions.Distribution ||
+            throw(ArgumentError("Monte Carlo quadrature requires a sampleable reference distribution"))
+        points, weights = montecarlo_weights(numberpoints, numberdimensions(map), reference)
+        return new(points, weights, reference)
     end
 
     function MonteCarloWeights(points::Matrix{Float64}, weights::Vector{Float64} = Float64[])
@@ -192,6 +218,12 @@ function montecarlo_weights(numberpoints::Int64, dimension::Int64, dist::Distrib
     points = rand(dist, numberpoints, dimension)
     weights = 1 / numberpoints * ones(numberpoints)
     return points, weights
+end
+
+function montecarlo_weights(numberpoints::Int64, dimension::Int64, dist::Distributions.MultivariateDistribution)
+    length(dist) == dimension || throw(DimensionMismatch("Reference and map dimensions must agree"))
+    points = permutedims(rand(dist, numberpoints))
+    return points, fill(1 / numberpoints, numberpoints)
 end
 
 """
@@ -222,8 +254,8 @@ struct LatinHypercubeWeights <: AbstractQuadratureWeights
 
     function LatinHypercubeWeights(n::Int64, map::AbstractTransportMap)
         # Generate Latin Hypercube points in the reference space
-        points, weights = latinhypercube_weights(n, numberdimensions(map), map.reference.densitytype)
-        return new(points, weights, map.reference.densitytype)
+        points, weights = latinhypercube_weights(n, numberdimensions(map), _reference_marginal(map))
+        return new(points, weights, _reference_marginal(map))
     end
 end
 

@@ -10,6 +10,25 @@
 
 end
 
+@testitem "LaplaceMap density transformations" setup = [LaplaceMapSetup] begin
+    using Distributions
+    L = LaplaceMap([-1.0 0.2; 0.2 0.8; 1.2 -0.4; 0.4 0.1])
+    expected = MvNormal(L)
+    X = [0.0 0.0; 1.0 -2.0; -0.5 0.3]
+    target = MapTargetDensity(x -> logpdf(expected, x))
+    standard = MvNormal(zeros(2), I)
+    @test logpushforward(L, target, X) ≈ logpdf(standard, X')
+    @test pushforward(L, target, X) ≈ pdf(standard, X')
+    @test logpushforward(L, target, X[1, :]) ≈ logpdf(standard, X[1, :])
+    @test isempty(logpushforward(L, target, zeros(0, 2)))
+    @test_throws AssertionError pushforward(L, target, zeros(3, 1))
+    @test pullback(L, X) ≈ pdf(expected, X')
+    @test jacobian(L, X) ≈ fill(inv(jacobian(L)), 3)
+    @test logabsdetjacobian(L, X) ≈ fill(-log(jacobian(L)), 3)
+    @test MonteCarloWeights(4, L).distribution == Normal()
+    @test LatinHypercubeWeights(4, L).distribution == Normal()
+end
+
 @testitem "LaplaceMap from Samples" setup = [LaplaceMapSetup] begin
     # Create samples from a Laplace distribution
     rng = MersenneTwister(123)

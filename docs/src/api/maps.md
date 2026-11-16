@@ -22,9 +22,11 @@ MarginalMap
 ```@docs
 evaluate
 inverse
+logabsdetjacobian
+logpushforward
+logpullback
 pushforward
 pullback
-logabsdetjacobian
 setcoefficients!
 getcoefficients
 setparameters!
