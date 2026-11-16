@@ -118,7 +118,7 @@ function TransportMapDistribution(samples::Matrix{Float64}, order::Union{Int, Ve
 
     @assert adaptive || isa(order, Int) "Fixed map construction requires a single integer for `order`."
 
-    ndim = size(samples, 2) #!TODO: Check which dimension
+    ndim = size(samples, 2)
 
     if adaptive
         if reference != Normal()
@@ -197,16 +197,16 @@ end
 # basic map from samples
 function _basic_distribution_from_samples(samples::Matrix{Float64}, order::Int, reference::UnivariateDistribution, rectifier::AbstractRectifierFunction, use_linear_map::Bool)
 
-    ndim = size(samples, 2) #!TODO: Check which dimension
+    ndim = size(samples, 2)
 
     if use_linear_map
         lmap = LinearMap(samples)
         normal_map = PolynomialMap(ndim, order, reference, rectifier)
-        normal_result = optimize!(normal_map, samples, lmap)
+        optimize!(normal_map, samples, lmap)
         return TransportMapDistribution(ComposedMap(lmap, normal_map))
     else
         normal_map = PolynomialMap(ndim, order, reference, rectifier)
-        normal_result = optimize!(normal_map, samples)
+        optimize!(normal_map, samples)
         return TransportMapDistribution(normal_map)
     end
 end
@@ -218,7 +218,7 @@ function _basic_distribution_from_target(target::Function, quadrature::AbstractQ
 
     maptarget = MapTargetDensity(target)
     normal_map = PolynomialMap(ndim, order, reference, rectifier)
-    normal_result = optimize!(normal_map, maptarget, quadrature)
+    optimize!(normal_map, maptarget, quadrature)
 
     return TransportMapDistribution(normal_map)
 end
@@ -228,13 +228,13 @@ function _adaptive_distribution_from_samples(samples::Matrix{Float64}, max_compo
 
     if use_linear_map
         lmap = LinearMap(samples)
-        M, results, selected_terms, selected_folds = optimize_adaptive_transportmap(
+        M, _ = optimize_adaptive_transportmap(
             samples, max_components, k_folds, lmap, rectifier
         )
         return TransportMapDistribution(M)
     else
-        lmap = LinearMap(size(samples, 2)) #!TODO: Check which dimension
-        M, results, selected_terms, selected_folds = optimize_adaptive_transportmap(
+        lmap = LinearMap(size(samples, 2))
+        M, _ = optimize_adaptive_transportmap(
             samples, max_components, k_folds, lmap, rectifier
         )
         return TransportMapDistribution(M)
@@ -245,7 +245,7 @@ function _adaptive_distribution_from_target(target::Function, quadrature::Abstra
 
     maptarget = MapTargetDensity(target)
 
-    T, hist = optimize_adaptive_transportmap(
+    T, _ = optimize_adaptive_transportmap(
         maptarget, quadrature, n_terms;
         rectifier = rectifier,
         validation = validation
@@ -301,10 +301,10 @@ function _validate_distribution_map(map::ComposedMap)
     return nothing
 end
 
-_validate_distribution_layer(map::Union{PolynomialMap, LinearMap, LaplaceMap}, dim) =
+_validate_distribution_layer(map::Union{PolynomialMap, LinearMap, LaplaceMap}, ::Int) =
     _validate_distribution_map(map)
 
-function _validate_distribution_layer(map::AbstractTransportMap, dim)
+function _validate_distribution_layer(map::AbstractTransportMap, dim::Int)
     point = zeros(dim)
     applicable(evaluate, map, point) && applicable(inverse, map, point) ||
         throw(ArgumentError("Distribution layers must implement evaluate and inverse"))
