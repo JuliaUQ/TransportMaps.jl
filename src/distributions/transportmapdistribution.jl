@@ -121,6 +121,9 @@ function TransportMapDistribution(samples::Matrix{Float64}, order::Union{Int, Ve
     ndim = size(samples, 2) #!TODO: Check which dimension
 
     if adaptive
+        if reference != Normal()
+            @warn "Reference distribution is ignored for adaptive map construction. Using standard normal reference."
+        end
         if isa(order, Int) && ndim > 1
             order = fill(order, size(samples, 2))
             @warn "Adaptive map construction requires a vector of maximum components for each dimension; using $order for all dimensions."
@@ -181,6 +184,9 @@ See also: [`TransportMapDistribution(::Matrix{Float64}, ::Union{Int, Vector{Int}
 function TransportMapDistribution(target::Function, quadrature::AbstractQuadratureWeights, order::Int, adaptive::Bool = true; rectifier::AbstractRectifierFunction = Softplus(), validation::AbstractQuadratureWeights = quadrature, reference::UnivariateDistribution = Normal())
 
     if adaptive
+        if reference != Normal()
+            @warn "Reference distribution is ignored for adaptive map construction. Using standard normal reference."
+        end
         return _adaptive_distribution_from_target(target, quadrature, order, rectifier, validation)
     else
         return _basic_distribution_from_target(target, quadrature, order, reference, rectifier)
