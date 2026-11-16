@@ -76,16 +76,16 @@ When the target density is available, use quadrature-based fitting:
 ==#
 
 logtarget(x) = logpdf(Normal(), x[1]) + logpdf(Normal(), x[2] - x[1]^3)
-quadr = SparseSmolyakWeights(3, 2)
+quadr = LatinHypercubeWeights(1000, 2)
 
 d_density_adaptive = TransportMapDistribution(
     logtarget,
     quadr,
-    27,    # Target number of polynomial terms
+    27,   # Target number of polynomial terms
     true  # Use adaptive term selection
 )
 
-println("\nDensity-based distribution created")
+println("Density-based distribution created")
 println("  Mean: ", mean(d_density_adaptive))
 println("  Std:  ", std(d_density_adaptive))
 
@@ -100,9 +100,9 @@ Both distributions provide the same interface for downstream tasks.
 # ### Sampling from the fitted distribution
 
 samples_from_fit = rand(d_samples_adaptive, 1000)
-println("\nGenerated 1000 samples from fitted distribution")
-println("  Empirical mean: ", vec(mean(samples_from_fit; dims = 1)))
-println("  Empirical std:  ", vec(std(samples_from_fit; dims = 1)))
+println("Generated 1000 samples from fitted distribution")
+println("  Empirical mean: ", vec(mean(samples_from_fit; dims = 2)))
+println("  Empirical std:  ", vec(std(samples_from_fit; dims = 2)))
 
 # ### Density evaluation
 
@@ -112,21 +112,21 @@ log_dens_target = logpdf(d_density_adaptive, test_point)
 dens_samples = pdf(d_samples_adaptive, test_point)
 dens_target = pdf(d_density_adaptive, test_point)
 
-println("\nDensity evaluation at $test_point:")
+println("Density evaluation at $test_point:")
 println("  From samples: pdf=$(dens_samples), logpdf=$(log_dens_samples)")
 println("  From target:  pdf=$(dens_target), logpdf=$(log_dens_target)")
 
 # ### Compare against true target
 
 true_log_density = logtarget(test_point)
-println("\n  True logtarget: $true_log_density")
+println("  True logtarget: $true_log_density")
 
 # ### Statistics via quadrature
 
-println("\nStatistics from samples-based distribution:")
+println("Statistics from samples-based distribution:")
 println("  Covariance matrix:\n", cov(d_samples_adaptive))
 println("  Entropy: ", entropy(d_samples_adaptive))
 
-println("\nStatistics from density-based distribution:")
+println("Statistics from density-based distribution:")
 println("  Covariance matrix:\n", cov(d_density_adaptive))
 println("  Entropy: ", entropy(d_density_adaptive))
