@@ -292,13 +292,7 @@ function _validate_distribution_map(map::ComposedMap)
     else
         throw(ArgumentError("TransportMapDistribution requires a sampleable continuous product or multivariate reference"))
     end
-    for layer in map.layers
-        numberdimensions(layer) == numberdimensions(map) ||
-            (layer isa LinearMap && numberdimensions(layer) == 0) ||
-            throw(DimensionMismatch("Composed map dimensions must agree"))
-        _validate_distribution_layer(layer, numberdimensions(map))
-    end
-    return nothing
+    return _validate_distribution_layers(map, numberdimensions(map))
 end
 
 function _validate_distribution_map(map::InverseMap)
@@ -308,6 +302,22 @@ end
 
 _validate_distribution_layer(map::Union{PolynomialMap, LinearMap, LaplaceMap}, ::Int) =
     _validate_distribution_map(map)
+
+_validate_distribution_layer(map::InverseMap, dim::Int) =
+    _validate_distribution_layer(map.map, dim)
+
+_validate_distribution_layer(map::ComposedMap, dim::Int) =
+    _validate_distribution_layers(map, dim)
+
+function _validate_distribution_layers(map::ComposedMap, dim::Int)
+    for layer in map.layers
+        numberdimensions(layer) == dim ||
+            (layer isa LinearMap && numberdimensions(layer) == 0) ||
+            throw(DimensionMismatch("Composed map dimensions must agree"))
+        _validate_distribution_layer(layer, dim)
+    end
+    return nothing
+end
 
 function _validate_distribution_layer(map::AbstractTransportMap, dim::Int)
     point = zeros(dim)

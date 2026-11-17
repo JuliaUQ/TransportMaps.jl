@@ -128,6 +128,8 @@ end
     @test CtimesCinv(samples) ≈ samples
     @test all(isapprox(pdf(C_distr, permutedims(pushed_samples)), pullback(Cinv, target, samples); atol = 1.0e-2))
     @test all(isapprox(logpdf(C_distr, permutedims(pushed_samples)), logpullback(Cinv, target, samples); atol = 1.0e0))
+    @test all(isapprox(pdf(C_distr, permutedims(pushed_samples)), pushforward(Cinv, pushed_samples); atol = 1.0e-2))
+    @test all(isapprox(logpdf(C_distr, permutedims(pushed_samples)), logpushforward(Cinv, pushed_samples); atol = 1.0e-2))
 end
 
 @testitem "InverseMapFromSamples" setup = [InverseMapSetup] begin

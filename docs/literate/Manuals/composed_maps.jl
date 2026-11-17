@@ -211,6 +211,11 @@ C_with_reference = ComposedMap(
 #md nothing # hide
 
 # To calculate the density or log-density of a map, create a [`TransportMapDistribution`](@ref) from the composition. Its `pdf` and `logpdf` evaluate the target-density approximation at target coordinates. The Jacobian determinant is included automatically.
+#
+# When density evaluation inverts a bounded polynomial or marginal layer,
+# points outside its image have zero density, including through inverse wrappers.
+# Distribution construction also validates wrapped layers, such as rejecting
+# a linear map with a zero scale.
 
 map_distribution = TransportMapDistribution(C)
 density = pdf(map_distribution, x)

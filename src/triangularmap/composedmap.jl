@@ -246,6 +246,15 @@ function _inverse_logabsdet(C::ComposedMap, x)
     return x, logdet
 end
 
+function _evaluate_logabsdet(M::InverseMap, x::AbstractVector{<:Real})
+    z, logdet = _inverse_logabsdet(M.map, x)
+    z === nothing && throw(DomainError(x, "Point is outside the wrapped map's image"))
+    return z, logdet
+end
+
+_inverse_logabsdet(M::InverseMap, x::AbstractVector{<:Real}) =
+    _evaluate_logabsdet(M.map, x)
+
 function _composition_reference_point(reference::MapReferenceDensity, z)
     marginal = reference.densitytype
     all(value -> _reference_insupport(marginal, value), z) || return nothing

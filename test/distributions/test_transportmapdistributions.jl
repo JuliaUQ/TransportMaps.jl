@@ -423,6 +423,18 @@ end
     @test logpdf(reverse, [0.4]) ≈ 0.0
     @test logpdf(reverse, [-0.1]) == -Inf
     @test !insupport(reverse, [1.1])
+
+    marginal = MarginalMap([Uniform(-2.0, 4.0)])
+    inverse_distribution = TransportMapDistribution(ComposedMap(inv(marginal)))
+    @test logpdf(inverse_distribution, [0.5]) ≈ logpdf(Uniform(-2.0, 4.0), 0.5)
+    for x in ([-3.0], [-2.0], [4.0], [5.0])
+        @test !insupport(inverse_distribution, x)
+        @test logpdf(inverse_distribution, x) == -Inf
+    end
+    target_distribution = TransportMapDistribution(
+        ComposedMap(inv(marginal); forwarddirection = :target, reference = Uniform(-2.0, 4.0)),
+    )
+    @test logpdf(target_distribution, [0.5]) ≈ logpdf(Normal(), 0.5)
 end
 
 @testitem "ComposedMap distribution validates layers and references" setup = [TransportMapDistributionSetup] begin
@@ -453,6 +465,30 @@ end
     @test insupport(d, [0.25])
     @test !insupport(d, [10.0])
     @test logpdf(d, [10.0]) == -Inf
+
+    for map in (bounded, ComposedMap(bounded))
+        inverse_distribution = TransportMapDistribution(ComposedMap(inv(map)))
+        @test logpdf(inverse_distribution, [0.25]) ≈ logpdf(d, [0.25])
+        @test insupport(inverse_distribution, [0.25])
+        @test !insupport(inverse_distribution, [10.0])
+        @test logpdf(inverse_distribution, [10.0]) == -Inf
+        @test pdf(inverse_distribution, [10.0]) == 0.0
+        batch = logpdf(inverse_distribution, [0.25 10.0])
+        @test batch[1] ≈ logpdf(d, [0.25])
+        @test batch[2] == -Inf
+    end
+
+    invalid_linear = LinearMap([0.0], [0.0])
+    for map in (inv(invalid_linear), inv(ComposedMap(invalid_linear)), InverseMap(InverseMap(invalid_linear)))
+        @test_throws ArgumentError TransportMapDistribution(ComposedMap(map))
+    end
+    invalid_laplace = LaplaceMap(reshape([-1.0, 0.0, 1.0], :, 1))
+    invalid_laplace.chol[1, 1] = 0.0
+    @test_throws ArgumentError TransportMapDistribution(ComposedMap(inv(invalid_laplace)))
+
+    inner = ComposedMap(LinearMap([1.0], [2.0]); reference = MapTargetDensity(x -> -sum(abs2, x)))
+    outer = TransportMapDistribution(ComposedMap(inv(inner); reference = Normal()))
+    @test logpdf(outer, [1.6]) ≈ logpdf(Normal(1.0, 2.0), 1.6)
 end
 
 @testitem "Distributions interface uses column batches" setup = [TransportMapDistributionSetup] begin
