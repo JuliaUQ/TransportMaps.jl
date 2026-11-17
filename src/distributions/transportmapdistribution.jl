@@ -301,6 +301,11 @@ function _validate_distribution_map(map::ComposedMap)
     return nothing
 end
 
+function _validate_distribution_map(map::InverseMap)
+    throw(ArgumentError("Distributions are not implemented for InverseMaps"))
+    return nothing
+end
+
 _validate_distribution_layer(map::Union{PolynomialMap, LinearMap, LaplaceMap}, ::Int) =
     _validate_distribution_map(map)
 
