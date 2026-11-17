@@ -47,6 +47,7 @@ end
 
 _reference_marginal(::AbstractLinearMap) = Normal()
 _map_direction(::AbstractLinearMap) = :reference
+forwarddirection(L::AbstractLinearMap) = _map_direction(L)
 
 function logabsdetjacobian(L::LinearMap, x::AbstractVector{<:Real})
     @assert numberdimensions(L) == 0 || length(x) == numberdimensions(L) "Input dimension must match the map"

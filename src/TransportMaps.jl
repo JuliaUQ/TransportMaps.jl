@@ -72,6 +72,7 @@ export HyperbolicMap
 export gradient_coefficients
 export gradient_z
 export gradient_zk
+export forwarddirection
 export jacobian
 export logabsdetjacobian
 export inverse

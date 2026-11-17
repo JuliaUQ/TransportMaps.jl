@@ -65,8 +65,13 @@ ComposedMap(maps...; kwargs...) = ComposedMap(maps; kwargs...)
 function _composition_direction(layers)
     direction = nothing
     for layer in layers
-        hasproperty(layer, :forwarddirection) || continue
-        next = layer.forwarddirection
+        if !(layer isa Union{AbstractLinearMap, InverseMap}) && applicable(forwarddirection, layer)
+            next = forwarddirection(layer)
+        elseif hasproperty(layer, :forwarddirection)
+            next = layer.forwarddirection
+        else
+            continue
+        end
         next in (:reference, :target) || throw(ArgumentError("Invalid layer forwarddirection"))
         direction === nothing || direction === next ||
             throw(ArgumentError("Layers have mixed directions; specify the composition's forwarddirection explicitly"))
@@ -76,16 +81,8 @@ function _composition_direction(layers)
 
     for layer in layers
         layer isa InverseMap || continue
-        map = layer.map
-        if hasproperty(map, :forwarddirection)
-            original = map.forwarddirection
-        elseif applicable(_map_direction, map)
-            original = _map_direction(map)
-        else
-            continue
-        end
-        original in (:reference, :target) || throw(ArgumentError("Invalid layer forwarddirection"))
-        next = original === :reference ? :target : :reference
+        _has_forwarddirection(layer) || continue
+        next = forwarddirection(layer)
         direction === nothing || direction === next ||
             throw(ArgumentError("Layers have mixed directions; specify the composition's forwarddirection explicitly"))
         direction = next
@@ -122,6 +119,7 @@ end
 
 numberdimensions(C::ComposedMap) = maximum(numberdimensions, C.layers)
 _map_direction(C::ComposedMap) = C.forwarddirection
+forwarddirection(C::ComposedMap) = _map_direction(C)
 
 function _reference_marginal(C::ComposedMap)
     C.reference isa MapReferenceDensity && return C.reference.densitytype

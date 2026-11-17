@@ -3,6 +3,52 @@
     using Distributions
 end
 
+@testsnippet DirectionMapSetup begin
+    using TransportMaps
+
+    struct DirectionalTestMap <: AbstractTransportMap end
+    TransportMaps.numberdimensions(::DirectionalTestMap) = 1
+    TransportMaps.forwarddirection(::DirectionalTestMap) = :target
+
+    struct UnknownDirectionTestMap <: AbstractTransportMap end
+    TransportMaps.numberdimensions(::UnknownDirectionTestMap) = 1
+end
+
+@testitem "Map forward directions" setup = [InverseMapSetup, DirectionMapSetup] begin
+    L = LinearMap([1.0], [2.0])
+    laplace = LaplaceMap(reshape([-1.0, 0.0, 2.0], :, 1))
+    marginal = MarginalMap([Normal(1.0, 2.0)])
+    M = PolynomialMap(1, 1)
+
+    @test forwarddirection(L) === :reference
+    @test forwarddirection(laplace) === :reference
+    @test forwarddirection(marginal) === :target
+    @test forwarddirection(M) === :target
+    @test forwarddirection(inv(L)) === :target
+    @test forwarddirection(inv(laplace)) === :target
+    @test forwarddirection(inv(marginal)) === :reference
+
+    inverse_M = inv(M)
+    C = ComposedMap(inverse_M)
+    @test forwarddirection(inverse_M) === :reference
+    @test forwarddirection(C) === :reference
+    M.forwarddirection = :reference
+    @test forwarddirection(inverse_M) === :target
+    @test forwarddirection(C) === :reference
+
+    custom = DirectionalTestMap()
+    @test forwarddirection(inv(custom)) === :reference
+    @test forwarddirection(ComposedMap(custom)) === :target
+    @test forwarddirection(ComposedMap(inv(custom))) === :reference
+    unknown = UnknownDirectionTestMap()
+    @test_throws ArgumentError forwarddirection(inv(unknown))
+    @test forwarddirection(ComposedMap(inv(unknown))) === :reference
+    @test forwarddirection(ComposedMap(InverseMap(inv(unknown)))) === :reference
+
+    M.forwarddirection = :unknown
+    @test_throws ArgumentError forwarddirection(inverse_M)
+end
+
 @testitem "InverseMap nonlinear Jacobian" setup = [InverseMapSetup] begin
     using LinearAlgebra
 

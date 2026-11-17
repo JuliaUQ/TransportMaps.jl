@@ -184,6 +184,11 @@ parameters = evaluate(physical_map, [0.0, 0.0])
 # - `:reference`: target to reference; sampling uses `inverse`.
 # - `:target`: reference to target; sampling uses `evaluate`.
 #
+# Use `forwarddirection(map)` to inspect a map's direction, including fixed
+# linear maps and inverse wrappers. It describes `evaluate` and does not
+# change the transformation. An inverse wrapper reports the opposite
+# direction of its wrapped map.
+#
 # The keyword does not reverse any layer. If omitted, directions are inferred
 # from layer metadata and must agree. If no layer supplies a direction, inverse
 # layers supply the opposite of their wrapped maps' direction; other linear-only

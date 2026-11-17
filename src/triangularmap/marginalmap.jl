@@ -39,6 +39,7 @@ end
 numberdimensions(P::MarginalMap) = length(P.marginals)
 _reference_marginal(P::MarginalMap) = P.reference.densitytype
 _map_direction(::MarginalMap) = :target
+forwarddirection(P::MarginalMap) = _map_direction(P)
 logpullback(P::MarginalMap, x::AbstractVector{<:Real}) = logpdf(P, x)
 logpullback(P::MarginalMap, X::AbstractMatrix{<:Real}) = logpdf(P, X)
 

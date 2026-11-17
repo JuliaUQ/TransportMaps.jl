@@ -32,6 +32,26 @@ Base.inv(map::AbstractTransportMap) = InverseMap(map)
 Base.inv(map::InverseMap) = map.map
 Base.literal_pow(::typeof(^), map::AbstractTransportMap, ::Val{-1}) = inv(map)
 
+_has_forwarddirection(map::AbstractTransportMap) =
+    applicable(forwarddirection, map) || hasproperty(map, :forwarddirection) ||
+    applicable(_map_direction, map)
+_has_forwarddirection(map::InverseMap) = _has_forwarddirection(map.map)
+
+function forwarddirection(map::InverseMap)
+    wrapped = map.map
+    if applicable(forwarddirection, wrapped)
+        direction = forwarddirection(wrapped)
+    elseif hasproperty(wrapped, :forwarddirection)
+        direction = wrapped.forwarddirection
+    elseif applicable(_map_direction, wrapped)
+        direction = _map_direction(wrapped)
+    else
+        throw(ArgumentError("Direction is not defined for $(typeof(wrapped))"))
+    end
+    direction in (:reference, :target) || throw(ArgumentError("Invalid map direction"))
+    return direction === :reference ? :target : :reference
+end
+
 numberdimensions(map::InverseMap) = numberdimensions(map.map)
 
 evaluate(map::InverseMap, x::AbstractVecOrMat{<:Real}) =
