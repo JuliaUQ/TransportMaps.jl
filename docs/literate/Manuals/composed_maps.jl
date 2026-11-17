@@ -185,14 +185,18 @@ parameters = evaluate(physical_map, [0.0, 0.0])
 # - `:target`: reference to target; sampling uses `evaluate`.
 #
 # The keyword does not reverse any layer. If omitted, directions are inferred
-# from layer metadata and must agree; linear-only chains default to `:reference`.
+# from layer metadata and must agree. If no layer supplies a direction, inverse
+# layers supply the opposite of their wrapped maps' direction; other linear-only
+# chains default to `:reference`.
 # This also applies to `∘`; composing maps with conflicting directions requires
 # an explicit `ComposedMap` constructor with a `forwarddirection` keyword.
 #
 # The reference density is taken from the last layer with reference metadata
-# for `:reference`, or the first such layer for `:target`. Linear-only chains
-# use a product standard normal. These settings are fixed at construction;
-# later changes to a layer's direction or reference do not affect the composition.
+# for `:reference`, or the first such layer for `:target`. If no layer supplies
+# a reference, inverse layers can supply their wrapped maps' reference.
+# Linear-only chains use a product standard normal. These settings are fixed
+# at construction; later changes to a layer's direction or reference do not
+# affect the composition.
 # Set the reference explicitly when needed:
 
 C_with_reference = ComposedMap(

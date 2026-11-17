@@ -1,3 +1,29 @@
+"""
+    InverseMap(map::AbstractTransportMap)
+    inv(map::AbstractTransportMap)
+    map^-1
+
+Wrap a transport map so that its inverse is evaluated as the forward map.
+For `I = inv(map)`, `evaluate(I, x)` calls `inverse(map, x)`, and
+`inverse(I, x)` calls `evaluate(map, x)`. Vectors represent single points;
+matrix inputs contain points in rows.
+
+The wrapper shares the original map rather than copying it, and `inv(I)`
+returns that map. Inversion inherits its domain restrictions and numerical
+accuracy. Point-dependent Jacobian methods use the inverse transformation's
+determinant.
+
+An `InverseMap` can be used as a layer in a [`ComposedMap`](@ref), but cannot
+currently be wrapped directly in a `TransportMapDistribution`.
+
+# Example
+```julia
+L = LinearMap([1.0], [2.0])
+I = L^-1
+evaluate(I, [0.5])  # [2.0]
+inv(I) === L         # true
+```
+"""
 struct InverseMap{T <: AbstractTransportMap} <: AbstractTransportMap
     map::T
 end
@@ -43,14 +69,8 @@ logpushforward(map::InverseMap, X::AbstractMatrix{<:Real}) =
 pushforward(map::InverseMap, x::AbstractVecOrMat{<:Real}) =
     pullback(map.map, x)
 
-pushforward!(map::InverseMap, x::AbstractVecOrMat{<:Real}) =
-    pullback!(map.map, x)
-
 pullback(map::InverseMap, density::MapTargetDensity, x::AbstractVecOrMat{<:Real}) =
     pushforward(map.map, density, x)
-
-pullback!(map::InverseMap, density::MapTargetDensity, x::AbstractVecOrMat{<:Real}) =
-    pushforward!(map.map, density, x)
 
 (map::InverseMap)(x::AbstractVecOrMat{<:Real}) = evaluate(map, x)
 

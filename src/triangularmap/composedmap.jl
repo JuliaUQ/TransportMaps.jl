@@ -13,12 +13,14 @@ compatible supports.
 
 `forwarddirection` is `:reference` (target -> reference) or `:target`
 (reference -> target). `:auto` infers a common direction from supplied maps,
-defaulting to `:reference` when none provide one.
+using the opposite direction of inverse layers when no other layer provides
+one, and defaulting to `:reference` otherwise.
 
 `reference` defaults to the last supplied reference for `:reference`, or the
-first for `:target`, falling back to a product standard normal. A univariate
-distribution defines a product reference. Direction and reference are fixed
-at construction.
+first for `:target`. If none is supplied, inverse layers can provide their
+wrapped maps' reference; otherwise it falls back to a product standard normal.
+A univariate distribution defines a product reference. Direction and reference
+are fixed at construction.
 """
 struct ComposedMap <: AbstractComposedMap
     layers::Vector{AbstractTransportMap}
@@ -70,6 +72,24 @@ function _composition_direction(layers)
             throw(ArgumentError("Layers have mixed directions; specify the composition's forwarddirection explicitly"))
         direction = next
     end
+    direction === nothing || return direction
+
+    for layer in layers
+        layer isa InverseMap || continue
+        map = layer.map
+        if hasproperty(map, :forwarddirection)
+            original = map.forwarddirection
+        elseif applicable(_map_direction, map)
+            original = _map_direction(map)
+        else
+            continue
+        end
+        original in (:reference, :target) || throw(ArgumentError("Invalid layer forwarddirection"))
+        next = original === :reference ? :target : :reference
+        direction === nothing || direction === next ||
+            throw(ArgumentError("Layers have mixed directions; specify the composition's forwarddirection explicitly"))
+        direction = next
+    end
     return isnothing(direction) ? :reference : direction
 end
 
@@ -77,6 +97,9 @@ function _composition_reference(layers, direction)
     candidates = direction === :reference ? Iterators.reverse(layers) : layers
     for layer in candidates
         hasproperty(layer, :reference) && return layer.reference
+    end
+    for layer in candidates
+        layer isa InverseMap && hasproperty(layer.map, :reference) && return layer.map.reference
     end
     return MapReferenceDensity()
 end
