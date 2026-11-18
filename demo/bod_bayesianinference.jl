@@ -37,7 +37,7 @@ M = PolynomialMap(2, 3, Normal(), Softplus(), LinearizedHermiteBasis())
 quadrature = GaussHermiteWeights(3, M)
 res = optimize!(M, target, quadrature)
 println("Optimization result: ", res)
-posterior_map = ComposedMap(M, prior_map; forwarddirection = :target)
+posterior_map = prior_map ∘ M
 
 samples_z = randn(1000, 2)
 mapped_samples = evaluate(posterior_map, samples_z)

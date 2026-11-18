@@ -113,9 +113,7 @@ function assimilate_observation(
     )
 
     ## The new correction acts first in evaluation order.
-    posterior = ComposedMap(
-        correction, previous; forwarddirection = :target,
-    )
+    posterior = previous ∘ correction
     return posterior, result
 end
 #md nothing # hide

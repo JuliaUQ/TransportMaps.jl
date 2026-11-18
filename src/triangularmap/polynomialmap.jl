@@ -52,6 +52,19 @@ end
 _reference_marginal(M::PolynomialMap) = M.reference.densitytype
 _map_direction(M::PolynomialMap) = M.forwarddirection
 
+"""
+    forwarddirection(map::AbstractTransportMap)
+
+Return the direction of `evaluate(map, x)`: `:target` for reference to target,
+or `:reference` for target to reference. This describes the map's existing
+transformation; it does not change it.
+
+An inverse map reports the opposite direction of its wrapped map. A composed
+map reports the direction resolved when it was constructed. Custom maps can
+implement this function to provide their direction.
+"""
+forwarddirection(M::PolynomialMap) = _map_direction(M)
+
 _default_basis(::Normal) = LinearizedHermiteBasis()
 
 function _default_basis(reference::Uniform)
