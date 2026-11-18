@@ -709,6 +709,43 @@ end
     end
 end
 
+@testitem "Guarded inversion at extreme scales" setup = [TransportMapDistributionSetup] begin
+    using Logging
+
+    @testset "Small residuals and reference coordinates" begin
+        for (scale, reference, target) in (
+                (1.0e-20, Normal(), 5.0e-21),
+                (1.0e200, Normal(0.0, 1.0e-200), 1.0),
+            )
+            pm = PolynomialMap(1, 1, reference, IdentityRectifier(), HermiteBasis())
+            setcoefficients!(pm, [0.0, scale])
+            expected = [target / scale]
+            reference_point = @test_logs min_level = Logging.Warn TransportMaps._reference_point_in_support(pm, [target])
+            @test reference_point ≈ expected rtol = 1.0e-14 atol = 0.0
+            expected_logpdf = logpdf(reference, only(expected)) - log(scale)
+            @test logpullback(pm, [target]) ≈ expected_logpdf atol = 1.0e-12
+            @test logpdf(TransportMapDistribution(pm), [target]) ≈ expected_logpdf atol = 1.0e-12
+
+            # Polynomial layers in a composition use the same guarded inverse.
+            composed = ComposedMap(LinearMap(1), pm; reference = reference, forwarddirection = :target)
+            @test logpdf(TransportMapDistribution(composed), [target]) ≈ expected_logpdf atol = 1.0e-12
+        end
+    end
+
+    @testset "Asymmetric endpoint residuals" begin
+        for sign in (-1.0, 1.0)
+            pm = PolynomialMap(1, 2, Uniform(-1.0, 1.0), ExpRectifier(), LegendreBasis())
+            setcoefficients!(pm, sign .* [25 / 3, 0.0, 50 / 3])
+            # M(0) = 0, while one endpoint has an output of order 1e20.
+            # Its residual must not make the opposite endpoint look like a root.
+            @test evaluate(pm, [0.0]) == [0.0]
+            @test TransportMaps._reference_point_in_support(pm, [0.0]) == [0.0]
+            @test logpullback(pm, [0.0]) ≈ -log(2.0) atol = 1.0e-12
+            @test logpdf(TransportMapDistribution(pm), [0.0]) ≈ -log(2.0) atol = 1.0e-12
+        end
+    end
+end
+
 @testitem "BOD posterior density inversion" setup = [TransportMapDistributionSetup] begin
     using Logging
 

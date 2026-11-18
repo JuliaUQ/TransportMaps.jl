@@ -32,6 +32,7 @@ function hybridrootfinder(
         lower::Real,
         upper::Real;
         xtol::Real = 1.0e-6,
+        xrtol::Real = 0.0,
         ftol::Real = 1.0e-6,
         maxiter::Int = 10_000
     )
@@ -42,7 +43,10 @@ function hybridrootfinder(
     # at an exact root). Avoid another residual/derivative pair in that case.
     abs(fx) <= ftol && return x, fx, dfx
     newton_step = fx / dfx
-    isfinite(dfx) && !iszero(dfx) && abs(newton_step) <= xtol && return x, fx, dfx
+    # Relative positional accuracy must follow the current iterate rather than
+    # the initial bracket, which may be much larger than the root.
+    isfinite(dfx) && !iszero(dfx) && abs(newton_step) <= max(xtol, xrtol * abs(x)) &&
+        return x, fx, dfx
     previous_step = upper - lower
 
     for _ in 1:maxiter
@@ -58,7 +62,10 @@ function hybridrootfinder(
         # A residual may stop improving at round-off accuracy. Once the bracket
         # is sufficiently narrow, or has no representable interior point, more
         # iterations cannot improve the root's positional accuracy.
-        (upper - lower <= xtol || midpoint == lower || midpoint == upper) &&
+        (
+            upper - lower <= max(xtol, xrtol * max(abs(lower), abs(upper))) ||
+                midpoint == lower || midpoint == upper
+        ) &&
             return x, fx, dfx
 
         # Keep endpoint roots reachable, but bisect if Newton leaves the
@@ -74,7 +81,7 @@ function hybridrootfinder(
         abs(fx) <= ftol && return x, fx, dfx
         newton_step = fx / dfx
 
-        if isfinite(dfx) && !iszero(dfx) && abs(newton_step) <= xtol
+        if isfinite(dfx) && !iszero(dfx) && abs(newton_step) <= max(xtol, xrtol * abs(x))
             return x, fx, dfx
         end
     end
