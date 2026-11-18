@@ -1,6 +1,7 @@
 @testsnippet InverseMapSetup begin
     using TransportMaps
     using Distributions
+    using Random
 end
 
 @testsnippet DirectionMapSetup begin
@@ -117,49 +118,55 @@ end
 
     CtimesCinv = C ∘ Cinv
 
-    samples = permutedims(rand(MvNormal([0.0, 0.0], [1.0 0.0; 0.0 1.0]), 100))
+    samples = permutedims(rand(Xoshiro(123), MvNormal([0.0, 0.0], [1.0 0.0; 0.0 1.0]), 100))
     pushed_samples = C(samples)
 
     C_distr = TransportMapDistribution(C)
+
+    reference = MvNormal([0.0, 0.0], [1.0 0.0; 0.0 1.0])
 
     @test_throws(ArgumentError, TransportMapDistribution(Cinv))
     @test CCinv === C
     @test Cinv(C(samples)) ≈ samples
     @test CtimesCinv(samples) ≈ samples
-    @test all(isapprox(pdf(C_distr, permutedims(pushed_samples)), pullback(Cinv, target, samples); atol = 1.0e-2))
-    @test all(isapprox(logpdf(C_distr, permutedims(pushed_samples)), logpullback(Cinv, target, samples); atol = 1.0e0))
-    @test all(isapprox(pdf(C_distr, permutedims(pushed_samples)), pushforward(Cinv, pushed_samples); atol = 1.0e-2))
-    @test all(isapprox(logpdf(C_distr, permutedims(pushed_samples)), logpushforward(Cinv, pushed_samples); atol = 1.0e-2))
+    @test all(isapprox.(pdf(reference, permutedims(samples)), pullback(Cinv, target, samples); atol = 1.0e-2))
+    @test all(isapprox.(logpdf(reference, permutedims(samples)), logpullback(Cinv, target, samples); atol = 1.0))
+    @test all(isapprox.(pdf(C_distr, permutedims(pushed_samples)), pushforward(Cinv, pushed_samples); atol = 1.0e-2))
+    @test all(isapprox.(logpdf(C_distr, permutedims(pushed_samples)), logpushforward(Cinv, pushed_samples); atol = 1.0e-2))
 end
 
 @testitem "InverseMapFromSamples" setup = [InverseMapSetup] begin
 
     function generate_banana_samples(number_samples)
-        latent_samples = randn(number_samples, 2)
+        latent_samples = randn(Xoshiro(123), number_samples, 2)
         return hcat(
             latent_samples[:, 1],
             latent_samples[:, 1] .^ 3 .+ latent_samples[:, 2],
         )
     end
 
-    samples = generate_banana_samples(1000)
+    banana_samples = generate_banana_samples(1000)
 
     M = PolynomialMap(2, 2)
-    L = LaplaceMap(samples)
+    L = LaplaceMap(banana_samples)
 
-    optimize!(M, L(samples))
+    optimize!(M, L(banana_samples))
 
     C = M ∘ L
     Cinv = C^-1
 
     Cdensity = TransportMapDistribution(C)
+    target = MapTargetDensity(x -> logpdf(Cdensity, x))
 
-    mapped = C(samples)
+    mapped = C(banana_samples)
     inv_mapped = inv(C)(mapped)
 
+    reference = MvNormal([0.0, 0.0], [1.0 0.0; 0.0 1.0])
+
     @test_throws(ArgumentError, TransportMapDistribution(Cinv))
-    @test mean(inv_mapped) .≈ mean(samples) atol = 1.0e-1
-    @test all(isapprox(cov(inv_mapped), cov(samples); atol = 1.0e-1))
-    @test all(isapprox(pdf(Cdensity, permutedims(samples)), pushforward(Cinv, samples); atol = 1.0e-2))
-    @test all(isapprox(logpdf(Cdensity, permutedims(samples)), logpushforward(Cinv, samples); atol = 1.0e-2))
+    @test all(isapprox.(inv_mapped, banana_samples; atol = 1.0e-1))
+    @test all(isapprox.(pdf(reference, permutedims(mapped)), pullback(Cinv, target, mapped); atol = 1.0e-2))
+    @test all(isapprox.(logpdf(reference, permutedims(mapped)), logpullback(Cinv, target, mapped); atol = 1.0e-2))
+    @test all(isapprox(pdf(Cdensity, permutedims(banana_samples)), pushforward(Cinv, banana_samples); atol = 1.0e-2))
+    @test all(isapprox(logpdf(Cdensity, permutedims(banana_samples)), logpushforward(Cinv, banana_samples); atol = 1.0e-2))
 end
