@@ -72,6 +72,7 @@ export HyperbolicMap
 export gradient_coefficients
 export gradient_z
 export gradient_zk
+export forwarddirection
 export jacobian
 export logabsdetjacobian
 export inverse
@@ -129,6 +130,7 @@ export ComposedMap
 export MarginalMap
 export PolynomialMapComponent
 export PolynomialMap
+export InverseMap
 export Softplus
 export ShiftedELU
 export MapTargetDensity
@@ -180,6 +182,7 @@ include("triangularmap/polynomialmap.jl")
 include("triangularmap/conditionaldensities.jl")
 include("triangularmap/linearmap.jl")
 include("triangularmap/laplacemap.jl")
+include("triangularmap/inversemap.jl")
 include("triangularmap/composedmap.jl")
 include("triangularmap/marginalmap.jl")
 

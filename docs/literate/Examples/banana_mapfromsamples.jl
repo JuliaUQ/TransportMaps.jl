@@ -55,11 +55,12 @@ linear_map = LinearMap(target_samples)
 # Sample-based construction fits a forward map ``S: \boldsymbol{X} \mapsto \boldsymbol{Z}``
 # Hence, [`evaluate`](@ref) maps target samples to the reference, while [`inverse`](@ref)
 # generates target samples from the reference. The linear map standardizes the data before
-# the polynomial map is fitted.
+# the polynomial map is fitted. Compose the fitted map with this standardization
+# using `∘`, which applies the map on the right first.
 
 normal_map = PolynomialMap(2, 2, Normal(), Softplus())
 normal_result = optimize!(normal_map, target_samples, linear_map)
-normal_composed_map = ComposedMap(linear_map, normal_map)
+normal_composed_map = normal_map ∘ linear_map
 
 # To check the accuracy of the map, we generate new samples from our target, map them to the
 # reference through our map and check mean and standard-deviation:
@@ -95,7 +96,7 @@ uniform_result = optimize!(
     linear_map;
     options = Optim.Options(iterations = 120, x_abstol = 1.0e-7),
 )
-uniform_composed_map = ComposedMap(linear_map, uniform_map)
+uniform_composed_map = uniform_map ∘ linear_map
 
 # Again, we map our validation samples to the reference space and compare the moments:
 uniform_validation_samples = evaluate(uniform_composed_map, validation_samples)

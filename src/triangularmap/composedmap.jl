@@ -13,12 +13,14 @@ compatible supports.
 
 `forwarddirection` is `:reference` (target -> reference) or `:target`
 (reference -> target). `:auto` infers a common direction from supplied maps,
-defaulting to `:reference` when none provide one.
+using the opposite direction of inverse layers when no other layer provides
+one, and defaulting to `:reference` otherwise.
 
 `reference` defaults to the last supplied reference for `:reference`, or the
-first for `:target`, falling back to a product standard normal. A univariate
-distribution defines a product reference. Direction and reference are fixed
-at construction.
+first for `:target`. If none is supplied, inverse layers can provide their
+wrapped maps' reference; otherwise it falls back to a product standard normal.
+A univariate distribution defines a product reference. Direction and reference
+are fixed at construction.
 """
 struct ComposedMap <: AbstractComposedMap
     layers::Vector{AbstractTransportMap}
@@ -63,9 +65,24 @@ ComposedMap(maps...; kwargs...) = ComposedMap(maps; kwargs...)
 function _composition_direction(layers)
     direction = nothing
     for layer in layers
-        hasproperty(layer, :forwarddirection) || continue
-        next = layer.forwarddirection
+        if !(layer isa Union{AbstractLinearMap, InverseMap}) && applicable(forwarddirection, layer)
+            next = forwarddirection(layer)
+        elseif hasproperty(layer, :forwarddirection)
+            next = layer.forwarddirection
+        else
+            continue
+        end
         next in (:reference, :target) || throw(ArgumentError("Invalid layer forwarddirection"))
+        direction === nothing || direction === next ||
+            throw(ArgumentError("Layers have mixed directions; specify the composition's forwarddirection explicitly"))
+        direction = next
+    end
+    direction === nothing || return direction
+
+    for layer in layers
+        layer isa InverseMap || continue
+        _has_forwarddirection(layer) || continue
+        next = forwarddirection(layer)
         direction === nothing || direction === next ||
             throw(ArgumentError("Layers have mixed directions; specify the composition's forwarddirection explicitly"))
         direction = next
@@ -77,6 +94,9 @@ function _composition_reference(layers, direction)
     candidates = direction === :reference ? Iterators.reverse(layers) : layers
     for layer in candidates
         hasproperty(layer, :reference) && return layer.reference
+    end
+    for layer in candidates
+        layer isa InverseMap && hasproperty(layer.map, :reference) && return layer.map.reference
     end
     return MapReferenceDensity()
 end
@@ -99,6 +119,7 @@ end
 
 numberdimensions(C::ComposedMap) = maximum(numberdimensions, C.layers)
 _map_direction(C::ComposedMap) = C.forwarddirection
+forwarddirection(C::ComposedMap) = _map_direction(C)
 
 function _reference_marginal(C::ComposedMap)
     C.reference isa MapReferenceDensity && return C.reference.densitytype
@@ -225,6 +246,15 @@ function _inverse_logabsdet(C::ComposedMap, x)
     return x, logdet
 end
 
+function _evaluate_logabsdet(M::InverseMap, x::AbstractVector{<:Real})
+    z, logdet = _inverse_logabsdet(M.map, x)
+    z === nothing && throw(DomainError(x, "Point is outside the wrapped map's image"))
+    return z, logdet
+end
+
+_inverse_logabsdet(M::InverseMap, x::AbstractVector{<:Real}) =
+    _evaluate_logabsdet(M.map, x)
+
 function _composition_reference_point(reference::MapReferenceDensity, z)
     marginal = reference.densitytype
     all(value -> _reference_insupport(marginal, value), z) || return nothing
@@ -327,3 +357,16 @@ function Base.show(io::IO, ::MIME"text/plain", C::ComposedMap)
     print(io, "  forwarddirection: :", C.forwarddirection)
     return nothing
 end
+
+"""
+    ∘(A::AbstractTransportMap, B::AbstractTransportMap)
+    A ∘ B
+
+Compose transport maps by applying `B` first, then `A`, so that
+`evaluate(A ∘ B, x) = evaluate(A, evaluate(B, x))`.
+
+Return `ComposedMap(B, A)`, since [`ComposedMap`](@ref) takes layers in
+evaluation order. Thus `A ∘ B ∘ C` is equivalent to `ComposedMap(C, B, A)`.
+Use `ComposedMap` directly to specify `reference` or `forwarddirection`.
+"""
+Base.:∘(A::AbstractTransportMap, B::AbstractTransportMap) = ComposedMap(B, A)

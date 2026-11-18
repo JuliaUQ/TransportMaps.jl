@@ -17,9 +17,9 @@ support throw `DomainError`. Derivatives are defined in the interior of the supp
 target-directed composition assigns zero density outside the prior support
 and at boundaries whose inverse coordinates are infinite.
 
-After fitting `T` to the posterior in prior-reference coordinates, use
-`ComposedMap(T, P; forwarddirection=:target)` to obtain a map into physical
-posterior coordinates. The output of `T` must lie in the support of
+After fitting a target-directed `T` to the posterior in prior-reference coordinates,
+use `P ∘ T` to obtain a map into physical posterior coordinates. The output of
+`T` must lie in the support of
 `P.reference.densitytype`; polynomial corrections do not automatically preserve
 bounded supports. `MarginalMap` is a transport layer, not a distribution.
 """
@@ -39,6 +39,7 @@ end
 numberdimensions(P::MarginalMap) = length(P.marginals)
 _reference_marginal(P::MarginalMap) = P.reference.densitytype
 _map_direction(::MarginalMap) = :target
+forwarddirection(P::MarginalMap) = _map_direction(P)
 logpullback(P::MarginalMap, x::AbstractVector{<:Real}) = logpdf(P, x)
 logpullback(P::MarginalMap, X::AbstractMatrix{<:Real}) = logpdf(P, X)
 

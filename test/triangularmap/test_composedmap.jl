@@ -377,3 +377,19 @@ end
     @test_throws ArgumentError ComposedMap(left, conflicting)
     @test ComposedMap(left, conflicting; forwarddirection = :target).reference === left.reference
 end
+
+@testitem "ComposedMap composition operator" begin
+    using TransportMaps, Test
+
+    A = LinearMap([0.0], [2.0]) # A(x) = x / 2
+    B = LinearMap([1.0], [1.0]) # B(x) = x - 1
+    x = [3.0]
+
+    C = A ∘ B
+
+    @test C isa ComposedMap
+    @test C(x) ≈ [1.0]           # A(B(3)) = (3 - 1) / 2
+    @test (B ∘ A)(x) ≈ [0.5]     # B(A(3)) = 3 / 2 - 1
+    @test C(x) ≈ evaluate(A, evaluate(B, x))
+    @test inverse(C, C(x)) ≈ x
+end
