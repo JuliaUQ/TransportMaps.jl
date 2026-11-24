@@ -8,6 +8,39 @@
 
 end
 
+@testitem "Adaptive Transport Map density references" setup = [AdaptiveTransportMapDensitySetup] begin
+    target = MapTargetDensity(x -> logpdf(Normal(1, 2), x[1]))
+    for (reference, basis_type) in (
+            (Normal(2, 3), LinearizedHermiteBasis),
+            (Uniform(-1, 1), LegendreBasis),
+            (Uniform(0, 1), ShiftedLegendreBasis),
+        )
+        reference_map = PolynomialMap(1, 1, reference)
+        quadrature = reference isa Normal ? GaussHermiteWeights(8, reference_map) : GaussLegendreWeights(12, reference_map)
+        M, history = optimize_adaptive_transportmap(target, quadrature, 3; reference)
+        @test M.reference.densitytype == reference
+        @test TransportMaps.getbasis(M[1]) isa basis_type
+        @test all(map -> map.reference.densitytype == reference, history.maps)
+        @test all(isfinite, history.train_objectives)
+
+        warm_start = deepcopy(M)
+        M_warm, _ = optimize_adaptive_transportmap(
+            target, quadrature, numbercoefficients(warm_start); initial_map = warm_start,
+        )
+        @test M_warm.reference.densitytype == reference
+        @test TransportMaps.getbasis(M_warm[1]) isa basis_type
+        @test getcoefficients(warm_start) == getcoefficients(M)
+    end
+
+    quadrature = GaussHermiteWeights(5, PolynomialMap(1, 1, Normal(2, 3)))
+    M, _ = optimize_adaptive_transportmap(target, quadrature, 2; reference_density = Normal(2, 3))
+    @test M.reference.densitytype == Normal(2, 3)
+    @test_throws AssertionError optimize_adaptive_transportmap(
+        target, quadrature, 2; reference = Normal(), basis = LegendreBasis(),
+    )
+    @test_throws ArgumentError optimize_adaptive_transportmap(target, quadrature, 2; reference = Uniform(2, 3))
+end
+
 @testitem "Adaptive Transport Map from density" setup = [AdaptiveTransportMapDensitySetup] begin
 
     # Define target and quadrature

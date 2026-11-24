@@ -915,6 +915,43 @@ end
     @test length(d_validation) == 2
 end
 
+@testitem "Fitting constructors preserve reference and basis" setup = [TransportMapDistributionSetup] begin
+    samples = reshape(collect(range(-3.0, 5.0; length = 60)), :, 1)
+    reference = Normal(2, 3)
+    target(x) = logpdf(Normal(1, 2), x[1])
+    quadrature = GaussHermiteWeights(6, PolynomialMap(1, 1, reference))
+
+    for adaptive in (false, true), use_linear_map in (false, true)
+        d = TransportMapDistribution(
+            samples, 2, adaptive; reference, basis = HermiteBasis(), use_linear_map, k_folds = 2,
+        )
+        polynomial = d.map isa ComposedMap ? d.map.polynomialmap : d.map
+        @test d.map.reference.densitytype == reference
+        @test TransportMaps.getbasis(polynomial[1]) isa HermiteBasis
+        @test mean(evaluate(d.map, samples)) ≈ mean(reference) atol = 1.0e-5
+        @test all(isfinite, logpdf(d, samples'))
+    end
+
+    for adaptive in (false, true)
+        d = TransportMapDistribution(
+            target, quadrature, 3, adaptive; reference, basis = HermiteBasis(),
+        )
+        @test d.map.reference.densitytype == reference
+        @test TransportMaps.getbasis(d.map[1]) isa HermiteBasis
+        @test all(isfinite, rand(MersenneTwister(105), d, 3))
+    end
+
+    d = TransportMapDistribution(samples, [2], true; reference = Uniform(0, 1), k_folds = 2)
+    @test d.map.reference.densitytype == Uniform(0, 1)
+    @test TransportMaps.getbasis(d.map.polynomialmap[1]) isa ShiftedLegendreBasis
+    @test all(isfinite, logpdf(d, samples'))
+
+    uniform_quadrature = GaussLegendreWeights(8, 1)
+    d_target = TransportMapDistribution(target, uniform_quadrature, 2; reference = Uniform(0, 1))
+    @test d_target.map.reference.densitytype == Uniform(0, 1)
+    @test TransportMaps.getbasis(d_target.map[1]) isa ShiftedLegendreBasis
+end
+
 @testitem "Constructor consistency checks" setup = [TransportMapDistributionSetup] begin
     # Verify that different constructors work together correctly
     Random.seed!(44)
