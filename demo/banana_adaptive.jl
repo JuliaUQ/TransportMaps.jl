@@ -24,7 +24,7 @@ println("Generated $(size(target_samples, 1)) samples")
 L = LinearMap(target_samples)
 
 M, results, selected_terms, selected_folds = optimize_adaptive_transportmap(
-    target_samples, [3, 6], 5, L, Softplus(2.0)
+    target_samples, [3, 6], 5, L, Normal(), Softplus(2.0)
 )
 
 ind_atm = getmultiindexsets(M.polynomialmap[2])

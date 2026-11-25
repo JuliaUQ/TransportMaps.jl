@@ -16,8 +16,10 @@ the multi-index set across all components simultaneously.
 
 # Keyword Arguments
 - `initial_map::Union{Nothing,PolynomialMap}=nothing`: Initial transport map structure
+- `reference::Distributions.UnivariateDistribution=Normal()`: Reference distribution; defaults to the initial map's reference when supplied
+- `reference_density::Distributions.UnivariateDistribution`: Former spelling of `reference`, retained for compatibility
 - `rectifier::AbstractRectifierFunction=Softplus()`: Rectifier function to use
-- `basis::AbstractPolynomialBasis=LinearizedHermiteBasis()`: Polynomial basis
+- `basis::AbstractPolynomialBasis=_default_basis(reference)`: Polynomial basis; inherited from the initial map when supplied
 - `optimizer::Optim.AbstractOptimizer=LBFGS()`: Optimization algorithm
 - `options::Optim.Options=Optim.Options()`: Optimizer options
 - `λ1::Real=0`: Strength ``\\lambda_1`` of the smoothed L1 penalty
@@ -29,17 +31,18 @@ the multi-index set across all components simultaneously.
 - `validation::Union{AbstractQuadratureWeights,Nothing}=nothing`: Quadrature rule used for validation diagnostics
 
 # Returns
-- `M::PolynomialMap`: The optimized triangular transport map (with best validation variance diagnostic)
-- `history::OptimizationHistory`: History of optimization iterations
+- `M::PolynomialMap`: The map with the lowest validation KL divergence, or training KL divergence when validation is omitted
+- `history::MapOptimizationResult`: History of optimization iterations
 """
 function optimize_adaptive_transportmap(
         target::AbstractMapDensity,
         quadrature::AbstractQuadratureWeights,
         maxterms::Int;
         initial_map::Union{Nothing, PolynomialMap} = nothing,
+        reference_density::Distributions.UnivariateDistribution = isnothing(initial_map) ? Normal() : initial_map.reference.densitytype,
+        reference::Distributions.UnivariateDistribution = reference_density,
         rectifier::AbstractRectifierFunction = Softplus(),
-        basis::AbstractPolynomialBasis = LinearizedHermiteBasis(),
-        reference_density::Distributions.UnivariateDistribution = Normal(),
+        basis::AbstractPolynomialBasis = isnothing(initial_map) ? _default_basis(reference) : getbasis(initial_map[1]),
         optimizer::Optim.AbstractOptimizer = LBFGS(),
         options::Optim.Options = Optim.Options(),
         λ1::Real = 0.0,
@@ -52,10 +55,14 @@ function optimize_adaptive_transportmap(
     d = size(quadrature.points, 2)
 
     if isnothing(initial_map)
+        @assert validate_basis_reference_compatibility(basis, reference) "Invalid combination of reference density and basis."
+        @assert maxterms >= d "maxterms must allow at least one constant term per component"
         # Initialize map with constant terms only
         Λ = [multivariate_indices(0, k) for k in 1:d]
-        M = PolynomialMap(Λ, rectifier, basis, reference_density)
+        M = PolynomialMap(Λ, rectifier, basis, reference)
     else
+        @assert numberdimensions(initial_map) == d "Initial map dimension must match the quadrature points"
+        @assert initial_map.reference.densitytype == reference "Reference must match the initial map's reference"
         @assert numbercoefficients(initial_map) <= maxterms "Initial map has more coefficients than maxterms=$maxterms"
         M = deepcopy(initial_map)
         setforwarddirection!(M, :target)

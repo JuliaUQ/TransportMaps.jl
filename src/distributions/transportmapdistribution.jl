@@ -72,7 +72,7 @@ struct TransportMapDistribution{M <: AbstractTransportMap} <: Distributions.Cont
 end
 
 """
-    TransportMapDistribution(samples::Matrix{Float64}, order::Union{Int, Vector{Int}}, adaptive::Bool = true; reference::UnivariateDistribution = Normal(), rectifier::AbstractRectifierFunction = Softplus(), use_linear_map::Bool = true, k_folds::Int = 5)
+    TransportMapDistribution(samples::Matrix{Float64}, order::Union{Int, Vector{Int}}, adaptive::Bool = true; reference::UnivariateDistribution = Normal(), rectifier::AbstractRectifierFunction = Softplus(), basis::AbstractPolynomialBasis = _default_basis(reference), use_linear_map::Bool = true, k_folds::Int = 5)
 
 Construct a `TransportMapDistribution` by learning a transport map from sample data.
 
@@ -93,6 +93,7 @@ to match the empirical distribution of the samples.
 - `reference::UnivariateDistribution = Normal()`: Reference distribution for the map. Must be
   a continuous univariate distribution.
 - `rectifier::AbstractRectifierFunction = Softplus()`: Rectifier function for nonlinear components.
+- `basis::AbstractPolynomialBasis = _default_basis(reference)`: Polynomial basis selected from the reference distribution.
 - `use_linear_map::Bool = true`: If `true`, first apply a linear transformation (computed from
   sample statistics) before polynomial refinement.
 - `k_folds::Int = 5`: Number of cross-validation folds for adaptive map selection (only used
@@ -114,37 +115,34 @@ computing moments (mean, covariance, entropy, etc.).
 
 See also: [`TransportMapDistribution(::Function, ::AbstractQuadratureWeights, ::Int, ::Bool)`](@ref)
 """
-function TransportMapDistribution(samples::Matrix{Float64}, order::Union{Int, Vector{Int}}, adaptive::Bool = true; reference::UnivariateDistribution = Normal(), rectifier::AbstractRectifierFunction = Softplus(), use_linear_map::Bool = true, k_folds::Int = 5)
+function TransportMapDistribution(samples::Matrix{Float64}, order::Union{Int, Vector{Int}}, adaptive::Bool = true; reference::UnivariateDistribution = Normal(), rectifier::AbstractRectifierFunction = Softplus(), basis::AbstractPolynomialBasis = _default_basis(reference), use_linear_map::Bool = true, k_folds::Int = 5)
 
     @assert adaptive || isa(order, Int) "Fixed map construction requires a single integer for `order`."
 
     ndim = size(samples, 2)
 
     if adaptive
-        if reference != Normal()
-            @warn "Reference distribution is ignored for adaptive map construction. Using standard normal reference."
-        end
         if isa(order, Int) && ndim > 1
             order = fill(order, size(samples, 2))
             @warn "Adaptive map construction requires a vector of maximum components for each dimension; using $order for all dimensions."
         elseif isa(order, Int) && ndim == 1
             order = [order]
         end
-        return _adaptive_distribution_from_samples(samples, order, rectifier, k_folds, use_linear_map)
+        return _adaptive_distribution_from_samples(samples, order, reference, rectifier, basis, k_folds, use_linear_map)
     else
-        return _basic_distribution_from_samples(samples, order, reference, rectifier, use_linear_map)
+        return _basic_distribution_from_samples(samples, order, reference, rectifier, basis, use_linear_map)
     end
 end
 
 """
-    TransportMapDistribution(target::Function, quadrature::AbstractQuadratureWeights, order::Int, adaptive::Bool = true; basis::AbstractPolynomialBasis = LinearizedHermiteBasis(), rectifier::AbstractRectifierFunction = Softplus(), validation::AbstractQuadratureWeights = quadrature)
+    TransportMapDistribution(target::Function, quadrature::AbstractQuadratureWeights, order::Int, adaptive::Bool = true; reference::UnivariateDistribution = Normal(), rectifier::AbstractRectifierFunction = Softplus(), basis::AbstractPolynomialBasis = _default_basis(reference), validation::AbstractQuadratureWeights = quadrature)
 
 Construct a `TransportMapDistribution` by learning a transport map from a target density function.
 
 This constructor fits a transport map to approximate a target probability density by optimizing
 the map parameters to match the target through numerical quadrature. The map is constructed
 as a `PolynomialMap` (optionally with adaptive term selection) that maps from a reference
-distribution (standard normal) to the target.
+distribution (default: standard normal) to the target.
 
 # Arguments
 - `target::Function`: A function computing `log(π(x))` where π is the target density. Must accept
@@ -156,7 +154,9 @@ distribution (standard normal) to the target.
   select optimal polynomial terms. If `false`, construct a fixed-order map.
 
 # Keyword Arguments
+- `reference::UnivariateDistribution = Normal()`: Reference distribution for the map.
 - `rectifier::AbstractRectifierFunction = Softplus()`: Rectifier function for nonlinear components.
+- `basis::AbstractPolynomialBasis = _default_basis(reference)`: Polynomial basis selected from the reference distribution.
 - `validation::AbstractQuadratureWeights = quadrature`: Quadrature rule for validation during
   adaptive optimization. Defaults to the same rule as `quadrature`.
 
@@ -181,73 +181,72 @@ computing moments (mean, covariance, entropy, etc.).
 
 See also: [`TransportMapDistribution(::Matrix{Float64}, ::Union{Int, Vector{Int}}, ::Bool)`](@ref)
 """
-function TransportMapDistribution(target::Function, quadrature::AbstractQuadratureWeights, order::Int, adaptive::Bool = true; rectifier::AbstractRectifierFunction = Softplus(), validation::AbstractQuadratureWeights = quadrature, reference::UnivariateDistribution = Normal())
+function TransportMapDistribution(target::Function, quadrature::AbstractQuadratureWeights, order::Int, adaptive::Bool = true; reference::UnivariateDistribution = Normal(), rectifier::AbstractRectifierFunction = Softplus(), basis::AbstractPolynomialBasis = _default_basis(reference), validation::AbstractQuadratureWeights = quadrature)
 
     if adaptive
-        if reference != Normal()
-            @warn "Reference distribution is ignored for adaptive map construction. Using standard normal reference."
-        end
-        return _adaptive_distribution_from_target(target, quadrature, order, rectifier, validation)
+        return _adaptive_distribution_from_target(target, quadrature, order, reference, rectifier, basis, validation)
     else
-        return _basic_distribution_from_target(target, quadrature, order, reference, rectifier)
+        return _basic_distribution_from_target(target, quadrature, order, reference, rectifier, basis)
     end
 
 end
 
 # basic map from samples
-function _basic_distribution_from_samples(samples::Matrix{Float64}, order::Int, reference::UnivariateDistribution, rectifier::AbstractRectifierFunction, use_linear_map::Bool)
+function _basic_distribution_from_samples(samples::Matrix{Float64}, order::Int, reference::UnivariateDistribution, rectifier::AbstractRectifierFunction, basis::AbstractPolynomialBasis, use_linear_map::Bool)
 
     ndim = size(samples, 2)
 
     if use_linear_map
         lmap = LinearMap(samples)
-        normal_map = PolynomialMap(ndim, order, reference, rectifier)
+        normal_map = PolynomialMap(ndim, order, reference, rectifier, basis)
         optimize!(normal_map, samples, lmap)
         return TransportMapDistribution(ComposedMap(lmap, normal_map))
     else
-        normal_map = PolynomialMap(ndim, order, reference, rectifier)
+        normal_map = PolynomialMap(ndim, order, reference, rectifier, basis)
         optimize!(normal_map, samples)
         return TransportMapDistribution(normal_map)
     end
 end
 
 # basic map from target
-function _basic_distribution_from_target(target::Function, quadrature::AbstractQuadratureWeights, order::Int, reference::UnivariateDistribution, rectifier::AbstractRectifierFunction)
+function _basic_distribution_from_target(target::Function, quadrature::AbstractQuadratureWeights, order::Int, reference::UnivariateDistribution, rectifier::AbstractRectifierFunction, basis::AbstractPolynomialBasis)
 
     ndim = size(quadrature.points, 2)
 
     maptarget = MapTargetDensity(target)
-    normal_map = PolynomialMap(ndim, order, reference, rectifier)
+    normal_map = PolynomialMap(ndim, order, reference, rectifier, basis)
     optimize!(normal_map, maptarget, quadrature)
 
     return TransportMapDistribution(normal_map)
 end
 
 # adaptive map from samples
-function _adaptive_distribution_from_samples(samples::Matrix{Float64}, max_components::Vector{Int}, rectifier::AbstractRectifierFunction, k_folds::Int, use_linear_map::Bool)
+function _adaptive_distribution_from_samples(samples::Matrix{Float64}, max_components::Vector{Int}, reference::UnivariateDistribution, rectifier::AbstractRectifierFunction, basis::AbstractPolynomialBasis, k_folds::Int, use_linear_map::Bool)
 
     if use_linear_map
         lmap = LinearMap(samples)
         M, _ = optimize_adaptive_transportmap(
-            samples, max_components, k_folds, lmap, rectifier
+            samples, max_components, k_folds, lmap, reference, rectifier, basis
         )
         return TransportMapDistribution(M)
     else
         lmap = LinearMap(size(samples, 2))
         M, _ = optimize_adaptive_transportmap(
-            samples, max_components, k_folds, lmap, rectifier
+            samples, max_components, k_folds, lmap, reference, rectifier, basis
         )
         return TransportMapDistribution(M)
     end
 end
 
-function _adaptive_distribution_from_target(target::Function, quadrature::AbstractQuadratureWeights, n_terms::Int, rectifier::AbstractRectifierFunction, validation::AbstractQuadratureWeights)
+function _adaptive_distribution_from_target(target::Function, quadrature::AbstractQuadratureWeights, n_terms::Int, reference::UnivariateDistribution, rectifier::AbstractRectifierFunction, basis::AbstractPolynomialBasis, validation::AbstractQuadratureWeights)
 
     maptarget = MapTargetDensity(target)
 
     T, _ = optimize_adaptive_transportmap(
         maptarget, quadrature, n_terms;
+        reference = reference,
         rectifier = rectifier,
+        basis = basis,
         validation = validation
     )
 

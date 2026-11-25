@@ -86,9 +86,18 @@
 # ```
 
 # Here `samples` has one sample per row, and `maxterms` is a vector of term limits
-# per component. The defaults use `LinearMap(samples)`, `Softplus()`, and
-# `LinearizedHermiteBasis()`. Pass these as additional positional arguments to
-# customize them; `optimizer` and `options` are keyword arguments. See
+# per component. The additional positional arguments are `lm=LinearMap(samples)`,
+# `reference=Normal()`, `rectifier=Softplus()`, and `basis=_default_basis(reference)`,
+# in that order. As in `PolynomialMap`, the basis defaults to `LinearizedHermiteBasis()`
+# for normal references, `LegendreBasis()` for `Uniform(-1, 1)`, and
+# `ShiftedLegendreBasis()` for `Uniform(0, 1)`. For example:
+# ```julia
+# M, histories = optimize_adaptive_transportmap(samples, maxterms, LinearMap(samples), Normal(2, 3))
+# ```
+# `optimizer` and `options` are keyword arguments. Uniform references use `IPNewton()`
+# by default and require at least two terms per component for an initial affine map.
+# Their histories begin with this two-term model, so read the number of terms from
+# `size(history.terms[iteration], 1)`. See
 # [`optimize_adaptive_transportmap`](@ref) for the full interface.
 #
 # The k-fold version returns:
@@ -112,8 +121,13 @@
 
 # `target` wraps a callable log-density; `maxterms` is a single global term budget.
 # Omit `validation` when no separate rule is available. The keyword defaults are
-# `rectifier=Softplus()`, `basis=LinearizedHermiteBasis()`, and
-# `reference_density=Normal()`; `optimizer` and `options` configure the solver.
+# `reference=Normal()`, `rectifier=Softplus()`, and `basis=_default_basis(reference)`;
+# `optimizer` and `options` configure the solver. The former `reference_density` keyword
+# is also accepted. When providing `initial_map`, its reference and basis are retained.
+# Quadrature points and weights must integrate against the selected reference.
+#
+# Both sample-based and density-based `TransportMapDistribution` fitting constructors
+# accept `reference` and `basis` keywords, with the same defaults for adaptive and fixed maps.
 #
 # Key differences from the sample-based approach:
 # - Uses a single global budget of terms (`maxterms`) shared across all components

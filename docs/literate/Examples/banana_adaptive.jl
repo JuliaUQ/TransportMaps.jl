@@ -61,12 +61,12 @@ L = LinearMap(target_samples)
 # Calling the `optimize_adaptive_transportmap` function performs the adaptive learning of map terms
 # and returns the learned map, optimization results, selected terms, and selected folds.
 # We can provide the initial linear map `L` to standardize the samples before learning the
-# ATM, and also specify options, such as the `rectifier`, `basis` and options for the
+# ATM, and also specify options, such as the `reference`, `rectifier`, `basis` and options for the
 # optimization process.
 # The function returns the `ComposedMap` of the linear map and the learned adaptive transport map.
 
 M, results, selected_terms, selected_folds = optimize_adaptive_transportmap(
-    target_samples, [3, 6], 5, L, Softplus(2.0)
+    target_samples, [3, 6], 5, L, Normal(), Softplus(2.0)
 )
 #md nothing # hide
 

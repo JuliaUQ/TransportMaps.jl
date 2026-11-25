@@ -69,8 +69,8 @@ println(hist)
 
 # The function uses default parameters:
 # - `rectifier = Softplus()`: Monotonicity-enforcing function
-# - `basis = LinearizedHermiteBasis()`: Polynomial basis (Hermite polynomials with linearization)
-# - `reference_density = Normal()`: Reference distribution (standard normal)
+# - `reference = Normal()`: Reference distribution (standard normal)
+# - `basis = _default_basis(reference)`: Polynomial basis (linearized Hermite for a normal reference)
 
 # ## Convergence Analysis
 

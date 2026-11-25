@@ -134,6 +134,8 @@ function _initialize_multivariate_basis(
                 uni_bases[j] = GaussianWeightedHermiteBasis()
             elseif isa(basis, CubicSplineHermiteBasis)
                 uni_bases[j] = CubicSplineHermiteBasis(samples[:, j])
+            else
+                uni_bases[j] = basis
             end
         end
 
